@@ -1,0 +1,28 @@
+# Xcode
+build/
+DerivedData/
+xcuserdata/
+*.xcuserstate
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# macOS
+.DS_Store
+
+# Swift Package Manager
+.build/
+Package.resolved
+.swiftpm/
+
+# Vendored binaries (re-downloaded by scripts/fetch-ghosttykit.sh)
+Vendor/GhosttyKit.xcframework/
+Vendor/*.tar.gz
+
+# Release artifacts (built by GitHub Actions, not committed)
+dist/
+*.dmg
+*.zip
+
+# Sparkle private signing key — NEVER commit
+sparkle_priv.key
+.sparkle/

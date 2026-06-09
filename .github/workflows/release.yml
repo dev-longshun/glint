@@ -1,0 +1,190 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, notarize, publish
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      APP_NAME: Glint
+      BUNDLE_ID: app.glint.Glint
+      # Tag is set by an owner with push permission, but isolate via env
+      # so we never interpolate ${{ github.ref_name }} directly into shell.
+      TAG_NAME: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Derive version from tag
+        id: version
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Strip leading 'v' — REF_NAME is from env, never inlined into shell.
+          version="${REF_NAME#v}"
+          # Validate shape (defense-in-depth even though tag pattern is enforced upstream).
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$'; then
+            echo "Refusing to release: tag '$REF_NAME' is not semver." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Cache GhosttyKit
+        id: ghostty-cache
+        uses: actions/cache@v4
+        with:
+          path: Vendor/GhosttyKit.xcframework
+          key: ghosttykit-${{ hashFiles('scripts/fetch-ghosttykit.sh') }}
+
+      - name: Fetch GhosttyKit
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        env:
+          GHOSTTYKIT_URL: ${{ secrets.GHOSTTYKIT_URL }}
+        run: bash scripts/fetch-ghosttykit.sh
+
+      - name: Stamp version into Info.plist
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          plutil -replace CFBundleShortVersionString -string "$VERSION" Glint/Resources/Info.plist
+          plutil -replace CFBundleVersion -string "$(date +%Y%m%d%H%M)" Glint/Resources/Info.plist
+
+      - name: Archive (Release)
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Glint.xcodeproj \
+            -scheme Glint \
+            -configuration Release \
+            -derivedDataPath build \
+            -archivePath build/Glint.xcarchive \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            archive
+
+      - name: Export .app
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp -R build/Glint.xcarchive/Products/Applications/Glint.app dist/
+
+      # ─── Optional: Apple Developer ID signing + notarization ───────────
+      # Skipped automatically when APPLE_CERT_P12_BASE64 secret is not set,
+      # giving you an unsigned (ad-hoc) build that still works via the Cask
+      # postinstall xattr -dr com.apple.quarantine trick.
+      - name: Codesign + notarize
+        if: ${{ env.HAS_APPLE_CERT == 'true' }}
+        env:
+          HAS_APPLE_CERT: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
+          APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
+          APPLE_NOTARY_ID: ${{ secrets.APPLE_NOTARY_ID }}
+          APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          BUNDLE_ID: ${{ env.BUNDLE_ID }}
+        run: bash scripts/sign-and-notarize.sh dist/Glint.app
+
+      - name: Build DMG
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DMG="dist/Glint-${VERSION}.dmg"
+          STAGING="$(mktemp -d)"
+          cp -R dist/Glint.app "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create \
+            -volname "Glint $VERSION" \
+            -srcfolder "$STAGING" \
+            -fs HFS+ \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            "$DMG"
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
+
+      # ─── Sparkle EdDSA signing of the DMG ──────────────────────────────
+      # When SPARKLE_ED_PRIV_KEY secret is set, sign with sparkle's
+      # `sign_update` tool. The signature lands in appcast.xml.
+      - name: Sparkle sign
+        id: sparkle
+        if: ${{ env.HAS_SPARKLE_KEY == 'true' }}
+        env:
+          HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIV_KEY != '' }}
+          SPARKLE_ED_PRIV_KEY: ${{ secrets.SPARKLE_ED_PRIV_KEY }}
+          DMG_PATH: ${{ env.DMG }}
+        run: |
+          set -euo pipefail
+          # Persist the key to a file with 0600, never echo it.
+          umask 077
+          printf '%s' "$SPARKLE_ED_PRIV_KEY" > "$RUNNER_TEMP/sparkle.key"
+          # `sign_update` ships inside Sparkle's distribution; we download
+          # the matching version once and cache it.
+          SPARKLE_VERSION="2.6.4"
+          curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
+            -o "$RUNNER_TEMP/sparkle.tar.xz"
+          mkdir -p "$RUNNER_TEMP/sparkle"
+          tar -xJf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
+          SIGN="$RUNNER_TEMP/sparkle/bin/sign_update"
+          # sign_update prints e.g. `sparkle:edSignature="..." length="..."`
+          SIG_LINE="$("$SIGN" -f "$RUNNER_TEMP/sparkle.key" "$DMG_PATH")"
+          echo "sig_line=$SIG_LINE" >> "$GITHUB_OUTPUT"
+          rm -f "$RUNNER_TEMP/sparkle.key"
+
+      - name: Update appcast.xml
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DMG_PATH: ${{ env.DMG }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          SIG_LINE: ${{ steps.sparkle.outputs.sig_line }}
+        run: bash scripts/update-appcast.sh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ env.DMG }}
+            appcast.xml
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+
+      - name: Commit updated appcast on main
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Switch to main so the appcast lives on a stable branch GitHub
+          # Pages / Sparkle can poll from a permalink.
+          git fetch origin main
+          git checkout main
+          git checkout "$GITHUB_SHA" -- appcast.xml
+          git add appcast.xml
+          if git diff --cached --quiet; then
+            echo "appcast already up to date"
+          else
+            git commit -m "release: appcast for v${VERSION}"
+            git push origin main
+          fi

@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (Debug, ad-hoc signed)
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Cache GhosttyKit
+        id: ghostty-cache
+        uses: actions/cache@v4
+        with:
+          path: Vendor/GhosttyKit.xcframework
+          key: ghosttykit-${{ hashFiles('scripts/fetch-ghosttykit.sh') }}
+
+      - name: Fetch GhosttyKit
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        env:
+          GHOSTTYKIT_URL: ${{ secrets.GHOSTTYKIT_URL }}
+        run: bash scripts/fetch-ghosttykit.sh
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Glint.xcodeproj \
+            -scheme Glint \
+            -configuration Debug \
+            -derivedDataPath build \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ONLY_ACTIVE_ARCH=NO \
+            build | tee build.log

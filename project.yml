@@ -1,0 +1,61 @@
+name: Glint
+options:
+  bundleIdPrefix: app.glint
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    DEAD_CODE_STRIPPING: YES
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
+
+targets:
+  Glint:
+    type: application
+    platform: macOS
+    sources:
+      - path: Glint
+        excludes:
+          - "**/.DS_Store"
+    resources:
+      - Glint/Resources
+    settings:
+      base:
+        PRODUCT_NAME: Glint
+        PRODUCT_BUNDLE_IDENTIFIER: app.glint.Glint
+        INFOPLIST_FILE: Glint/Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Glint/Resources/Glint.entitlements
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+        DEVELOPMENT_TEAM: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        FRAMEWORK_SEARCH_PATHS:
+          - "$(SRCROOT)/Vendor"
+        OTHER_LDFLAGS:
+          - "-framework"
+          - "Metal"
+          - "-framework"
+          - "MetalKit"
+          - "-framework"
+          - "QuartzCore"
+          - "-framework"
+          - "CoreText"
+          - "-framework"
+          - "AppKit"
+          - "-framework"
+          - "Carbon"
+          - "-framework"
+          - "IOKit"
+          - "-framework"
+          - "Security"
+          - "-framework"
+          - "UserNotifications"
+          - "-lc++"
+    dependencies:
+      - framework: Vendor/GhosttyKit.xcframework
+        embed: false

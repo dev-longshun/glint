@@ -1,0 +1,441 @@
+import Foundation
+
+/// Drops the Claude Code hook script onto disk and merges its hook entries
+/// into `~/.claude/settings.json`. The merge is idempotent: existing Glint
+/// entries (recognized by command path) are replaced, everything else is
+/// left alone. If the file isn't valid JSON we back it up and skip rather
+/// than risk corrupting the user's config.
+enum AgentHookInstaller {
+    /// Events we register. Order doesn't matter; matters that it covers
+    /// every transition the status machine cares about.
+    private static let hookEvents: [String] = [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PostToolUse",
+        "Notification",
+        "PermissionRequest",
+        "PreCompact",
+        "Stop",
+    ]
+
+    /// True if any hook bucket in `~/.claude/settings.json` already references
+    /// our reporter script. Used by the Settings UI to flip between
+    /// "Install" and "Uninstall" actions.
+    static func isInstalled() -> Bool {
+        let settingsURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/settings.json")
+        guard let data = try? Data(contentsOf: settingsURL),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let hooks = root["hooks"] as? [String: Any] else {
+            return false
+        }
+        for (_, bucket) in hooks {
+            guard let arr = bucket as? [Any] else { continue }
+            for entry in arr {
+                guard let group = entry as? [String: Any],
+                      let inner = group["hooks"] as? [[String: Any]] else { continue }
+                if inner.contains(where: { ($0["command"] as? String)?.contains("glint-report.sh") == true }) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// Strip Glint's hook entries from `~/.claude/settings.json` and delete
+    /// the reporter script. Other tools' hook entries are preserved; empty
+    /// buckets are removed; an empty `hooks` map is removed entirely.
+    static func uninstall() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let settingsURL = home.appendingPathComponent(".claude/settings.json")
+        if let data = try? Data(contentsOf: settingsURL),
+           var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+            var touched = false
+            for (event, bucket) in hooks {
+                guard let arr = bucket as? [Any] else { continue }
+                let filtered = arr.filter { entry in
+                    guard let group = entry as? [String: Any],
+                          let inner = group["hooks"] as? [[String: Any]] else { return true }
+                    return !inner.contains { ($0["command"] as? String)?.contains("glint-report.sh") == true }
+                }
+                if filtered.count != arr.count {
+                    touched = true
+                    if filtered.isEmpty {
+                        hooks.removeValue(forKey: event)
+                    } else {
+                        hooks[event] = filtered
+                    }
+                }
+            }
+            if touched {
+                if hooks.isEmpty {
+                    root.removeValue(forKey: "hooks")
+                } else {
+                    root["hooks"] = hooks
+                }
+                if let out = try? JSONSerialization.data(
+                    withJSONObject: root,
+                    options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                ) {
+                    try? out.write(to: settingsURL, options: [.atomic])
+                    NSLog("[glint] claude hooks removed from \(settingsURL.path)")
+                }
+            }
+        }
+        // Only nuke the shared reporter if no other installed agent still
+        // references it (Codex shares the same script).
+        if !AgentHookInstaller.isInstalled() && !CodexHookInstaller.isInstalled() {
+            let script = home.appendingPathComponent(".glint/hooks/glint-report.sh")
+            try? FileManager.default.removeItem(at: script)
+        }
+    }
+
+    static func installIfNeeded(socketPath: String) {
+        guard let scriptPath = ensureReporterScript() else { return }
+        mergeClaudeSettings(scriptPath: scriptPath)
+        _ = socketPath  // path is baked into the script via $GLINT_AGENT_SOCK at runtime
+    }
+
+    /// Drop the shared reporter script (used by both Claude and Codex) into
+    /// `~/.glint/hooks/glint-report.sh` and chmod +x. Idempotent: re-runs
+    /// only rewrite the file if the body changed. Returns the absolute path
+    /// to the script, or nil if the directory couldn't be created.
+    static func ensureReporterScript() -> String? {
+        guard let dir = ensureHookDir() else { return nil }
+        let scriptURL = dir.appendingPathComponent("glint-report.sh")
+        let body = Self.scriptBody
+        let needsWrite: Bool = {
+            guard let existing = try? String(contentsOf: scriptURL) else { return true }
+            return existing != body
+        }()
+        if needsWrite {
+            do {
+                try body.write(to: scriptURL, atomically: true, encoding: .utf8)
+                try FileManager.default.setAttributes(
+                    [.posixPermissions: 0o755],
+                    ofItemAtPath: scriptURL.path
+                )
+            } catch {
+                NSLog("[glint] hook script write failed: \(error)")
+                return nil
+            }
+        }
+        return scriptURL.path
+    }
+
+    // MARK: settings.json merge
+
+    /// Atomically merge our 6 hook entries into `~/.claude/settings.json`.
+    /// Stable: re-runs after a path change will replace stale entries, not
+    /// duplicate them.
+    private static func mergeClaudeSettings(scriptPath: String) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let claudeDir = home.appendingPathComponent(".claude", isDirectory: true)
+        let settingsURL = claudeDir.appendingPathComponent("settings.json")
+
+        do {
+            try FileManager.default.createDirectory(at: claudeDir, withIntermediateDirectories: true)
+        } catch {
+            NSLog("[glint] couldn't create ~/.claude: \(error)")
+            return
+        }
+
+        var root: [String: Any] = [:]
+        if let data = try? Data(contentsOf: settingsURL), !data.isEmpty {
+            guard let parsed = try? JSONSerialization.jsonObject(with: data),
+                  let dict = parsed as? [String: Any] else {
+                // Don't trust the file — back it up and bail. User can resolve.
+                let backup = settingsURL.appendingPathExtension("glint-backup")
+                try? FileManager.default.copyItem(at: settingsURL, to: backup)
+                NSLog("[glint] ~/.claude/settings.json isn't a JSON object; backed up to \(backup.lastPathComponent), skipping merge")
+                return
+            }
+            root = dict
+        }
+
+        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        var changed = false
+
+        for event in hookEvents {
+            var bucket = (hooks[event] as? [Any]) ?? []
+            // Drop any prior Glint entry — recognised by `glint-report.sh`
+            // appearing anywhere in the command. The filename is the marker
+            // so old entries from moved/renamed paths still get cleaned up.
+            let filtered = bucket.filter { entry in
+                guard let group = entry as? [String: Any],
+                      let inner = group["hooks"] as? [[String: Any]] else { return true }
+                return !inner.contains { ($0["command"] as? String)?.contains("glint-report.sh") == true }
+            }
+            let ours: [String: Any] = [
+                "matcher": "*",
+                "hooks": [[
+                    "type": "command",
+                    "command": "\(scriptPath) \(event)",
+                ]],
+            ]
+            bucket = filtered + [ours]
+            if !equalsJSON(hooks[event], bucket) {
+                hooks[event] = bucket
+                changed = true
+            }
+        }
+
+        if !changed { return }
+
+        root["hooks"] = hooks
+        do {
+            let data = try JSONSerialization.data(
+                withJSONObject: root,
+                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            )
+            // Belt-and-suspenders: keep one .glint-prev next to the file the
+            // first time we touch it, so the user can always roll back.
+            let prev = settingsURL.appendingPathExtension("glint-prev")
+            if FileManager.default.fileExists(atPath: settingsURL.path),
+               !FileManager.default.fileExists(atPath: prev.path) {
+                try? FileManager.default.copyItem(at: settingsURL, to: prev)
+            }
+            try data.write(to: settingsURL, options: [.atomic])
+            NSLog("[glint] claude hooks merged into \(settingsURL.path)")
+        } catch {
+            NSLog("[glint] writing ~/.claude/settings.json failed: \(error)")
+        }
+    }
+
+    /// Cheap structural equality via JSON round-trip. Used to skip writes
+    /// when nothing actually changed.
+    private static func equalsJSON(_ a: Any?, _ b: Any) -> Bool {
+        guard let a else { return false }
+        let opts: JSONSerialization.WritingOptions = [.sortedKeys]
+        guard let da = try? JSONSerialization.data(withJSONObject: a, options: opts),
+              let db = try? JSONSerialization.data(withJSONObject: b, options: opts) else {
+            return false
+        }
+        return da == db
+    }
+
+    /// Drop hooks under `~/.glint/hooks/` rather than `~/Library/Application Support/Glint/`.
+    /// claude code passes the `command` field to a POSIX shell, so an unquoted
+    /// path containing spaces ("Application Support") gets word-split and the
+    /// hook fails to launch. The dotfile path sidesteps that entirely.
+    static func ensureHookDir() -> URL? {
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".glint", isDirectory: true)
+            .appendingPathComponent("hooks", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            return dir
+        } catch {
+            NSLog("[glint] hook dir create failed: \(error)")
+            return nil
+        }
+    }
+
+    /// Pure POSIX sh — runs inside the pty so `$GLINT_PANE_ID` resolves.
+    /// Stays cheap (single `nc` send, swallows stdin).
+    ///
+    /// Argv[1] = hook event name (e.g. "PostToolUse").
+    /// Argv[2] = agent kind ("claude" or "codex"); defaults to "claude" so
+    /// existing Claude installs keep working without a script rewrite.
+    static let scriptBody: String = """
+    #!/bin/sh
+    # Glint CLI-agent hook reporter. Argv[1] = hook event, argv[2] = agent kind.
+    [ -z "$GLINT_PANE_ID" ] && exit 0
+    [ -z "$GLINT_AGENT_SOCK" ] && exit 0
+    [ ! -S "$GLINT_AGENT_SOCK" ] && exit 0
+
+    HOOK="${1:-Unknown}"
+    AGENT="${2:-claude}"
+    # Drain stdin (claude/codex pass the hook payload there). We ignore it for
+    # now — only the hook name + agent are needed to drive pane state.
+    cat >/dev/null 2>&1
+
+    printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' "$GLINT_PANE_ID" "$HOOK" "$AGENT" \\
+      | nc -U -w 1 "$GLINT_AGENT_SOCK" >/dev/null 2>&1 || true
+    exit 0
+    """
+
+}
+
+/// Same idea as `AgentHookInstaller`, but writes Codex CLI's hook config
+/// to `~/.codex/hooks.json`. The on-disk schema is structurally identical
+/// to Claude's settings.json hooks subtree:
+///
+///     {
+///       "hooks": {
+///         "<EventName>": [
+///           { "matcher": "*", "hooks": [{ "type": "command", "command": "…" }] }
+///         ]
+///       }
+///     }
+///
+/// Codex passes the entire hook payload on stdin, same as Claude — the
+/// shared `glint-report.sh` swallows it and only forwards the event name
+/// plus the agent kind ("codex") to Glint's local socket.
+enum CodexHookInstaller {
+    /// Events Glint reacts to. Mirrors the Claude set, with one tweak:
+    /// Codex uses PostToolUse → thinking too, no Notification event exists.
+    private static let hookEvents: [String] = [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PostToolUse",
+        "PermissionRequest",
+        "PreCompact",
+        "Stop",
+    ]
+
+    static func isInstalled() -> Bool {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".codex/hooks.json")
+        guard let data = try? Data(contentsOf: url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let hooks = root["hooks"] as? [String: Any] else {
+            return false
+        }
+        for (_, bucket) in hooks {
+            guard let arr = bucket as? [Any] else { continue }
+            for entry in arr {
+                guard let group = entry as? [String: Any],
+                      let inner = group["hooks"] as? [[String: Any]] else { continue }
+                if inner.contains(where: { ($0["command"] as? String)?.contains("glint-report.sh") == true }) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    static func installIfNeeded(socketPath: String) {
+        guard let scriptPath = AgentHookInstaller.ensureReporterScript() else { return }
+        mergeCodexHooks(scriptPath: scriptPath)
+        _ = socketPath
+    }
+
+    /// Remove Glint's entries from `~/.codex/hooks.json`. The reporter script
+    /// itself is shared with Claude, so we only delete it when neither agent
+    /// still references it.
+    static func uninstall() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let url = home.appendingPathComponent(".codex/hooks.json")
+        if let data = try? Data(contentsOf: url),
+           var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+            var touched = false
+            for (event, bucket) in hooks {
+                guard let arr = bucket as? [Any] else { continue }
+                let filtered = arr.filter { entry in
+                    guard let group = entry as? [String: Any],
+                          let inner = group["hooks"] as? [[String: Any]] else { return true }
+                    return !inner.contains { ($0["command"] as? String)?.contains("glint-report.sh") == true }
+                }
+                if filtered.count != arr.count {
+                    touched = true
+                    if filtered.isEmpty {
+                        hooks.removeValue(forKey: event)
+                    } else {
+                        hooks[event] = filtered
+                    }
+                }
+            }
+            if touched {
+                if hooks.isEmpty {
+                    root.removeValue(forKey: "hooks")
+                } else {
+                    root["hooks"] = hooks
+                }
+                if root.isEmpty {
+                    // Whole file was just our hooks → remove it cleanly.
+                    try? FileManager.default.removeItem(at: url)
+                } else if let out = try? JSONSerialization.data(
+                    withJSONObject: root,
+                    options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                ) {
+                    try? out.write(to: url, options: [.atomic])
+                }
+                NSLog("[glint] codex hooks removed from \(url.path)")
+            }
+        }
+        // Only nuke the shared reporter if neither Claude nor Codex still
+        // references it — otherwise Claude (or a future agent) would break.
+        if !AgentHookInstaller.isInstalled() && !CodexHookInstaller.isInstalled() {
+            let script = home.appendingPathComponent(".glint/hooks/glint-report.sh")
+            try? FileManager.default.removeItem(at: script)
+        }
+    }
+
+    private static func mergeCodexHooks(scriptPath: String) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let codexDir = home.appendingPathComponent(".codex", isDirectory: true)
+        let url = codexDir.appendingPathComponent("hooks.json")
+        do {
+            try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
+        } catch {
+            NSLog("[glint] couldn't create ~/.codex: \(error)")
+            return
+        }
+
+        var root: [String: Any] = [:]
+        if let data = try? Data(contentsOf: url), !data.isEmpty {
+            guard let parsed = try? JSONSerialization.jsonObject(with: data),
+                  let dict = parsed as? [String: Any] else {
+                let backup = url.appendingPathExtension("glint-backup")
+                try? FileManager.default.copyItem(at: url, to: backup)
+                NSLog("[glint] ~/.codex/hooks.json isn't a JSON object; backed up to \(backup.lastPathComponent), skipping merge")
+                return
+            }
+            root = dict
+        }
+
+        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        var changed = false
+        for event in hookEvents {
+            var bucket = (hooks[event] as? [Any]) ?? []
+            let filtered = bucket.filter { entry in
+                guard let group = entry as? [String: Any],
+                      let inner = group["hooks"] as? [[String: Any]] else { return true }
+                return !inner.contains { ($0["command"] as? String)?.contains("glint-report.sh") == true }
+            }
+            let ours: [String: Any] = [
+                "matcher": "*",
+                "hooks": [[
+                    "type": "command",
+                    "command": "\(scriptPath) \(event) codex",
+                ]],
+            ]
+            bucket = filtered + [ours]
+            if !equalsJSON(hooks[event], bucket) {
+                hooks[event] = bucket
+                changed = true
+            }
+        }
+
+        if !changed { return }
+        root["hooks"] = hooks
+        do {
+            let data = try JSONSerialization.data(
+                withJSONObject: root,
+                options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+            )
+            let prev = url.appendingPathExtension("glint-prev")
+            if FileManager.default.fileExists(atPath: url.path),
+               !FileManager.default.fileExists(atPath: prev.path) {
+                try? FileManager.default.copyItem(at: url, to: prev)
+            }
+            try data.write(to: url, options: [.atomic])
+            NSLog("[glint] codex hooks merged into \(url.path)")
+        } catch {
+            NSLog("[glint] writing ~/.codex/hooks.json failed: \(error)")
+        }
+    }
+
+    private static func equalsJSON(_ a: Any?, _ b: Any) -> Bool {
+        guard let a else { return false }
+        let opts: JSONSerialization.WritingOptions = [.sortedKeys]
+        guard let da = try? JSONSerialization.data(withJSONObject: a, options: opts),
+              let db = try? JSONSerialization.data(withJSONObject: b, options: opts) else {
+            return false
+        }
+        return da == db
+    }
+}
