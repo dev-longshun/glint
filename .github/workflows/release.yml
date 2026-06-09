@@ -73,8 +73,13 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           set -euo pipefail
+          BUILD_NUMBER="$(date +%Y%m%d%H%M)"
           plutil -replace CFBundleShortVersionString -string "$VERSION" Glint/Resources/Info.plist
-          plutil -replace CFBundleVersion -string "$(date +%Y%m%d%H%M)" Glint/Resources/Info.plist
+          plutil -replace CFBundleVersion -string "$BUILD_NUMBER" Glint/Resources/Info.plist
+          # Sparkle compares <sparkle:version> against CFBundleVersion to
+          # decide if an update is newer; the appcast must use the same
+          # build number we just stamped here, not the human "0.0.3".
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
       - name: Archive (Release)
         run: |
@@ -169,6 +174,7 @@ jobs:
         env:
           HAS_SPARKLE_KEY: ${{ secrets.SPARKLE_ED_PRIV_KEY != '' }}
           VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ env.BUILD_NUMBER }}
           DMG_PATH: ${{ env.DMG }}
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}

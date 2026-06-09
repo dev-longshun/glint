@@ -2,16 +2,21 @@
 # Append (or refresh) the latest release entry in appcast.xml.
 #
 # Env:
-#   VERSION    e.g. 0.1.3
-#   DMG_PATH   path to the freshly built dmg
-#   TAG        github tag (e.g. v0.1.3) — used to compose the download URL
-#   REPO       owner/name
-#   SIG_LINE   the `sparkle:edSignature="..." length="..."` produced by
-#              sign_update; empty when Sparkle signing was skipped
+#   VERSION       human version, e.g. 0.1.3
+#   BUILD_NUMBER  monotonically increasing build identifier — MUST match the
+#                 CFBundleVersion the workflow stamped into Info.plist, since
+#                 Sparkle compares <sparkle:version> against that to decide
+#                 whether an update is newer.
+#   DMG_PATH      path to the freshly built dmg
+#   TAG           github tag (e.g. v0.1.3) — used to compose the download URL
+#   REPO          owner/name
+#   SIG_LINE      the `sparkle:edSignature="..." length="..."` produced by
+#                 sign_update; empty when Sparkle signing was skipped
 
 set -euo pipefail
 
 : "${VERSION:?missing}"
+: "${BUILD_NUMBER:?missing}"
 : "${DMG_PATH:?missing}"
 : "${TAG:?missing}"
 : "${REPO:?missing}"
@@ -38,31 +43,92 @@ if [ ! -f "$APPCAST" ]; then
 XML
 fi
 
-# Use python3 (preinstalled on macOS runners) to splice a new <item> in.
-# We use stdlib ElementTree instead of defusedxml because:
-#   1. The appcast is our own artifact — there's no untrusted producer.
-#   2. macos runners ship a PEP-668-managed Python that refuses pip
-#      installs without a venv, so adding defusedxml would mean spinning
-#      up a venv on every release for no real security gain.
-
-# Pass every dynamic value through env vars and use a quoted heredoc
-# (<<'PY'), so bash performs no interpolation inside the python body. A
-# SIG_LINE that contains its own double quotes (always, for EdDSA) would
-# otherwise corrupt a """${SIG_LINE}""" triple-quoted literal.
-export VERSION DOWNLOAD_URL PUB_DATE LENGTH SIG_LINE REPO TAG
+# Build release notes HTML from the git log since the previous tag. Use a
+# placeholder text in ET so the writer doesn't escape our HTML, then swap
+# in CDATA via a post-process step — Sparkle expects description HTML to
+# be CDATA-wrapped (or escaped) and the stdlib ElementTree can't emit
+# CDATA sections directly.
+PREV_TAG="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo '')"
+export VERSION BUILD_NUMBER DOWNLOAD_URL PUB_DATE LENGTH SIG_LINE REPO TAG PREV_TAG
 
 python3 - "$APPCAST" <<'PY'
-import os, sys
+import os, sys, html, re, subprocess
 import xml.etree.ElementTree as ET
 
-path = sys.argv[1]
-version    = os.environ["VERSION"]
-url        = os.environ["DOWNLOAD_URL"]
-pub_date   = os.environ["PUB_DATE"]
-length     = os.environ["LENGTH"]
-sig_line   = os.environ.get("SIG_LINE", "").strip()
+path          = sys.argv[1]
+version       = os.environ["VERSION"]
+build_number  = os.environ["BUILD_NUMBER"]
+url           = os.environ["DOWNLOAD_URL"]
+pub_date      = os.environ["PUB_DATE"]
+length        = os.environ["LENGTH"]
+sig_line      = os.environ.get("SIG_LINE", "").strip()
 release_notes_link = f"https://github.com/{os.environ['REPO']}/releases/tag/{os.environ['TAG']}"
+prev_tag      = os.environ.get("PREV_TAG", "").strip()
+tag           = os.environ["TAG"]
 
+# ─── Collect bilingual commit summaries between the previous tag and this one ──
+#
+# Convention: each commit subject is the English short description; the
+# Chinese summary lives in the body as a `CN: ...` trailer (one line).
+# Commits without a `CN:` trailer fall back to English-only.
+#
+# Example commit:
+#     about: surface auto-update wiring as a Build row
+#
+#     CN: 关于面板:把 Sparkle 自动更新状态展示出来
+#
+#     Lets you eyeball whether the running build has Sparkle ...
+SEP = "__GLINT_COMMIT_SEP__"
+rev_range = f"{prev_tag}..{tag}" if prev_tag else tag
+try:
+    raw = subprocess.check_output(
+        ["git", "log", rev_range, f"--pretty=format:%s%n%b%n{SEP}"],
+        text=True, stderr=subprocess.DEVNULL,
+    )
+except subprocess.CalledProcessError:
+    raw = ""
+
+CN_RE = re.compile(r"^CN[:：]\s*(.+?)\s*$", re.MULTILINE)
+
+entries = []  # list of (en, zh|None)
+for chunk in raw.split(SEP):
+    chunk = chunk.strip()
+    if not chunk:
+        continue
+    lines = chunk.splitlines()
+    en = lines[0].strip()
+    if not en or en.lower().startswith("co-authored-by"):
+        continue
+    body = "\n".join(lines[1:])
+    m = CN_RE.search(body)
+    zh = m.group(1).strip() if m else None
+    entries.append((en, zh))
+
+# ─── Render notes HTML (bilingual headings + list of EN / 中文 per item) ──
+def render_li(en, zh):
+    en_esc = html.escape(en)
+    if zh:
+        zh_esc = html.escape(zh)
+        return (
+            f"    <li><strong>{en_esc}</strong>"
+            f"<br><span style=\"color:#666\">{zh_esc}</span></li>"
+        )
+    return f"    <li>{en_esc}</li>"
+
+if entries:
+    lis = "\n".join(render_li(en, zh) for en, zh in entries)
+    body = f"<ul>\n{lis}\n  </ul>"
+else:
+    body = "<p>Maintenance release · 维护更新</p>"
+
+notes_html = (
+    "<div style=\"font-family:-apple-system,sans-serif;\">"
+    f"<h3>更新内容 · What's new in {html.escape(version)}</h3>"
+    f"{body}"
+    "</div>"
+)
+
+# ─── Splice/refresh the appcast item ──
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 ET.register_namespace("sparkle", SPARKLE)
 
@@ -73,41 +139,49 @@ assert channel is not None, "appcast.xml missing <channel>"
 
 # Drop any pre-existing item with the same sparkle:version (idempotent re-run).
 for item in list(channel.findall("item")):
-    v = item.find("{%s}version" % SPARKLE)
-    if v is not None and v.text == version:
+    v = item.find(f"{{{SPARKLE}}}version")
+    if v is not None and v.text == build_number:
         channel.remove(item)
+
+NOTES_PLACEHOLDER = "__GLINT_NOTES_CDATA_PLACEHOLDER__"
 
 item = ET.Element("item")
 ET.SubElement(item, "title").text = f"Glint {version}"
-ET.SubElement(item, "{%s}version" % SPARKLE).text = version
-ET.SubElement(item, "{%s}shortVersionString" % SPARKLE).text = version
+ET.SubElement(item, f"{{{SPARKLE}}}version").text = build_number
+ET.SubElement(item, f"{{{SPARKLE}}}shortVersionString").text = version
 ET.SubElement(item, "pubDate").text = pub_date
-ET.SubElement(item, "{%s}minimumSystemVersion" % SPARKLE).text = "14.0"
-ET.SubElement(item, "{%s}releaseNotesLink" % SPARKLE).text = release_notes_link
+ET.SubElement(item, f"{{{SPARKLE}}}minimumSystemVersion").text = "14.0"
+ET.SubElement(item, f"{{{SPARKLE}}}releaseNotesLink").text = release_notes_link
+ET.SubElement(item, "description").text = NOTES_PLACEHOLDER
 
 enclosure = ET.Element("enclosure")
 enclosure.set("url", url)
 enclosure.set("length", length)
 enclosure.set("type", "application/octet-stream")
-# Parse "sparkle:edSignature=\"...\" length=\"...\"" into attrs.
+# Parse `sparkle:edSignature="..." length="..."` into attrs.
 if sig_line:
-    import re
     for k, v in re.findall(r'(\w+:?\w+)="([^"]*)"', sig_line):
         enclosure.set(k, v)
 item.append(enclosure)
 
 # Insert as the newest item (right after <description> / <language>).
-insert_at = 0
+insert_at = len(list(channel))
 for i, child in enumerate(list(channel)):
     if child.tag == "item":
         insert_at = i
         break
-else:
-    insert_at = len(list(channel))
 channel.insert(insert_at, item)
 
 ET.indent(tree, space="  ")
 tree.write(path, encoding="utf-8", xml_declaration=True)
+
+# Post-process: swap the placeholder for a CDATA section, so Sparkle
+# can render the HTML rather than treating &lt;ul&gt;… as literal text.
+with open(path, "r", encoding="utf-8") as f:
+    raw = f.read()
+raw = raw.replace(NOTES_PLACEHOLDER, f"<![CDATA[{notes_html}]]>")
+with open(path, "w", encoding="utf-8") as f:
+    f.write(raw)
 PY
 
-echo "appcast.xml updated with v${VERSION}"
+echo "appcast.xml updated with v${VERSION} (build ${BUILD_NUMBER})"

@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='utf-8'?>
+<?xml version="1.0" encoding="utf-8"?>
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
   <channel>
     <title>Glint</title>
@@ -7,21 +7,13 @@
     <language>en</language>
     <item>
       <title>Glint 0.0.3</title>
-      <sparkle:version>0.0.3</sparkle:version>
+      <sparkle:version>202606091148</sparkle:version>
       <sparkle:shortVersionString>0.0.3</sparkle:shortVersionString>
       <pubDate>Tue, 09 Jun 2026 11:49:06 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:releaseNotesLink>https://github.com/chenbstack/glint/releases/tag/v0.0.3</sparkle:releaseNotesLink>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.0.3</h3><ul><li><strong>about: surface auto-update wiring as a Build row</strong><br><span style="color:#666">关于面板:把 Sparkle 自动更新状态展示出来</span></li></ul></div>]]></description>
       <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.0.3/Glint-0.0.3.dmg" length="9059446" type="application/octet-stream" sparkle:edSignature="NiqgLAWk5mak5dCini3bsQe0EKqItP5wtS1rq89qdRUhnXWhjSaAhwBNPdKOvdD2lcKsCsLjIgXiIeWwosveAw==" />
-    </item>
-    <item>
-      <title>Glint 0.0.2</title>
-      <sparkle:version>0.0.2</sparkle:version>
-      <sparkle:shortVersionString>0.0.2</sparkle:shortVersionString>
-      <pubDate>Tue, 09 Jun 2026 11:43:22 +0000</pubDate>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:releaseNotesLink>https://github.com/chenbstack/glint/releases/tag/v0.0.2</sparkle:releaseNotesLink>
-      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.0.2/Glint-0.0.2.dmg" length="10125284" type="application/octet-stream" sparkle:edSignature="3ZNnU7ZDKqg0fG65kJv0AKhIcxqHg2tHdt39MZdBXe5ZlzY1k8WgWCqKaJlM1ycCWSuKbaEKZbqraxxExAULCw==" />
     </item>
   </channel>
 </rss>
