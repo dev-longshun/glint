@@ -45,17 +45,23 @@ fi
 #      installs without a venv, so adding defusedxml would mean spinning
 #      up a venv on every release for no real security gain.
 
-python3 - "$APPCAST" <<PY
+# Pass every dynamic value through env vars and use a quoted heredoc
+# (<<'PY'), so bash performs no interpolation inside the python body. A
+# SIG_LINE that contains its own double quotes (always, for EdDSA) would
+# otherwise corrupt a """${SIG_LINE}""" triple-quoted literal.
+export VERSION DOWNLOAD_URL PUB_DATE LENGTH SIG_LINE REPO TAG
+
+python3 - "$APPCAST" <<'PY'
 import os, sys
 import xml.etree.ElementTree as ET
 
 path = sys.argv[1]
 version    = os.environ["VERSION"]
-url        = "${DOWNLOAD_URL}"
-pub_date   = "${PUB_DATE}"
-length     = "${LENGTH}"
-sig_line   = """${SIG_LINE}""".strip()
-release_notes_link = f"https://github.com/${REPO}/releases/tag/${TAG}"
+url        = os.environ["DOWNLOAD_URL"]
+pub_date   = os.environ["PUB_DATE"]
+length     = os.environ["LENGTH"]
+sig_line   = os.environ.get("SIG_LINE", "").strip()
+release_notes_link = f"https://github.com/{os.environ['REPO']}/releases/tag/{os.environ['TAG']}"
 
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 ET.register_namespace("sparkle", SPARKLE)
