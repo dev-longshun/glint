@@ -151,7 +151,9 @@ ET.SubElement(item, f"{{{SPARKLE}}}version").text = build_number
 ET.SubElement(item, f"{{{SPARKLE}}}shortVersionString").text = version
 ET.SubElement(item, "pubDate").text = pub_date
 ET.SubElement(item, f"{{{SPARKLE}}}minimumSystemVersion").text = "14.0"
-ET.SubElement(item, f"{{{SPARKLE}}}releaseNotesLink").text = release_notes_link
+# Don't emit <sparkle:releaseNotesLink> — when both link and description
+# are present, Sparkle prefers the link and iframes the GitHub repo page
+# straight into the dialog. We want the local CDATA HTML to render.
 ET.SubElement(item, "description").text = NOTES_PLACEHOLDER
 
 enclosure = ET.Element("enclosure")
