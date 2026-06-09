@@ -715,6 +715,10 @@ private struct AboutPane: View {
                 SettingsRow("Channel", subtitle: nil) {
                     StatusPill(label: "Local Dev", tone: .neutral)
                 }
+                SettingsDivider()
+                SettingsRow("Auto-update", subtitle: nil) {
+                    StatusPill(label: "Sparkle 2.6", tone: .ok)
+                }
             }
         }
     }
