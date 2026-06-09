@@ -26,7 +26,7 @@ trap 'rm -f "$PRIV_TMP"' EXIT
 
 # 1. Fetch Sparkle's tools if missing.
 if [ ! -x "$GEN_KEYS" ]; then
-  echo "Downloading Sparkle $SPARKLE_VERSION…"
+  echo "Downloading Sparkle ${SPARKLE_VERSION}..."
   mkdir -p "$SPARKLE_DIR"
   curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
     | tar -xJ -C "$SPARKLE_DIR" --strip-components=1
@@ -43,7 +43,11 @@ fi
 echo "Public key: $PUB"
 
 # 3. Export the private key (Sparkle 2.6+: `generate_keys -x <path>`).
-"$GEN_KEYS" -x "$PRIV_TMP" >/dev/null
+# Don't swallow output — generate_keys may print a Keychain access prompt
+# notice, and the user needs to click "Always Allow" in the dialog that
+# pops up. If you redirect to /dev/null the script looks like it succeeded
+# while writing an empty file.
+"$GEN_KEYS" -x "$PRIV_TMP"
 chmod 0600 "$PRIV_TMP"
 if [ ! -s "$PRIV_TMP" ]; then
   echo "ERROR: private key export produced an empty file." >&2
