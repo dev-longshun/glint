@@ -1,12 +1,17 @@
 import AppKit
 import Darwin
+import QuartzCore
 import GhosttyKit
 
 /// AppKit view hosting one `ghostty_surface_t`.
 ///
-/// We give ghostty an `NSView*` via `ghostty_surface_config_s.platform.macos.nsview`;
-/// ghostty attaches its own `CAMetalLayer` to the view's layer hierarchy and
-/// drives it. We forward keyboard / resize events back into the surface.
+/// We give ghostty an `NSView*` via `ghostty_surface_config_s.platform.macos.nsview`.
+/// The view's backing layer is a `CAMetalLayer` we install ourselves via
+/// `makeBackingLayer` — ghostty's renderer sees the existing layer and draws
+/// straight into it instead of inserting a sublayer. Owning the layer lets us
+/// resize the drawable atomically with the view bounds inside a CATransaction
+/// (disableActions=true), which is what kills the resize stretch/tear that
+/// happens when AppKit and the renderer disagree about size for one frame.
 final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     private var surface: ghostty_surface_t?
@@ -49,6 +54,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = NSColor(red: 0.043, green: 0.039, blue: 0.078, alpha: 1.0).cgColor
+        // CAMetalLayer otherwise re-projects whatever was there from the old
+        // drawableSize onto the new bounds for one frame — that's the visible
+        // "stretch" during live resize. Pinning the layer to its center stops
+        // the rubber-banding even if a frame slips past our CATransaction.
+        layer?.contentsGravity = .center
         // Accept file drops from Finder; on drop we paste the shell-quoted
         // path so users can `cd <drop>` without typing it.
         registerForDraggedTypes([.fileURL])
@@ -58,6 +68,22 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     deinit {
         if let s = surface { ghostty_surface_free(s) }
+    }
+
+    /// Install a CAMetalLayer as the view's backing layer. Ghostty's macOS
+    /// apprt checks `view.layer` at surface-creation time; finding a
+    /// CAMetalLayer here means it renders directly into this layer instead
+    /// of inserting its own sublayer — which is what lets `setFrameSize`
+    /// resize the drawable atomically with the view bounds below.
+    override func makeBackingLayer() -> CALayer {
+        let metalLayer = CAMetalLayer()
+        metalLayer.pixelFormat = .bgra8Unorm
+        // framebufferOnly=false lets the macOS compositor sample the drawable
+        // for translucent / blurred window backgrounds. Matches standalone
+        // ghostty's SurfaceView and cmux.
+        metalLayer.framebufferOnly = false
+        metalLayer.isOpaque = false
+        return metalLayer
     }
 
     override func viewDidMoveToWindow() {
@@ -113,10 +139,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         }
         self.surface = s
 
-        let scale = window?.backingScaleFactor ?? 2.0
-        ghostty_surface_set_size(s,
-                                 UInt32(bounds.width * scale),
-                                 UInt32(bounds.height * scale))
+        // Route the initial size through the same CATransaction path the
+        // resize hooks use, so frame 0 already has drawableSize aligned
+        // with view bounds — no first-paint stretch from the layer's
+        // default 0×0 drawable.
+        syncSurfaceSize(pointsSize: bounds.size)
     }
 
     /// Best-effort current cwd: prefers the cached value pushed via ghostty's
@@ -212,20 +239,38 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
-        guard let s = surface else { return }
-        let scale = window?.backingScaleFactor ?? 2.0
-        ghostty_surface_set_size(s,
-                                 UInt32(newSize.width * scale),
-                                 UInt32(newSize.height * scale))
+        syncSurfaceSize(pointsSize: newSize)
     }
 
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
+        syncSurfaceSize(pointsSize: bounds.size)
+    }
+
+    /// Push (drawableSize, contentsScale, ghostty surface size) in one
+    /// CATransaction with implicit animations disabled. This is what kills
+    /// the visible stretch during live resize: AppKit changes the view's
+    /// bounds in the same transaction that the Metal layer's backing
+    /// store and ghostty's grid both pick up the new pixel size — so the
+    /// compositor never gets a frame where the drawable's old size has
+    /// to be projected onto the new bounds.
+    private func syncSurfaceSize(pointsSize: NSSize) {
         guard let s = surface else { return }
         let scale = window?.backingScaleFactor ?? 2.0
-        ghostty_surface_set_size(s,
-                                 UInt32(bounds.width * scale),
-                                 UInt32(bounds.height * scale))
+        let pixelWidth = floor(pointsSize.width * scale)
+        let pixelHeight = floor(pointsSize.height * scale)
+        guard pixelWidth > 0, pixelHeight > 0 else { return }
+        let drawableSize = CGSize(width: pixelWidth, height: pixelHeight)
+
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        layer?.contentsScale = scale
+        if let metalLayer = layer as? CAMetalLayer,
+           metalLayer.drawableSize != drawableSize {
+            metalLayer.drawableSize = drawableSize
+        }
+        ghostty_surface_set_size(s, UInt32(pixelWidth), UInt32(pixelHeight))
+        CATransaction.commit()
     }
 
     // MARK: - focus
@@ -254,6 +299,23 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     override func keyDown(with event: NSEvent) {
         guard let s = surface else { super.keyDown(with: event); return }
         let mods = event.modifierFlags
+        // ⌘V (keycode 9) with an image clipboard: forward ⌃V (byte
+        // 0x16) into the PTY instead of pasting a file-path string.
+        // The running CLI (claude code, codex) reads the system
+        // clipboard itself on ⌃V and attaches the image directly —
+        // no literal path leaks into the prompt buffer.
+        if mods.contains(.command),
+           !mods.contains(.shift), !mods.contains(.option), !mods.contains(.control),
+           event.keyCode == 9,
+           clipboardHasPasteableImage() {
+            var syn: UInt8 = 0x16
+            withUnsafePointer(to: &syn) { ptr in
+                ptr.withMemoryRebound(to: CChar.self, capacity: 1) { cptr in
+                    ghostty_surface_text_input(s, cptr, 1)
+                }
+            }
+            return
+        }
         let hasBindingMod = mods.contains(.control) || mods.contains(.command)
         if hasBindingMod || Self.isSpecialKey(event.keyCode) {
             // Bindings + special keys (arrows, Return, Backspace, etc.) go
@@ -370,16 +432,19 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         forwardMouseButton(event, state: GHOSTTY_MOUSE_RELEASE, button: btn)
     }
 
-    /// ghostty's mouse_pos is in the same scaled-pixel space as
-    /// `ghostty_surface_set_size`: origin top-left, Y growing downward.
-    /// NSEvent gives us window coords with origin bottom-left, so flip Y.
+    /// ghostty's mouse_pos is in logical POINTS with top-left origin,
+    /// even though `surface_set_size` is in pixels — the apprt is
+    /// expected to do the cell-grid mapping in the same units it laid
+    /// out the view with. NSEvent gives us window coords with bottom-
+    /// left origin, so convert to view-local and flip Y. (Multiplying
+    /// by backingScaleFactor here, like the size call does, makes
+    /// every mouse hit land in a cell ~2× to the right and down — the
+    /// "selection at wrong position" bug.)
     private func forwardMousePos(_ event: NSEvent) {
         guard let s = surface else { return }
         let local = convert(event.locationInWindow, from: nil)
-        let scale = window?.backingScaleFactor ?? 2.0
-        let px = local.x * scale
-        let py = (bounds.height - local.y) * scale
-        ghostty_surface_mouse_pos(s, px, py, currentMods(event.modifierFlags))
+        let y = bounds.height - local.y
+        ghostty_surface_mouse_pos(s, local.x, y, currentMods(event.modifierFlags))
     }
 
     private func forwardMouseButton(_ event: NSEvent,
@@ -413,9 +478,8 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     }
 
     override func mouseExited(with event: NSEvent) {
-        // Send -1,-1 so ghostty stops drawing hover effects (link
-        // underline, mouse-mode cursor highlight) when the pointer
-        // leaves the surface entirely.
+        // Send (-1, -1) so ghostty drops link underline / mouse-mode
+        // hover decoration when the pointer leaves the surface.
         guard let s = surface else { return }
         ghostty_surface_mouse_pos(s, -1, -1, currentMods(event.modifierFlags))
     }
@@ -562,7 +626,86 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     @objc private func menuPaste(_ sender: Any?) {
         guard let s = surface else { return }
+        if pasteImageFromClipboardIfPresent() { return }
         triggerBindingAction(s, "paste_from_clipboard")
+    }
+
+    /// True when the pasteboard holds image bytes worth re-routing through
+    /// the running CLI's own ⌃V handler. Finder file-URL copies fall back
+    /// to the regular paste path so the user gets the file path, not a
+    /// detour through the agent's image-attach flow.
+    private func clipboardHasPasteableImage() -> Bool {
+        let pb = NSPasteboard.general
+        let pbTypes = Set(pb.types ?? [])
+        guard pbTypes.contains(.png) || pbTypes.contains(.tiff) else { return false }
+        if let urls = pb.readObjects(forClasses: [NSURL.self], options: nil) as? [URL],
+           !urls.isEmpty {
+            return false
+        }
+        return true
+    }
+
+    /// Right-click "Paste" alternative for image clipboards: write the
+    /// image under `~/Library/Caches/Glint/paste/` and inject the
+    /// shell-quoted path. Kept around because some users want the
+    /// literal path (e.g. to drop it into a shell command) instead of
+    /// the ⌃V forwarding the ⌘V hotkey now does.
+    private func pasteImageFromClipboardIfPresent() -> Bool {
+        guard let s = surface, clipboardHasPasteableImage() else { return false }
+        let pb = NSPasteboard.general
+        guard let pngData = imagePNGData(from: pb) else { return false }
+        guard let path = persistPastedImage(pngData) else { return false }
+        let quoted = shellQuote(path)
+        quoted.withCString { ptr in
+            ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
+        }
+        return true
+    }
+
+    /// Pull the best PNG representation we can off the pasteboard. Tries
+    /// PNG bytes directly (screenshots), then TIFF (most other sources),
+    /// then any NSImage the pasteboard will hand us.
+    private func imagePNGData(from pb: NSPasteboard) -> Data? {
+        if let data = pb.data(forType: .png) { return data }
+        if let tiff = pb.data(forType: .tiff),
+           let rep = NSBitmapImageRep(data: tiff) {
+            return rep.representation(using: .png, properties: [:])
+        }
+        if let image = NSImage(pasteboard: pb),
+           let tiff = image.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff) {
+            return rep.representation(using: .png, properties: [:])
+        }
+        return nil
+    }
+
+    /// Write to `~/Library/Caches/Glint/paste/glint-paste-<ts>.png`.
+    /// Cache directory so macOS can reclaim it; pid+timestamp so
+    /// repeated pastes don't collide between panes.
+    private func persistPastedImage(_ data: Data) -> String? {
+        let fm = FileManager.default
+        guard let caches = try? fm.url(for: .cachesDirectory,
+                                       in: .userDomainMask,
+                                       appropriateFor: nil,
+                                       create: true) else {
+            return nil
+        }
+        let dir = caches.appendingPathComponent("Glint/paste", isDirectory: true)
+        do {
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            NSLog("[glint] paste cache dir create failed: \(error)")
+            return nil
+        }
+        let ts = Int(Date().timeIntervalSince1970 * 1000)
+        let url = dir.appendingPathComponent("glint-paste-\(getpid())-\(ts).png")
+        do {
+            try data.write(to: url, options: [.atomic])
+            return url.path
+        } catch {
+            NSLog("[glint] paste write failed: \(error)")
+            return nil
+        }
     }
 
     @objc private func menuSelectAll(_ sender: Any?) {
