@@ -12,8 +12,8 @@
       <pubDate>Wed, 10 Jun 2026 05:23:20 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.12</h3><ul>
-    <li>app: check for updates hourly instead of daily</li>
-    <li>app: localize destructive-confirm alerts, fill missing zh-Hans strings</li>
+    <li><strong>app: check for updates hourly instead of daily</strong><br><span style="color:#666">自动更新检查间隔从每天一次缩短到每小时一次</span></li>
+    <li><strong>app: localize destructive-confirm alerts, fill missing zh-Hans strings</strong><br><span style="color:#666">退出/关闭面板/删除工作区等确认弹窗汉化,并补齐右键菜单等缺失的中文翻译</span></li>
     <li>release: appcast for v0.1.11</li>
   </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.11</h3><ul>
     <li><strong>sidebar: run comet, pulse and breathing borders on the render server</strong><br><span style="color:#666">comet 边框/状态点/权限呼吸边框改为 Core Animation 循环,agent 工作中 CPU 从 ~15% 降到 ~1%</span></li>
