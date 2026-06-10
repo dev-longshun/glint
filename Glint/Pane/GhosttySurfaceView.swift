@@ -324,6 +324,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         if Self.looksLikeVersion(comm), let argv0 = Self.processBasenameFromArgv(pid: Int32(pid)) {
             return argv0
         }
+        // npm-installed CLIs (codex, claude, …) run as `node` with the real
+        // tool only visible in argv — the bin shim's path. Surface that
+        // basename instead so the icon table can match the actual agent.
+        if comm == "node", let script = Self.scriptBasenameFromArgv(pid: Int32(pid)) {
+            return script
+        }
         return comm
     }
 
@@ -339,27 +345,48 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         return sawDigit && sawDot
     }
 
-    /// Read `KERN_PROCARGS2` for `pid` and return the basename of `argv[0]`.
+    /// Read `KERN_PROCARGS2` for `pid` and return the first few argv entries.
     /// Layout: `int argc; char exec_path[]; char argv[0][]; …`.
-    private static func processBasenameFromArgv(pid: Int32) -> String? {
+    private static func processArgv(pid: Int32, limit: Int = 8) -> [String]? {
         var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
         var sz: Int = 0
         if sysctl(&mib, 3, nil, &sz, nil, 0) != 0 || sz == 0 { return nil }
         var buf = [UInt8](repeating: 0, count: sz)
         if sysctl(&mib, 3, &buf, &sz, nil, 0) != 0 { return nil }
         guard sz > MemoryLayout<Int32>.size else { return nil }
+        let argc = Int(buf.withUnsafeBytes { $0.loadUnaligned(as: Int32.self) })
         // Skip argc, then the exec_path C-string and any nul padding.
         var i = MemoryLayout<Int32>.size
-        // exec_path: read until first \0
         while i < sz && buf[i] != 0 { i += 1 }
         while i < sz && buf[i] == 0 { i += 1 }
-        // Now i points at argv[0]. Read until next \0.
-        let start = i
-        while i < sz && buf[i] != 0 { i += 1 }
-        guard i > start else { return nil }
-        let argv0 = String(decoding: buf[start..<i], as: UTF8.self)
-        // Return basename only; the icon table matches on short names.
+        var argv: [String] = []
+        while i < sz, argv.count < min(argc, limit) {
+            let start = i
+            while i < sz && buf[i] != 0 { i += 1 }
+            guard i > start else { break }
+            argv.append(String(decoding: buf[start..<i], as: UTF8.self))
+            i += 1
+        }
+        return argv.isEmpty ? nil : argv
+    }
+
+    /// Basename of `argv[0]`; the icon table matches on short names.
+    private static func processBasenameFromArgv(pid: Int32) -> String? {
+        guard let argv0 = processArgv(pid: pid, limit: 1)?.first else { return nil }
         return (argv0 as NSString).lastPathComponent
+    }
+
+    /// Basename of the script a `node` process is executing: the first argv
+    /// entry after the binary that looks like a path (npm bin shims always
+    /// pass one — `node /opt/homebrew/bin/codex` → "codex"). Requiring a
+    /// "/" keeps inline code (`node -e '…'`) and a bare REPL out; those
+    /// return nil and the caller falls back to the plain comm name.
+    private static func scriptBasenameFromArgv(pid: Int32) -> String? {
+        guard let argv = processArgv(pid: pid) else { return nil }
+        for arg in argv.dropFirst() where !arg.hasPrefix("-") && arg.contains("/") {
+            return (arg as NSString).lastPathComponent
+        }
+        return nil
     }
 
     // MARK: - resize

@@ -212,8 +212,9 @@ final class WorkspaceStore: ObservableObject {
     /// few seconds; drives the workspace card icon. Non-persistent.
     @Published var paneProcesses: [WorkspacePaneKey: String] = [:]
     /// CLI-agent state per pane (push-driven via AgentBridge hooks).
-    /// Beats `paneProcesses` for icon/state because tcgetpgrp can't see
-    /// through Node wrappers like `claude`. Non-persistent.
+    /// Beats `paneProcesses` for icon/state because hooks carry live
+    /// status (thinking/permission/…) the 1s name poll can't know.
+    /// Non-persistent.
     @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
