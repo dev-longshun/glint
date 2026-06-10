@@ -200,11 +200,6 @@ private struct WorkspaceCard: View {
     /// only on a fresh transition into `.justCompleted`, so a re-render
     /// while the status is sticky doesn't re-fire.
     @State private var justCompletedFlash: Double = 0
-    /// While the focused pane is `.needsPermission`, this drives a
-    /// gentle amber-border pulse. Toggled in `.onAppear` of the overlay
-    /// with `repeatForever`, so it auto-stops when the overlay leaves.
-    @State private var permissionPulseOn: Bool = false
-
     var body: some View {
         let active = store.selectedWorkspaceID == ws.id
         let summary = store.agentSummary(for: ws)
@@ -525,29 +520,22 @@ private struct WorkspaceCard: View {
     }
 
     /// While the agent is `.needsPermission`, render a soft amber border
-    /// that breathes between 0.25 and 0.85 alpha on a 1.2s cycle. Once
-    /// the status leaves this state the overlay disappears entirely and
-    /// the implicit `repeatForever` animation winds down with the view.
+    /// that breathes between 0.25 and 0.85 alpha on a 1.2s cycle. The
+    /// breathing is a Core Animation opacity loop on the render server —
+    /// a SwiftUI `repeatForever` here re-renders the card every frame on
+    /// the main thread (see CardBorderTraveler).
     @ViewBuilder
     private func permissionPulseOverlay(status: PaneAgentStatus?) -> some View {
         if status == .needsPermission {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .strokeBorder(
-                    Color(red: 1.0, green: 0.45, blue: 0.42),
-                    lineWidth: 1.5
-                )
+            BreathingBorder(
+                color: NSColor(red: 1.0, green: 0.45, blue: 0.42, alpha: 1.0),
+                cornerRadius: 9,
+                lineWidth: 1.5,
                 // Reduce Motion: hold the border at full strength instead
                 // of breathing — still unmistakably "needs attention".
-                .opacity(reduceMotion ? 0.85 : (permissionPulseOn ? 0.85 : 0.25))
-                .allowsHitTesting(false)
-                .onAppear {
-                    guard !reduceMotion else { return }
-                    permissionPulseOn = false
-                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
-                        permissionPulseOn = true
-                    }
-                }
-                .onDisappear { permissionPulseOn = false }
+                animates: !reduceMotion
+            )
+            .allowsHitTesting(false)
         }
     }
 
@@ -879,17 +867,19 @@ private final class GIFFrameCache {
 private struct AgentStatusDot: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: PaneAgentStatus?
-    @State private var pulse = false
 
     var body: some View {
         Group {
             if let status, status != .idle {
                 ZStack {
-                    Circle()
-                        .fill(color(for: status))
-                        .overlay(
-                            Circle().strokeBorder(Color.black.opacity(0.45), lineWidth: 1)
-                        )
+                    // The scale/opacity pulse runs as a Core Animation loop
+                    // on the render server — a SwiftUI `repeatForever` here
+                    // re-renders every frame on the main thread (see
+                    // CardBorderTraveler).
+                    PulsingDot(
+                        color: NSColor(color(for: status)),
+                        pulsing: needsPulse(status)
+                    )
                     if status == .justCompleted {
                         Image(systemName: "checkmark")
                             .font(.system(size: 6, weight: .heavy))
@@ -897,15 +887,6 @@ private struct AgentStatusDot: View {
                     }
                 }
                 .frame(width: 10, height: 10)
-                .scaleEffect(needsPulse(status) && pulse ? 1.18 : 1.0)
-                .opacity(needsPulse(status) && pulse ? 0.75 : 1.0)
-                .animation(
-                    needsPulse(status)
-                        ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true)
-                        : .default,
-                    value: pulse
-                )
-                .onAppear { pulse = true }
             }
         }
     }
@@ -932,62 +913,320 @@ private struct AgentStatusDot: View {
 /// indeterminate progress. Compaction passes `dual: true` so two opposing
 /// spots travel together — visually distinct from a normal thinking turn.
 ///
-/// The gradient itself is static; the sweep comes from `rotationEffect`
-/// on a square gradient layer masked by the border stroke. Core Animation
-/// runs transform animations on the GPU without touching the layer's
-/// backing store — animating the gradient's `angle` parameter instead
-/// re-rasterizes the stroke on the CPU every frame (~30% of a core with
-/// one spinner on a ProMotion display), which starves the main thread
-/// ghostty needs for frame presentation and tick processing.
-private struct CardBorderTraveler: View {
+/// The sweep is a `CABasicAnimation` rotating a conic `CAGradientLayer`
+/// masked by the border stroke, so it plays entirely on the render
+/// server. A SwiftUI `repeatForever` rotation here is NOT offloaded to
+/// Core Animation: the view graph re-resolves the display list every
+/// frame on the main thread (~15% CPU with one spinner), starving the
+/// main thread ghostty needs for frame presentation and tick processing.
+private struct CardBorderTraveler: NSViewRepresentable {
     let color: Color
     let cornerRadius: CGFloat
     let dual: Bool
-    @State private var spinning = false
 
-    var body: some View {
-        GeometryReader { geo in
+    func makeNSView(context: Context) -> CometLayerView {
+        let view = CometLayerView()
+        view.apply(color: NSColor(color), cornerRadius: cornerRadius, dual: dual)
+        return view
+    }
+
+    func updateNSView(_ view: CometLayerView, context: Context) {
+        view.apply(color: NSColor(color), cornerRadius: cornerRadius, dual: dual)
+    }
+
+    final class CometLayerView: NSView {
+        private static let spinKey = "glint.comet.spin"
+        private let gradientLayer = CAGradientLayer()
+        private var color: NSColor = .clear
+        private var cornerRadius: CGFloat = 9
+        private var dual = false
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            gradientLayer.type = .conic
+            gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.5)
+            gradientLayer.endPoint = CGPoint(x: 1.0, y: 0.5)
+            gradientLayer.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        }
+
+        required init?(coder: NSCoder) { fatalError("not used") }
+
+        /// The overlay spans the whole card; never swallow its clicks.
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        func apply(color: NSColor, cornerRadius: CGFloat, dual: Bool) {
+            guard color != self.color || cornerRadius != self.cornerRadius
+                || dual != self.dual else { return }
+            self.color = color
+            self.cornerRadius = cornerRadius
+            self.dual = dual
+            configureLayers()
+        }
+
+        /// Layer-backed views can be handed a fresh layer when re-parented
+        /// or moved between windows, dropping sublayers/animations.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            configureLayers()
+        }
+
+        override func layout() {
+            super.layout()
+            configureLayers()
+        }
+
+        private func configureLayers() {
+            guard let layer, bounds.width > 1, bounds.height > 1 else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            if gradientLayer.superlayer !== layer {
+                layer.addSublayer(gradientLayer)
+            }
+            gradientLayer.colors = stops.map(\.0.cgColor)
+            gradientLayer.locations = stops.map { NSNumber(value: $0.1) }
             // Square side = card diagonal, so the rotating gradient covers
             // every corner of the mask at any angle.
-            let side = (geo.size.width * geo.size.width
-                + geo.size.height * geo.size.height).squareRoot()
-            AngularGradient(gradient: Gradient(stops: stops), center: .center)
-                .frame(width: side, height: side)
-                .rotationEffect(.degrees(spinning ? 360 : 0))
-                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+            let side = (bounds.width * bounds.width
+                + bounds.height * bounds.height).squareRoot()
+            gradientLayer.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+            gradientLayer.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            let mask = layer.mask as? CAShapeLayer ?? CAShapeLayer()
+            mask.frame = bounds
+            mask.path = strokeBorderPath(in: bounds, cornerRadius: cornerRadius,
+                                         lineWidth: 1.2)
+            mask.fillColor = nil
+            mask.strokeColor = NSColor.white.cgColor
+            mask.lineWidth = 1.2
+            layer.mask = mask
+            CATransaction.commit()
+            ensureSpin()
         }
-        .mask {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(Color.white, lineWidth: 1.2)
-        }
-        .allowsHitTesting(false)
-        .onAppear {
-            withAnimation(.linear(duration: dual ? 1.4 : 2.0)
-                .repeatForever(autoreverses: false)) {
-                    spinning = true
-                }
-        }
-        .onDisappear { spinning = false }
-    }
 
-    private var stops: [Gradient.Stop] {
-        if dual {
+        private func ensureSpin() {
+            let duration: CFTimeInterval = dual ? 1.4 : 2.0
+            if let existing = gradientLayer.animation(forKey: Self.spinKey),
+               existing.duration == duration { return }
+            let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+            spin.fromValue = 0
+            // Negative = clockwise on screen (macOS layers are y-up).
+            spin.toValue = -2 * Double.pi
+            spin.duration = duration
+            spin.repeatCount = .infinity
+            spin.isRemovedOnCompletion = false
+            gradientLayer.add(spin, forKey: Self.spinKey)
+        }
+
+        private var stops: [(NSColor, Double)] {
+            if dual {
+                return [
+                    (color.withAlphaComponent(0.20), 0.00),
+                    (color.withAlphaComponent(0.95), 0.10),
+                    (color.withAlphaComponent(0.20), 0.30),
+                    (color.withAlphaComponent(0.20), 0.55),
+                    (color.withAlphaComponent(0.95), 0.72),
+                    (color.withAlphaComponent(0.20), 0.88),
+                    (color.withAlphaComponent(0.20), 1.00),
+                ]
+            }
             return [
-                .init(color: color.opacity(0.20), location: 0.00),
-                .init(color: color.opacity(0.95), location: 0.10),
-                .init(color: color.opacity(0.20), location: 0.30),
-                .init(color: color.opacity(0.20), location: 0.55),
-                .init(color: color.opacity(0.95), location: 0.72),
-                .init(color: color.opacity(0.20), location: 0.88),
-                .init(color: color.opacity(0.20), location: 1.00),
+                (color.withAlphaComponent(0.18), 0.00),
+                (color.withAlphaComponent(0.18), 0.55),
+                (color.withAlphaComponent(0.95), 0.72),
+                (color.withAlphaComponent(0.18), 0.88),
+                (color.withAlphaComponent(0.18), 1.00),
             ]
         }
-        return [
-            .init(color: color.opacity(0.18), location: 0.00),
-            .init(color: color.opacity(0.18), location: 0.55),
-            .init(color: color.opacity(0.95), location: 0.72),
-            .init(color: color.opacity(0.18), location: 0.88),
-            .init(color: color.opacity(0.18), location: 1.00),
-        ]
     }
+}
+
+/// The agent-status dot circle, with its working-state pulse running as a
+/// Core Animation scale/opacity loop on the render server.
+private struct PulsingDot: NSViewRepresentable {
+    let color: NSColor
+    let pulsing: Bool
+
+    func makeNSView(context: Context) -> DotLayerView {
+        let view = DotLayerView()
+        view.apply(color: color, pulsing: pulsing)
+        return view
+    }
+
+    func updateNSView(_ view: DotLayerView, context: Context) {
+        view.apply(color: color, pulsing: pulsing)
+    }
+
+    final class DotLayerView: NSView {
+        private static let pulseKey = "glint.dot.pulse"
+        private let dot = CALayer()
+        private var color: NSColor = .clear
+        private var pulsing = false
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            dot.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+            dot.borderWidth = 1
+        }
+
+        required init?(coder: NSCoder) { fatalError("not used") }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        func apply(color: NSColor, pulsing: Bool) {
+            guard color != self.color || pulsing != self.pulsing else { return }
+            self.color = color
+            self.pulsing = pulsing
+            configureLayers()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            configureLayers()
+        }
+
+        override func layout() {
+            super.layout()
+            configureLayers()
+        }
+
+        private func configureLayers() {
+            guard let layer, bounds.width > 1, bounds.height > 1 else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            if dot.superlayer !== layer {
+                layer.addSublayer(dot)
+            }
+            let side = min(bounds.width, bounds.height)
+            dot.bounds = CGRect(x: 0, y: 0, width: side, height: side)
+            dot.position = CGPoint(x: bounds.midX, y: bounds.midY)
+            dot.cornerRadius = side / 2
+            dot.backgroundColor = color.cgColor
+            dot.borderColor = NSColor.black.withAlphaComponent(0.45).cgColor
+            CATransaction.commit()
+            if pulsing {
+                guard dot.animation(forKey: Self.pulseKey) == nil else { return }
+                let scale = CABasicAnimation(keyPath: "transform.scale")
+                scale.fromValue = 1.0
+                scale.toValue = 1.18
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = 1.0
+                fade.toValue = 0.75
+                let group = CAAnimationGroup()
+                group.animations = [scale, fade]
+                group.duration = 0.9
+                group.autoreverses = true
+                group.repeatCount = .infinity
+                group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                group.isRemovedOnCompletion = false
+                dot.add(group, forKey: Self.pulseKey)
+            } else {
+                dot.removeAnimation(forKey: Self.pulseKey)
+            }
+        }
+    }
+}
+
+/// Amber "needs permission" border, breathing via a Core Animation
+/// opacity loop on the render server. `animates: false` (Reduce Motion)
+/// holds it steady at full strength.
+private struct BreathingBorder: NSViewRepresentable {
+    let color: NSColor
+    let cornerRadius: CGFloat
+    let lineWidth: CGFloat
+    let animates: Bool
+
+    func makeNSView(context: Context) -> BorderLayerView {
+        let view = BorderLayerView()
+        view.apply(color: color, cornerRadius: cornerRadius,
+                   lineWidth: lineWidth, animates: animates)
+        return view
+    }
+
+    func updateNSView(_ view: BorderLayerView, context: Context) {
+        view.apply(color: color, cornerRadius: cornerRadius,
+                   lineWidth: lineWidth, animates: animates)
+    }
+
+    final class BorderLayerView: NSView {
+        private static let breatheKey = "glint.permission.breathe"
+        private let border = CAShapeLayer()
+        private var color: NSColor = .clear
+        private var cornerRadius: CGFloat = 9
+        private var lineWidth: CGFloat = 1.5
+        private var animates = true
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            border.fillColor = nil
+        }
+
+        required init?(coder: NSCoder) { fatalError("not used") }
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        func apply(color: NSColor, cornerRadius: CGFloat,
+                   lineWidth: CGFloat, animates: Bool) {
+            guard color != self.color || cornerRadius != self.cornerRadius
+                || lineWidth != self.lineWidth || animates != self.animates
+            else { return }
+            self.color = color
+            self.cornerRadius = cornerRadius
+            self.lineWidth = lineWidth
+            self.animates = animates
+            configureLayers()
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            configureLayers()
+        }
+
+        override func layout() {
+            super.layout()
+            configureLayers()
+        }
+
+        private func configureLayers() {
+            guard let layer, bounds.width > 1, bounds.height > 1 else { return }
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            if border.superlayer !== layer {
+                layer.addSublayer(border)
+            }
+            border.frame = bounds
+            border.path = strokeBorderPath(in: bounds, cornerRadius: cornerRadius,
+                                           lineWidth: lineWidth)
+            border.strokeColor = color.cgColor
+            border.lineWidth = lineWidth
+            border.opacity = 0.85
+            CATransaction.commit()
+            if animates {
+                guard border.animation(forKey: Self.breatheKey) == nil else { return }
+                let breathe = CABasicAnimation(keyPath: "opacity")
+                breathe.fromValue = 0.85
+                breathe.toValue = 0.25
+                breathe.duration = 1.2
+                breathe.autoreverses = true
+                breathe.repeatCount = .infinity
+                breathe.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                breathe.isRemovedOnCompletion = false
+                border.add(breathe, forKey: Self.breatheKey)
+            } else {
+                border.removeAnimation(forKey: Self.breatheKey)
+            }
+        }
+    }
+}
+
+/// Path for a stroke that hugs the inside of `rect` (the CAShapeLayer
+/// equivalent of SwiftUI's `strokeBorder`): inset by half the line width
+/// so the stroke's outer edge lands exactly on the rect's edge.
+private func strokeBorderPath(in rect: CGRect, cornerRadius: CGFloat,
+                              lineWidth: CGFloat) -> CGPath {
+    let inset = rect.insetBy(dx: lineWidth / 2, dy: lineWidth / 2)
+    let radius = max(cornerRadius - lineWidth / 2, 0)
+    return CGPath(roundedRect: inset, cornerWidth: radius,
+                  cornerHeight: radius, transform: nil)
 }
