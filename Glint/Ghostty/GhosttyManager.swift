@@ -48,7 +48,10 @@ final class GhosttyManager {
             read_clipboard_cb: { _, _, _ in false },
             confirm_read_clipboard_cb: { _, _, _, _ in },
             write_clipboard_cb: GhosttyManager.writeClipboard,
-            close_surface_cb: GhosttyManager.closeSurface
+            close_surface_cb: GhosttyManager.closeSurface,
+            // Embedded tmux control mode (cmux's fork API); Glint doesn't
+            // consume these events.
+            tmux_control_cb: nil
         )
 
         guard let app = ghostty_app_new(&runtime, cfg) else {
