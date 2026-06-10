@@ -174,6 +174,19 @@ private struct WorkspaceCard: View {
     /// short cooldown matched to the spring response kills the oscillation
     /// without affecting genuine user-intent swaps onto a different card.
     @State private var lastTargetedAt: Date = .distantPast
+    /// Hover affordance — drives the 1pt scale + soft shadow that makes
+    /// cards feel "liftable" without being a heavy hover state. Driven
+    /// by `.onHover`; doesn't touch ghostty.
+    @State private var isHovered: Bool = false
+    /// One-shot opacity for the green glow that flashes when an agent's
+    /// `.justCompleted` arrives. 1 → 0 over ~0.7s, then idle. Re-armed
+    /// only on a fresh transition into `.justCompleted`, so a re-render
+    /// while the status is sticky doesn't re-fire.
+    @State private var justCompletedFlash: Double = 0
+    /// While the focused pane is `.needsPermission`, this drives a
+    /// gentle amber-border pulse. Toggled in `.onAppear` of the overlay
+    /// with `repeatForever`, so it auto-stops when the overlay leaves.
+    @State private var permissionPulseOn: Bool = false
 
     var body: some View {
         let active = store.selectedWorkspaceID == ws.id
@@ -210,11 +223,29 @@ private struct WorkspaceCard: View {
             Spacer(minLength: 0)
         }
         .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(active ? Color.white.opacity(0.09) : Color.white.opacity(0.03))
-        )
+        .background(cardBackground(active: active))
         .overlay(cardBorder(active: active, status: status))
+        .overlay(completionFlashOverlay)
+        .overlay(permissionPulseOverlay(status: status))
+        .scaleEffect(isHovered ? 1.005 : 1.0, anchor: .center)
+        .shadow(color: Color.black.opacity(isHovered ? 0.22 : 0),
+                radius: isHovered ? 6 : 0,
+                y: isHovered ? 2 : 0)
+        .animation(.easeOut(duration: 0.16), value: isHovered)
+        .onHover { hovering in
+            isHovered = hovering && !isEditing
+        }
+        .onChange(of: status) { oldStatus, newStatus in
+            // One-shot green flash on transition into .justCompleted.
+            // Guard against re-rendering while the status is sticky —
+            // we only want the flash on the actual edge.
+            if newStatus == .justCompleted && oldStatus != .justCompleted {
+                justCompletedFlash = 1
+                withAnimation(.easeOut(duration: 0.7)) {
+                    justCompletedFlash = 0
+                }
+            }
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             // Single-tap only — double-tap-to-rename used to live here but
@@ -302,7 +333,7 @@ private struct WorkspaceCard: View {
         }()
         return Group {
             if isClaude {
-                ClaudeMascotIcon()
+                ClaudeMascotIcon(status: status)
             } else if let sf = kind.sfSymbol {
                 Image(systemName: sf)
                     .font(.system(size: 13, weight: .medium))
@@ -339,27 +370,53 @@ private struct WorkspaceCard: View {
 
     @ViewBuilder
     private func secondaryRow(summary: (status: PaneAgentStatus, since: Date)?, active: Bool) -> some View {
-        if let summary, summary.status != .idle {
-            HStack(spacing: 4) {
-                Text(statusText(summary.status))
-                    .foregroundStyle(statusTextColor(summary.status))
-                    .fontWeight(.medium)
-                if showsTimer(summary.status) {
-                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                        Text("· \(elapsedString(since: summary.since, now: ctx.date))")
-                            .foregroundStyle(active ? Theme.text3 : Theme.text4)
+        // Wrap the two branches in a single Group keyed off the row's
+        // logical identity so SwiftUI treats a status flip as a view
+        // replacement and the `.transition(.opacity)` actually fires.
+        // Without the `.id(...)`, SwiftUI sees the same Text view with
+        // changed text and snaps without crossfading.
+        let key = secondaryRowKey(summary?.status)
+        Group {
+            if let summary, summary.status != .idle {
+                HStack(spacing: 4) {
+                    Text(statusText(summary.status))
+                        .foregroundStyle(statusTextColor(summary.status))
+                        .fontWeight(.medium)
+                    if showsTimer(summary.status) {
+                        TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                            Text("· \(elapsedString(since: summary.since, now: ctx.date))")
+                                .foregroundStyle(active ? Theme.text3 : Theme.text4)
+                        }
                     }
                 }
-            }
-            .font(.system(size: 11, design: .monospaced))
-            .lineLimit(1)
-            .truncationMode(.tail)
-        } else {
-            Text(cwdLine)
                 .font(.system(size: 11, design: .monospaced))
-                .foregroundStyle(active ? Theme.text3 : Theme.text4)
                 .lineLimit(1)
-                .truncationMode(.middle)
+                .truncationMode(.tail)
+            } else {
+                Text(cwdLine)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(active ? Theme.text3 : Theme.text4)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .id(key)
+        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.18), value: key)
+    }
+
+    /// Stable identity for the secondary row — bucket `idle` and `nil`
+    /// together (both render the cwd line), and each real status keeps
+    /// its own key so transitions between e.g. thinking → tool also
+    /// crossfade rather than snapping mid-word.
+    private func secondaryRowKey(_ s: PaneAgentStatus?) -> String {
+        switch s {
+        case .none, .some(.idle):       return "cwd"
+        case .some(.thinking):          return "thinking"
+        case .some(.tool):              return "tool"
+        case .some(.needsPermission):   return "permission"
+        case .some(.compacting):        return "compacting"
+        case .some(.justCompleted):     return "done"
         }
     }
 
@@ -381,6 +438,62 @@ private struct WorkspaceCard: View {
         let h = total / 3600
         let m = (total % 3600) / 60
         return "\(h)h\(m)m"
+    }
+
+    /// Card surface fill — extracted so the body's modifier chain stays
+    /// inside SwiftUI's type-inference budget. Three states: selected,
+    /// hovered, idle; transitions are animated via the bound `value:`
+    /// keys so they don't fight with the unrelated reorder spring on
+    /// the parent VStack.
+    private func cardBackground(active: Bool) -> some View {
+        let fill: Color = {
+            if active { return Color.white.opacity(0.09) }
+            if isHovered { return Color.white.opacity(0.055) }
+            return Color.white.opacity(0.03)
+        }()
+        return RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(fill)
+            .animation(.spring(response: 0.28, dampingFraction: 0.85), value: active)
+            .animation(.easeOut(duration: 0.16), value: isHovered)
+    }
+
+    /// One-shot green halo overlay that fades from full to clear over
+    /// ~0.7s when `justCompletedFlash` is non-zero. Decoupled from the
+    /// regular static border so the celebration doesn't fight with the
+    /// border color crossfade.
+    private var completionFlashOverlay: some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .strokeBorder(
+                Color(red: 0.40, green: 0.90, blue: 0.55),
+                lineWidth: 2
+            )
+            .blur(radius: 4)
+            .opacity(justCompletedFlash)
+            .allowsHitTesting(false)
+    }
+
+    /// While the agent is `.needsPermission`, render a soft amber border
+    /// that breathes between 0.25 and 0.85 alpha on a 1.2s cycle. Once
+    /// the status leaves this state the overlay disappears entirely and
+    /// the implicit `repeatForever` animation winds down with the view.
+    @ViewBuilder
+    private func permissionPulseOverlay(status: PaneAgentStatus?) -> some View {
+        if status == .needsPermission {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(
+                    Color(red: 1.0, green: 0.45, blue: 0.42),
+                    lineWidth: 1.5
+                )
+                .opacity(permissionPulseOn ? 0.85 : 0.25)
+                .allowsHitTesting(false)
+                .onAppear {
+                    permissionPulseOn = false
+                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                        permissionPulseOn = true
+                    }
+                }
+                .onDisappear { permissionPulseOn = false }
+        }
     }
 
     @ViewBuilder
@@ -479,14 +592,116 @@ private struct WorkspaceCard: View {
 /// Official Claude mark, bundled as an asset (`Claude.imageset`). Clipped
 /// to the same squircle as the other workspace icons so it sits flush in
 /// the sidebar row.
+/// Animated Claude mascot driven by per-status GIFs (idle / thinking /
+/// tool-call / working). The GIF carries the bulk of the motion; we
+/// keep two extra interaction beats on top:
+///   • Celebrate bounce — one-shot spring scale pop on the transition
+///     into `.justCompleted`, pairs with the card's green halo flash.
+///   • Tap squish — scale dip + spring rebound when the icon is clicked.
 private struct ClaudeMascotIcon: View {
+    let status: PaneAgentStatus?
+    @State private var celebrateScale: CGFloat = 1.0
+    @State private var tapScale: CGFloat = 1.0
+
     var body: some View {
-        Image("Claude")
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fill)
+        AnimatedGIFView(assetName: gifAssetName(for: status))
+            // The 128×128 gif canvas pads the robot with transparent
+            // margin (room for the bounce/confetti frames), so render
+            // bigger than the 28pt layout slot to keep the robot itself
+            // at icon size; the background is transparent so no clip.
+            .frame(width: 40, height: 40)
             .frame(width: 28, height: 28)
-            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
+            .onChange(of: status) { oldStatus, newStatus in
+                if newStatus == .justCompleted && oldStatus != .justCompleted {
+                    celebrateScale = 1.22
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                        celebrateScale = 1.0
+                    }
+                }
+            }
+            .onTapGesture {
+                tapScale = 0.85
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.5)) {
+                    tapScale = 1.0
+                }
+            }
+    }
+
+    /// Map the agent's status to the right Data Set in Assets.xcassets.
+    /// Idle covers the "nothing's happening" cases (including the post-
+    /// turn justCompleted window — the card already flashes green and
+    /// the celebrate scale pops, the gif staying idle keeps the moment
+    /// readable).
+    private func gifAssetName(for s: PaneAgentStatus?) -> String {
+        switch s {
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted):
+            return "ClaudeIdle"
+        case .some(.thinking):
+            return "ClaudeThinking"
+        case .some(.tool):
+            return "ClaudeToolCall"
+        case .some(.compacting):
+            return "ClaudeCompressing"
+        }
+    }
+}
+
+/// SwiftUI host for an animated GIF from Assets.xcassets (Data Set).
+/// `Image(...)` can't decode GIF frames, so we wrap `NSImageView` and
+/// feed it an `NSImage` whose representation is the GIF's bitmap rep —
+/// NSImageView's `animates` flag then cycles the frames natively.
+///
+/// Two gotchas this implementation guards against:
+///   * `NSImage(data:)` on GIF data sometimes returns an image with
+///     only the first frame, dropping the multi-frame array. Building
+///     the image via `NSBitmapImageRep(data:)` preserves all frames.
+///   * `wantsLayer = true` makes Core Animation own the contents, which
+///     bypasses NSImageView's frame ticker — so the GIF freezes on
+///     frame one. We let NSImageView render without an explicit layer;
+///     the rounded clip happens in SwiftUI via `clipShape`.
+///
+/// The view reloads its image only when `assetName` changes (tracked
+/// through `view.identifier`), so SwiftUI re-renders with the same
+/// state don't restart the animation mid-cycle.
+private struct AnimatedGIFView: NSViewRepresentable {
+    let assetName: String
+
+    func makeNSView(context: Context) -> NSImageView {
+        let view = NSImageView()
+        view.imageScaling = .scaleProportionallyUpOrDown
+        view.imageAlignment = .alignCenter
+        view.imageFrameStyle = .none
+        view.animates = true
+        // The gif bitmaps are 128×128; without these the representable
+        // insists on the image's intrinsic size and the outer .frame(28)
+        // just crops the center out of a full-size render.
+        view.setContentCompressionResistancePriority(.init(1), for: .horizontal)
+        view.setContentCompressionResistancePriority(.init(1), for: .vertical)
+        view.setContentHuggingPriority(.init(1), for: .horizontal)
+        view.setContentHuggingPriority(.init(1), for: .vertical)
+        return view
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSImageView, context: Context) -> CGSize? {
+        proposal.replacingUnspecifiedDimensions(by: CGSize(width: 28, height: 28))
+    }
+
+    func updateNSView(_ view: NSImageView, context: Context) {
+        let currentAsset = view.identifier?.rawValue
+        guard currentAsset != assetName else { return }
+        guard let data = NSDataAsset(name: assetName)?.data,
+              let rep = NSBitmapImageRep(data: data) else { return }
+        let image = NSImage()
+        image.addRepresentation(rep)
+        // A bare NSImage() has size .zero; NSImageView's proportional
+        // scaling divides by it and blows the bitmap up to a solid blob.
+        image.size = NSSize(
+            width: rep.pixelsWide > 0 ? CGFloat(rep.pixelsWide) : rep.size.width,
+            height: rep.pixelsHigh > 0 ? CGFloat(rep.pixelsHigh) : rep.size.height
+        )
+        view.image = image
+        view.identifier = NSUserInterfaceItemIdentifier(assetName)
     }
 }
 

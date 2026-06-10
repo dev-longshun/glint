@@ -44,10 +44,22 @@ struct ContentView: View {
         .overlay {
             if store.commandPaletteOpen {
                 CommandPalette()
-                    .transition(.opacity)
+                    .transition(
+                        .asymmetric(
+                            // In: fade + scale + 8pt Y drop, all on a
+                            // springy curve so the panel feels weighted
+                            // rather than snapping in. Out: simpler so it
+                            // gets out of the way fast.
+                            insertion: .opacity
+                                .combined(with: .scale(scale: 0.97))
+                                .combined(with: .offset(y: -8)),
+                            removal: .opacity
+                        )
+                    )
             }
         }
-        .animation(.easeOut(duration: 0.12), value: store.commandPaletteOpen)
+        .animation(.spring(response: 0.28, dampingFraction: 0.82),
+                   value: store.commandPaletteOpen)
         .sheet(isPresented: $store.settingsOpen) {
             GlintSettingsView()
                 .environmentObject(store)
