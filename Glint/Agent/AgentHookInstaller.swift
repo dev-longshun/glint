@@ -1,5 +1,25 @@
 import Foundation
 
+/// `Data.write(options: .atomic)` replaces the target inode with a fresh
+/// temp file owned by the process umask (0644 by default), silently widening
+/// a mode the user may have tightened. The agent configs we rewrite
+/// (`~/.claude/settings.json`, `~/.codex/hooks.json`) can hold sensitive
+/// config, so every rewrite captures the original POSIX mode first and
+/// re-asserts it afterwards — including on the `.glint-backup`/`.glint-prev`
+/// copies, which must never be more readable than the original. Files we
+/// create from scratch default to 0600.
+private func posixPermissions(atPath path: String) -> Int {
+    guard let attrs = try? FileManager.default.attributesOfItem(atPath: path),
+          let mode = (attrs[.posixPermissions] as? NSNumber)?.intValue else {
+        return 0o600
+    }
+    return mode
+}
+
+private func setPosixPermissions(_ mode: Int, atPath path: String) {
+    try? FileManager.default.setAttributes([.posixPermissions: mode], ofItemAtPath: path)
+}
+
 /// Drops the Claude Code hook script onto disk and merges its hook entries
 /// into `~/.claude/settings.json`. The merge is idempotent: existing Glint
 /// entries (recognized by command path) are replaced, everything else is
@@ -79,7 +99,9 @@ enum AgentHookInstaller {
                     withJSONObject: root,
                     options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
                 ) {
+                    let mode = posixPermissions(atPath: settingsURL.path)
                     try? out.write(to: settingsURL, options: [.atomic])
+                    setPosixPermissions(mode, atPath: settingsURL.path)
                     NSLog("[glint] claude hooks removed from \(settingsURL.path)")
                 }
             }
@@ -149,6 +171,7 @@ enum AgentHookInstaller {
                 // Don't trust the file — back it up and bail. User can resolve.
                 let backup = settingsURL.appendingPathExtension("glint-backup")
                 try? FileManager.default.copyItem(at: settingsURL, to: backup)
+                setPosixPermissions(posixPermissions(atPath: settingsURL.path), atPath: backup.path)
                 NSLog("[glint] ~/.claude/settings.json isn't a JSON object; backed up to \(backup.lastPathComponent), skipping merge")
                 return
             }
@@ -190,14 +213,19 @@ enum AgentHookInstaller {
                 withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             )
+            // Capture the original mode before the atomic write swaps the
+            // inode out from under it (0600 when the file is new).
+            let mode = posixPermissions(atPath: settingsURL.path)
             // Belt-and-suspenders: keep one .glint-prev next to the file the
             // first time we touch it, so the user can always roll back.
             let prev = settingsURL.appendingPathExtension("glint-prev")
             if FileManager.default.fileExists(atPath: settingsURL.path),
                !FileManager.default.fileExists(atPath: prev.path) {
                 try? FileManager.default.copyItem(at: settingsURL, to: prev)
+                setPosixPermissions(mode, atPath: prev.path)
             }
             try data.write(to: settingsURL, options: [.atomic])
+            setPosixPermissions(mode, atPath: settingsURL.path)
             NSLog("[glint] claude hooks merged into \(settingsURL.path)")
         } catch {
             NSLog("[glint] writing ~/.claude/settings.json failed: \(error)")
@@ -352,7 +380,9 @@ enum CodexHookInstaller {
                     withJSONObject: root,
                     options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
                 ) {
+                    let mode = posixPermissions(atPath: url.path)
                     try? out.write(to: url, options: [.atomic])
+                    setPosixPermissions(mode, atPath: url.path)
                 }
                 NSLog("[glint] codex hooks removed from \(url.path)")
             }
@@ -382,6 +412,7 @@ enum CodexHookInstaller {
                   let dict = parsed as? [String: Any] else {
                 let backup = url.appendingPathExtension("glint-backup")
                 try? FileManager.default.copyItem(at: url, to: backup)
+                setPosixPermissions(posixPermissions(atPath: url.path), atPath: backup.path)
                 NSLog("[glint] ~/.codex/hooks.json isn't a JSON object; backed up to \(backup.lastPathComponent), skipping merge")
                 return
             }
@@ -418,12 +449,16 @@ enum CodexHookInstaller {
                 withJSONObject: root,
                 options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             )
+            // Same mode-preservation dance as the Claude merge above.
+            let mode = posixPermissions(atPath: url.path)
             let prev = url.appendingPathExtension("glint-prev")
             if FileManager.default.fileExists(atPath: url.path),
                !FileManager.default.fileExists(atPath: prev.path) {
                 try? FileManager.default.copyItem(at: url, to: prev)
+                setPosixPermissions(mode, atPath: prev.path)
             }
             try data.write(to: url, options: [.atomic])
+            setPosixPermissions(mode, atPath: url.path)
             NSLog("[glint] codex hooks merged into \(url.path)")
         } catch {
             NSLog("[glint] writing ~/.codex/hooks.json failed: \(error)")

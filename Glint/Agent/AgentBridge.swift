@@ -20,8 +20,14 @@ final class AgentBridge {
 
     /// Bind + listen. Path is short on purpose (sun_path is 104 chars on Darwin).
     ///
-    /// Debug builds use a separate socket path so a running dev Glint and
-    /// a running production Glint don't fight over `/tmp/glint-<uid>-agent.sock`.
+    /// The socket lives under `~/.glint/run/` (0700) rather than `/tmp`:
+    /// a world-writable /tmp lets any local user pre-create ("squat") our
+    /// predictable path, and the chmod-after-bind below would otherwise be
+    /// a small race window in a world-readable directory. A 0700 parent
+    /// closes both holes — nobody else can reach the socket at all.
+    ///
+    /// Debug builds use a separate socket filename so a running dev Glint
+    /// and a running production Glint don't fight over the same path.
     /// Without this split, whichever process started last `unlink()`s the
     /// other's bound entry and steals every incoming hook event — the other
     /// Glint's sidebar would freeze on whatever status the pane was in when
@@ -29,10 +35,29 @@ final class AgentBridge {
     /// The path is baked into each pane's `$GLINT_AGENT_SOCK` at creation,
     /// so panes consistently report back to the Glint that launched them.
     func start() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let runDir = home
+            .appendingPathComponent(".glint", isDirectory: true)
+            .appendingPathComponent("run", isDirectory: true)
+        do {
+            // 0700 applies to every directory this call creates (including
+            // ~/.glint if it doesn't exist yet); pre-existing dirs keep
+            // their mode, so re-assert it on `run` below.
+            try FileManager.default.createDirectory(
+                at: runDir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            NSLog("[glint] agent run dir create failed: \(error)")
+            return
+        }
+        chmod(runDir.path, 0o700)
+
         #if DEBUG
-        let path = "/tmp/glint-\(getuid())-dev-agent.sock"
+        let path = runDir.appendingPathComponent("agent-debug.sock").path
         #else
-        let path = "/tmp/glint-\(getuid())-agent.sock"
+        let path = runDir.appendingPathComponent("agent.sock").path
         #endif
         socketPath = path
 
@@ -84,9 +109,20 @@ final class AgentBridge {
     private func acceptOne() {
         let client = accept(listenFD, nil, nil)
         guard client >= 0 else { return }
-        queue.async { [weak self] in self?.serve(fd: client) }
+        // The reporter script holds its connection open for up to a second
+        // (`nc -w 1`), and a wedged client could hold it forever. Serve each
+        // connection on the concurrent global pool — never on the serial
+        // accept queue, where one slow client would stall every other hook
+        // event — and bound each blocking read() so a silent peer can't pin
+        // a pool thread indefinitely.
+        var tv = timeval(tv_sec: 2, tv_usec: 0)
+        _ = setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &tv, socklen_t(MemoryLayout<timeval>.size))
+        DispatchQueue.global(qos: .utility).async { [weak self] in self?.serve(fd: client) }
     }
 
+    /// Runs off the accept queue; touches no bridge state. Parsed events
+    /// are forwarded to the main queue in `handle(line:)`, so concurrent
+    /// connections stay safe.
     private func serve(fd: Int32) {
         defer { close(fd) }
         var buf = Data()
