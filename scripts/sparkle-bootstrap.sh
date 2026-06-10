@@ -17,6 +17,17 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 SPARKLE_VERSION="${SPARKLE_VERSION:-2.6.4}"
+# Pinned sha256 of Sparkle-2.6.4.tar.xz. `generate_keys` handles the EdDSA
+# private key, so never run a binary we haven't checksummed (same policy as
+# scripts/setup-ghosttykit.sh). Overriding SPARKLE_VERSION requires also
+# exporting SPARKLE_SHA256 for the new artifact.
+if [ "$SPARKLE_VERSION" = "2.6.4" ]; then
+  SPARKLE_SHA256="${SPARKLE_SHA256:-50612a06038abc931f16011d7903b8326a362c1074dabccb718404ce8e585f0b}"
+elif [ -z "${SPARKLE_SHA256:-}" ]; then
+  echo "ERROR: SPARKLE_VERSION=$SPARKLE_VERSION has no pinned sha256." >&2
+  echo "Export SPARKLE_SHA256=<sha256 of Sparkle-${SPARKLE_VERSION}.tar.xz> to proceed." >&2
+  exit 1
+fi
 SPARKLE_DIR="$ROOT/.sparkle"
 GEN_KEYS="$SPARKLE_DIR/bin/generate_keys"
 INFO_PLIST="Glint/Resources/Info.plist"
@@ -24,12 +35,26 @@ REPO="${SPARKLE_REPO:-chenbstack/glint}"
 PRIV_TMP="$(mktemp -t sparkle-priv.XXXXXX)"
 trap 'rm -f "$PRIV_TMP"' EXIT
 
-# 1. Fetch Sparkle's tools if missing.
+# 1. Fetch Sparkle's tools if missing. Download to a temp file and verify
+# the pinned sha256 before extracting — never stream untrusted bytes
+# straight into tar.
 if [ ! -x "$GEN_KEYS" ]; then
   echo "Downloading Sparkle ${SPARKLE_VERSION}..."
-  mkdir -p "$SPARKLE_DIR"
+  SPARKLE_TARBALL="$(mktemp -t sparkle-dist.XXXXXX)"
+  trap 'rm -f "$PRIV_TMP" "$SPARKLE_TARBALL"' EXIT
   curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
-    | tar -xJ -C "$SPARKLE_DIR" --strip-components=1
+    -o "$SPARKLE_TARBALL"
+  ACTUAL_SHA256="$(shasum -a 256 "$SPARKLE_TARBALL" | awk '{print $1}')"
+  if [ "$ACTUAL_SHA256" != "$SPARKLE_SHA256" ]; then
+    cat >&2 <<EOF
+ERROR: Sparkle ${SPARKLE_VERSION} sha256 mismatch.
+  expected: $SPARKLE_SHA256
+  actual:   $ACTUAL_SHA256
+EOF
+    exit 1
+  fi
+  mkdir -p "$SPARKLE_DIR"
+  tar -xJf "$SPARKLE_TARBALL" -C "$SPARKLE_DIR" --strip-components=1
 fi
 
 # 2. Either reuse an existing keypair from the Keychain, or generate one.

@@ -164,10 +164,21 @@ jobs:
           umask 077
           printf '%s' "$SPARKLE_ED_PRIV_KEY" > "$RUNNER_TEMP/sparkle.key"
           # `sign_update` ships inside Sparkle's distribution; we download
-          # the matching version once and cache it.
+          # the matching version once and cache it. The binary handles the
+          # EdDSA private key, so pin the artifact's sha256 (same policy as
+          # scripts/setup-ghosttykit.sh) — a compromised/squatted release
+          # asset must fail loudly, not sign our updates.
           SPARKLE_VERSION="2.6.4"
+          SPARKLE_SHA256="50612a06038abc931f16011d7903b8326a362c1074dabccb718404ce8e585f0b"
           curl -fsSL "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
             -o "$RUNNER_TEMP/sparkle.tar.xz"
+          ACTUAL_SHA256="$(shasum -a 256 "$RUNNER_TEMP/sparkle.tar.xz" | awk '{print $1}')"
+          if [ "$ACTUAL_SHA256" != "$SPARKLE_SHA256" ]; then
+            echo "ERROR: Sparkle ${SPARKLE_VERSION} sha256 mismatch." >&2
+            echo "  expected: $SPARKLE_SHA256" >&2
+            echo "  actual:   $ACTUAL_SHA256" >&2
+            exit 1
+          fi
           mkdir -p "$RUNNER_TEMP/sparkle"
           tar -xJf "$RUNNER_TEMP/sparkle.tar.xz" -C "$RUNNER_TEMP/sparkle"
           SIGN="$RUNNER_TEMP/sparkle/bin/sign_update"
