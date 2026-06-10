@@ -34,7 +34,7 @@
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUEnableAutomaticChecks</key>
-	<false/>
+	<true/>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/chenbstack/glint/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
