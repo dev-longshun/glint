@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import ImageIO
 
 struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
@@ -8,11 +10,23 @@ struct SidebarView: View {
     /// card's preview onAppear and cleared on the preview's onDisappear,
     /// so every sibling can render its insertion indicator relative to it.
     @State private var draggingWorkspaceID: UUID?
+    /// Traffic lights vanish in full screen, so the reserved strip above
+    /// the search field must vanish with them (same fix as ToolbarHeader's
+    /// 78pt gutter).
+    @State private var isFullscreen = false
 
     var body: some View {
         VStack(spacing: 0) {
             // top spacer for traffic-light area (NSWindow draws them automatically here)
-            Color.clear.frame(height: 38)
+            Color.clear.frame(height: isFullscreen ? 8 : 38)
+                .onReceive(NotificationCenter.default.publisher(
+                    for: NSWindow.willEnterFullScreenNotification)) { _ in
+                    isFullscreen = true
+                }
+                .onReceive(NotificationCenter.default.publisher(
+                    for: NSWindow.willExitFullScreenNotification)) { _ in
+                    isFullscreen = false
+                }
 
             searchField
                 .padding(.horizontal, 12)
@@ -161,6 +175,9 @@ struct SidebarView: View {
 
 private struct WorkspaceCard: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// System "Reduce Motion" — when on, the looping decorations (border
+    /// comet, pulsing dots/borders, mascot GIF) render as static states.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ws: Workspace
     @Binding var draggingID: UUID?
 
@@ -193,7 +210,10 @@ private struct WorkspaceCard: View {
         let summary = store.agentSummary(for: ws)
         let status = summary?.status
         HStack(alignment: .center, spacing: 10) {
+            // Purely decorative for VoiceOver — the icon (incl. mascot GIF
+            // and status dot) repeats what label/value below already say.
             workspaceIcon(active: active, status: status)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 if isEditing {
                     TextField("", text: $draftName)
@@ -217,6 +237,8 @@ private struct WorkspaceCard: View {
                         .font(.system(size: 13, weight: active ? .semibold : .medium))
                         .foregroundStyle(active ? Theme.text1 : Theme.text2)
                         .italic(!ws.userNamed)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
                 secondaryRow(summary: summary, active: active)
             }
@@ -224,9 +246,11 @@ private struct WorkspaceCard: View {
         }
         .padding(8)
         .background(cardBackground(active: active))
-        .overlay(cardBorder(active: active, status: status))
-        .overlay(completionFlashOverlay)
-        .overlay(permissionPulseOverlay(status: status))
+        // Border/flash/pulse overlays are decorative — hide from VoiceOver
+        // so the combined element doesn't pick up phantom children.
+        .overlay(cardBorder(active: active, status: status).accessibilityHidden(true))
+        .overlay(completionFlashOverlay.accessibilityHidden(true))
+        .overlay(permissionPulseOverlay(status: status).accessibilityHidden(true))
         .scaleEffect(isHovered ? 1.005 : 1.0, anchor: .center)
         .shadow(color: Color.black.opacity(isHovered ? 0.22 : 0),
                 radius: isHovered ? 6 : 0,
@@ -262,6 +286,13 @@ private struct WorkspaceCard: View {
                 store.deleteWorkspace(ws.id)
             }
         }
+        // VoiceOver: the card is one tappable button. Name = workspace
+        // name (verbatim — user data); value = the same status line the
+        // card renders visually, with the elapsed time spelled out.
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(Text(verbatim: ws.displayName))
+        .accessibilityValue(Text(verbatim: accessibilityStatus(summary: summary)))
         .draggable(ws.id.uuidString) {
             // The preview view's lifecycle is the cleanest drag-lifecycle
             // signal SwiftUI exposes for `.draggable` — onAppear when the
@@ -505,9 +536,12 @@ private struct WorkspaceCard: View {
                     Color(red: 1.0, green: 0.45, blue: 0.42),
                     lineWidth: 1.5
                 )
-                .opacity(permissionPulseOn ? 0.85 : 0.25)
+                // Reduce Motion: hold the border at full strength instead
+                // of breathing — still unmistakably "needs attention".
+                .opacity(reduceMotion ? 0.85 : (permissionPulseOn ? 0.85 : 0.25))
                 .allowsHitTesting(false)
                 .onAppear {
+                    guard !reduceMotion else { return }
                     permissionPulseOn = false
                     withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                         permissionPulseOn = true
@@ -519,7 +553,9 @@ private struct WorkspaceCard: View {
 
     @ViewBuilder
     private func cardBorder(active: Bool, status: PaneAgentStatus?) -> some View {
-        if let status, isWorking(status) {
+        // Reduce Motion: skip the orbiting comet and fall through to the
+        // static status-colored border, which carries the same information.
+        if let status, isWorking(status), !reduceMotion {
             // Active turn: the comet replaces the static colored border and
             // makes it obvious from across the sidebar that something's
             // running. Compaction uses dual comets to look distinct.
@@ -558,6 +594,41 @@ private struct WorkspaceCard: View {
         let shortCwd = cwd.map(prettyCwd) ?? String(localized: "no cwd")
         return "\(n) \(unit) · \(shortCwd)"
     }
+
+    /// Spoken description for VoiceOver: the agent-status text the card
+    /// already renders, plus a spelled-out elapsed time ("1 minute, 24
+    /// seconds") when the visual row shows a timer. Idle cards read the
+    /// same pane-count/cwd line they display.
+    private func accessibilityStatus(summary: (status: PaneAgentStatus, since: Date)?) -> String {
+        guard let summary, summary.status != .idle else { return cwdLine }
+        var parts = [plainStatusText(summary.status)]
+        if showsTimer(summary.status),
+           let spoken = Self.spokenDurationFormatter.string(
+               from: max(0, Date().timeIntervalSince(summary.since))) {
+            parts.append(spoken)
+        }
+        return parts.joined(separator: ", ")
+    }
+
+    /// Plain-String twin of `statusText` — accessibilityValue needs a
+    /// String, not a LocalizedStringKey.
+    private func plainStatusText(_ s: PaneAgentStatus) -> String {
+        switch s {
+        case .thinking:        return String(localized: "thinking…")
+        case .tool:            return String(localized: "running tool")
+        case .needsPermission: return String(localized: "needs approval")
+        case .compacting:      return String(localized: "compacting…")
+        case .justCompleted:   return String(localized: "done")
+        case .idle:            return ""
+        }
+    }
+
+    private static let spokenDurationFormatter: DateComponentsFormatter = {
+        let f = DateComponentsFormatter()
+        f.allowedUnits = [.hour, .minute, .second]
+        f.unitsStyle = .full
+        return f
+    }()
 
     private func statusText(_ s: PaneAgentStatus) -> LocalizedStringKey {
         switch s {
@@ -620,12 +691,15 @@ private struct WorkspaceCard: View {
 ///     into `.justCompleted`, pairs with the card's green halo flash.
 ///   • Tap squish — scale dip + spring rebound when the icon is clicked.
 private struct ClaudeMascotIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: PaneAgentStatus?
     @State private var celebrateScale: CGFloat = 1.0
     @State private var tapScale: CGFloat = 1.0
 
     var body: some View {
-        AnimatedGIFView(assetName: gifAssetName(for: status))
+        // Reduce Motion: freeze the GIF on its first frame — the mascot
+        // stays as the workspace icon, just without the looping animation.
+        AnimatedGIFView(assetName: gifAssetName(for: status), animates: !reduceMotion)
             // The 128×128 gif canvas pads the robot with transparent
             // margin (room for the bounce/confetti frames), so render
             // bigger than the 28pt layout slot to keep the robot itself
@@ -669,60 +743,131 @@ private struct ClaudeMascotIcon: View {
 }
 
 /// SwiftUI host for an animated GIF from Assets.xcassets (Data Set).
-/// `Image(...)` can't decode GIF frames, so we wrap `NSImageView` and
-/// feed it an `NSImage` whose representation is the GIF's bitmap rep —
-/// NSImageView's `animates` flag then cycles the frames natively.
 ///
-/// Two gotchas this implementation guards against:
-///   * `NSImage(data:)` on GIF data sometimes returns an image with
-///     only the first frame, dropping the multi-frame array. Building
-///     the image via `NSBitmapImageRep(data:)` preserves all frames.
-///   * `wantsLayer = true` makes Core Animation own the contents, which
-///     bypasses NSImageView's frame ticker — so the GIF freezes on
-///     frame one. We let NSImageView render without an explicit layer;
-///     the rounded clip happens in SwiftUI via `clipShape`.
-///
-/// The view reloads its image only when `assetName` changes (tracked
-/// through `view.identifier`), so SwiftUI re-renders with the same
-/// state don't restart the animation mid-cycle.
+/// Playback deliberately does NOT use `NSImageView.animates`: that path
+/// re-decodes the GIF on the main thread for every animation tick (ImageIO
+/// shows up hot in samples) and dirties layout/display each frame — with a
+/// few mascots looping, that alone held the whole app at ~15-20% CPU.
+/// Instead each asset is decoded ONCE (cached for the app's lifetime, the
+/// bitmaps are 128×128 so this is a few hundred KB) and played back by a
+/// repeating `CAKeyframeAnimation` on the layer's `contents`, which runs
+/// entirely in the render server — zero per-frame work in this process.
 private struct AnimatedGIFView: NSViewRepresentable {
     let assetName: String
+    /// false (Reduce Motion) shows the GIF's first frame statically.
+    var animates: Bool = true
 
-    func makeNSView(context: Context) -> NSImageView {
-        let view = NSImageView()
-        view.imageScaling = .scaleProportionallyUpOrDown
-        view.imageAlignment = .alignCenter
-        view.imageFrameStyle = .none
-        view.animates = true
-        // The gif bitmaps are 128×128; without these the representable
-        // insists on the image's intrinsic size and the outer .frame(28)
-        // just crops the center out of a full-size render.
-        view.setContentCompressionResistancePriority(.init(1), for: .horizontal)
-        view.setContentCompressionResistancePriority(.init(1), for: .vertical)
-        view.setContentHuggingPriority(.init(1), for: .horizontal)
-        view.setContentHuggingPriority(.init(1), for: .vertical)
+    func makeNSView(context: Context) -> GIFLayerView {
+        let view = GIFLayerView()
+        view.apply(assetName: assetName, animates: animates)
         return view
     }
 
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSImageView, context: Context) -> CGSize? {
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: GIFLayerView, context: Context) -> CGSize? {
         proposal.replacingUnspecifiedDimensions(by: CGSize(width: 28, height: 28))
     }
 
-    func updateNSView(_ view: NSImageView, context: Context) {
-        let currentAsset = view.identifier?.rawValue
-        guard currentAsset != assetName else { return }
+    func updateNSView(_ view: GIFLayerView, context: Context) {
+        view.apply(assetName: assetName, animates: animates)
+    }
+
+    final class GIFLayerView: NSView {
+        private static let animationKey = "glint.gif.contents"
+        private var currentAsset: String?
+        private var currentlyAnimating = false
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+            layer?.contentsGravity = .resizeAspect
+            layer?.minificationFilter = .trilinear
+        }
+
+        required init?(coder: NSCoder) { fatalError("not used") }
+
+        func apply(assetName: String, animates: Bool) {
+            // No-op on SwiftUI's frequent re-renders with unchanged inputs,
+            // so the loop isn't restarted mid-cycle every second.
+            guard assetName != currentAsset || animates != currentlyAnimating else { return }
+            currentAsset = assetName
+            currentlyAnimating = animates
+            applyToLayer()
+        }
+
+        /// Layer-backed views can be handed a fresh layer when re-parented
+        /// or moved between windows, dropping our animation — re-apply.
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            applyToLayer()
+        }
+
+        private func applyToLayer() {
+            guard let layer, let asset = currentAsset,
+                  let gif = GIFFrameCache.shared.gif(named: asset) else { return }
+            layer.removeAnimation(forKey: Self.animationKey)
+            layer.contents = gif.frames.first
+            guard currentlyAnimating, gif.frames.count > 1 else { return }
+            let anim = CAKeyframeAnimation(keyPath: "contents")
+            anim.calculationMode = .discrete
+            anim.values = gif.frames
+            anim.keyTimes = gif.keyTimes
+            anim.duration = gif.duration
+            anim.repeatCount = .infinity
+            anim.isRemovedOnCompletion = false
+            layer.add(anim, forKey: Self.animationKey)
+        }
+    }
+}
+
+/// Decodes each GIF asset exactly once per app run. Main-thread only
+/// (always reached via SwiftUI view updates).
+private final class GIFFrameCache {
+    static let shared = GIFFrameCache()
+
+    struct DecodedGIF {
+        let frames: [CGImage]
+        /// `.discrete` keyframe timing: frames.count + 1 entries in 0…1;
+        /// frame i is visible from keyTimes[i] to keyTimes[i+1].
+        let keyTimes: [NSNumber]
+        let duration: Double
+    }
+
+    private var cache: [String: DecodedGIF] = [:]
+
+    func gif(named assetName: String) -> DecodedGIF? {
+        if let hit = cache[assetName] { return hit }
         guard let data = NSDataAsset(name: assetName)?.data,
-              let rep = NSBitmapImageRep(data: data) else { return }
-        let image = NSImage()
-        image.addRepresentation(rep)
-        // A bare NSImage() has size .zero; NSImageView's proportional
-        // scaling divides by it and blows the bitmap up to a solid blob.
-        image.size = NSSize(
-            width: rep.pixelsWide > 0 ? CGFloat(rep.pixelsWide) : rep.size.width,
-            height: rep.pixelsHigh > 0 ? CGFloat(rep.pixelsHigh) : rep.size.height
-        )
-        view.image = image
-        view.identifier = NSUserInterfaceItemIdentifier(assetName)
+              let src = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        var frames: [CGImage] = []
+        var delays: [Double] = []
+        for i in 0..<CGImageSourceGetCount(src) {
+            guard let img = CGImageSourceCreateImageAtIndex(src, i, nil) else { continue }
+            frames.append(img)
+            delays.append(Self.frameDelay(src, i))
+        }
+        guard !frames.isEmpty else { return nil }
+        let duration = max(delays.reduce(0, +), 0.01)
+        var acc = 0.0
+        var keyTimes: [NSNumber] = [0]
+        for d in delays {
+            acc += d
+            keyTimes.append(NSNumber(value: acc / duration))
+        }
+        let gif = DecodedGIF(frames: frames, keyTimes: keyTimes, duration: duration)
+        cache[assetName] = gif
+        return gif
+    }
+
+    private static func frameDelay(_ src: CGImageSource, _ index: Int) -> Double {
+        guard let props = CGImageSourceCopyPropertiesAtIndex(src, index, nil) as? [CFString: Any],
+              let gifProps = props[kCGImagePropertyGIFDictionary] as? [CFString: Any] else {
+            return 0.1
+        }
+        let unclamped = gifProps[kCGImagePropertyGIFUnclampedDelayTime] as? Double ?? 0
+        let clamped = gifProps[kCGImagePropertyGIFDelayTime] as? Double ?? 0.1
+        // Browsers clamp tiny delays to ~100ms; honor the unclamped value
+        // when present but never spin faster than 50fps.
+        return max(unclamped > 0 ? unclamped : clamped, 0.02)
     }
 }
 
@@ -732,6 +877,7 @@ private struct AnimatedGIFView: NSViewRepresentable {
 ///   needsPerm     → red
 ///   idle / nil    → invisible
 private struct AgentStatusDot: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: PaneAgentStatus?
     @State private var pulse = false
 
@@ -775,7 +921,10 @@ private struct AgentStatusDot: View {
     }
 
     private func needsPulse(_ s: PaneAgentStatus) -> Bool {
-        s == .thinking || s == .tool || s == .needsPermission || s == .compacting
+        // Reduce Motion: render the dot steady at full opacity — the
+        // color alone carries the status.
+        guard !reduceMotion else { return false }
+        return s == .thinking || s == .tool || s == .needsPermission || s == .compacting
     }
 }
 
