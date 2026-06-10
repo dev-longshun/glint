@@ -782,28 +782,43 @@ private struct AgentStatusDot: View {
 /// A comet of accent color orbits the workspace card border to indicate
 /// indeterminate progress. Compaction passes `dual: true` so two opposing
 /// spots travel together — visually distinct from a normal thinking turn.
+///
+/// The gradient itself is static; the sweep comes from `rotationEffect`
+/// on a square gradient layer masked by the border stroke. Core Animation
+/// runs transform animations on the GPU without touching the layer's
+/// backing store — animating the gradient's `angle` parameter instead
+/// re-rasterizes the stroke on the CPU every frame (~30% of a core with
+/// one spinner on a ProMotion display), which starves the main thread
+/// ghostty needs for frame presentation and tick processing.
 private struct CardBorderTraveler: View {
     let color: Color
     let cornerRadius: CGFloat
     let dual: Bool
-    @State private var angle: Double = 0
+    @State private var spinning = false
 
     var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .strokeBorder(
-                AngularGradient(
-                    gradient: Gradient(stops: stops),
-                    center: .center,
-                    angle: .degrees(angle)
-                ),
-                lineWidth: 1.2
-            )
-            .onAppear {
-                withAnimation(.linear(duration: dual ? 1.4 : 2.0)
-                    .repeatForever(autoreverses: false)) {
-                        angle = 360
-                    }
-            }
+        GeometryReader { geo in
+            // Square side = card diagonal, so the rotating gradient covers
+            // every corner of the mask at any angle.
+            let side = (geo.size.width * geo.size.width
+                + geo.size.height * geo.size.height).squareRoot()
+            AngularGradient(gradient: Gradient(stops: stops), center: .center)
+                .frame(width: side, height: side)
+                .rotationEffect(.degrees(spinning ? 360 : 0))
+                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+        }
+        .mask {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .strokeBorder(Color.white, lineWidth: 1.2)
+        }
+        .allowsHitTesting(false)
+        .onAppear {
+            withAnimation(.linear(duration: dual ? 1.4 : 2.0)
+                .repeatForever(autoreverses: false)) {
+                    spinning = true
+                }
+        }
+        .onDisappear { spinning = false }
     }
 
     private var stops: [Gradient.Stop] {
