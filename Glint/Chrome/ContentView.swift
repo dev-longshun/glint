@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ContentView: View {
     @EnvironmentObject var store: WorkspaceStore
@@ -71,6 +72,10 @@ struct ContentView: View {
 
 struct ToolbarHeader: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// Traffic lights disappear in full screen, so the 78pt gutter we
+    /// reserve for them (when the sidebar is collapsed) must collapse too
+    /// or the toolbar starts with a dead zone.
+    @State private var isFullscreen = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -106,10 +111,19 @@ struct ToolbarHeader: View {
             }
         }
         // Traffic lights take ~78pt when sidebar is collapsed; otherwise the
-        // sidebar reserves that gutter for us.
-        .padding(.leading, store.sidebarCollapsed ? 78 : 12)
+        // sidebar reserves that gutter for us. In full screen there are no
+        // traffic lights at all.
+        .padding(.leading, store.sidebarCollapsed && !isFullscreen ? 78 : 12)
         .padding(.trailing, 14)
         .frame(height: 52)
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSWindow.willEnterFullScreenNotification)) { _ in
+            isFullscreen = true
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSWindow.willExitFullScreenNotification)) { _ in
+            isFullscreen = false
+        }
         .background(
             Group {
                 if store.glassEffect {

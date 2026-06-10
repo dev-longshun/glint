@@ -1,174 +1,1708 @@
 {
   "sourceLanguage" : "en",
-  "version" : "1.0",
   "strings" : {
-    "Glint" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint" } } } },
-    "Settings" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设置" } } } },
-    "Settings…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设置…" } } } },
-    "Settings (⌘,)" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "设置 (⌘,)" } } } },
+    "· %@" : {
 
-    "Show Sidebar" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示侧栏" } } } },
-    "Hide Sidebar" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏侧栏" } } } },
-    "Command Palette" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "命令面板" } } } },
-    "Command Palette (⌘K)" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "命令面板 (⌘K)" } } } },
+    },
+    "%@" : {
 
-    "Workspace" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作区" } } } },
-    "WORKSPACES" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作区" } } } },
-    "New Workspace" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "新建工作区" } } } },
-    "Rename" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重命名" } } } },
-    "Delete Workspace" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "删除工作区" } } } },
-    "Search" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "搜索" } } } },
-    "pane" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "面板" } } } },
-    "panes" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "面板" } } } },
+    },
+    "~/.glint/hooks/glint-report.sh" : {
 
-    "thinking…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "思考中…" } } } },
-    "running tool" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "调用工具" } } } },
-    "needs approval" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待批准" } } } },
-    "compacting…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "压缩中…" } } } },
-    "✓ done" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "✓ 已完成" } } } },
+    },
+    "⌘N" : {
 
-    "Type a command or workspace…" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "输入命令或工作区…" } } } },
-    "ESC" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "ESC" } } } },
-    "ACTION" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "动作" } } } },
-    "WORKSPACE" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作区" } } } },
-    "Create a fresh workspace" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "创建一个新工作区" } } } },
-    "Stack a new pane below" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在下方堆叠一个新面板" } } } },
-    "Open a new pane on the right" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在右侧打开一个新面板" } } } },
-    "Close the focused pane" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭当前面板" } } } },
-    "Cycle pane focus within this workspace" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在工作区内循环切换面板" } } } },
-    "Show or hide the workspace sidebar" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "显示或隐藏工作区侧栏" } } } },
+    },
+    "✓ done" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "✓ 已完成"
+          }
+        }
+      }
+    },
+    "A native mac terminal made for AI agents." : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为 AI 代理打造的原生 Mac 终端。"
+          }
+        }
+      }
+    },
+    "About" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关于"
+          }
+        }
+      }
+    },
+    "Accent" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "强调色"
+          }
+        }
+      }
+    },
+    "ACTION" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "动作"
+          }
+        }
+      }
+    },
+    "Agents" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "代理"
+          }
+        }
+      }
+    },
+    "Appearance" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外观"
+          }
+        }
+      }
+    },
+    "Auto-compact tracking" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动压缩追踪"
+          }
+        }
+      }
+    },
+    "Auto-name new workspaces" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动命名新建工作区"
+          }
+        }
+      }
+    },
+    "Auto-update" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动更新"
+          }
+        }
+      }
+    },
+    "Auto-update is not wired yet. Pull main and rebuild for now." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动更新尚未接入,现阶段请拉取 main 重新编译。"
+          }
+        }
+      }
+    },
+    "Bar" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "竖线"
+          }
+        }
+      }
+    },
+    "Beta channel" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beta 通道"
+          }
+        }
+      }
+    },
+    "Blink" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "闪烁"
+          }
+        }
+      }
+    },
+    "Block" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "方块"
+          }
+        }
+      }
+    },
+    "Bubble workspaces whose agent just finished a turn to the top of the sidebar. Sinks back when you open it." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Agent 刚完成一轮的工作区会浮到侧栏顶部,打开后会落回原位。"
+          }
+        }
+      }
+    },
+    "Buffer" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缓冲区"
+          }
+        }
+      }
+    },
+    "Build" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "构建"
+          }
+        }
+      }
+    },
+    "Bundle ID" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bundle ID"
+          }
+        }
+      }
+    },
+    "Channel" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通道"
+          }
+        }
+      }
+    },
+    "Check" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查"
+          }
+        }
+      }
+    },
+    "Check for updates automatically" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动检查更新"
+          }
+        }
+      }
+    },
+    "Check now" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即检查"
+          }
+        }
+      }
+    },
+    "Chimes only fire for background workspaces — the one you're looking at stays quiet." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提示音只在后台工作区触发,你正在查看的工作区保持安静。"
+          }
+        }
+      }
+    },
+    "Claude Code" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Code"
+          }
+        }
+      }
+    },
+    "Claude Code, Codex, hook routing" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Claude Code、Codex、Hook 路由"
+          }
+        }
+      }
+    },
+    "Close (Esc)" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭 (Esc)"
+          }
+        }
+      }
+    },
+    "Close Palette" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭面板"
+          }
+        }
+      }
+    },
+    "Close Pane" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭面板"
+          }
+        }
+      }
+    },
+    "Close the focused pane" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭当前面板"
+          }
+        }
+      }
+    },
+    "Codex" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex"
+          }
+        }
+      }
+    },
+    "Collapse sidebar on launch" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时折叠侧栏"
+          }
+        }
+      }
+    },
+    "Color scheme" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配色方案"
+          }
+        }
+      }
+    },
+    "Comfortable" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "舒适"
+          }
+        }
+      }
+    },
+    "Command Palette" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令面板"
+          }
+        }
+      }
+    },
+    "Command Palette (⌘K)" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令面板 (⌘K)"
+          }
+        }
+      }
+    },
+    "Compact" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "紧凑"
+          }
+        }
+      }
+    },
+    "compacting…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "压缩中…"
+          }
+        }
+      }
+    },
+    "Create a fresh workspace" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建一个新工作区"
+          }
+        }
+      }
+    },
+    "Cursor" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "光标"
+          }
+        }
+      }
+    },
+    "Cycle pane focus within this workspace" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在工作区内循环切换面板"
+          }
+        }
+      }
+    },
+    "Dark" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "深色"
+          }
+        }
+      }
+    },
+    "Delete Workspace" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除工作区"
+          }
+        }
+      }
+    },
+    "Density" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密度"
+          }
+        }
+      }
+    },
+    "Derive a name from the focused pane's cwd until you rename." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在你手动重命名之前,从聚焦面板的工作目录推导名称。"
+          }
+        }
+      }
+    },
+    "Disabling vibrancy can help on older Macs." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在旧款 Mac 上关闭毛玻璃可能更流畅。"
+          }
+        }
+      }
+    },
+    "Display language for Glint's UI." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 界面的显示语言。"
+          }
+        }
+      }
+    },
+    "Enable glass effect" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启毛玻璃"
+          }
+        }
+      }
+    },
+    "English" : {
 
-    "General" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通用" } } } },
-    "Appearance" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "外观" } } } },
-    "Terminal" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "终端" } } } },
-    "Agents" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "代理" } } } },
-    "Shortcuts" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "快捷键" } } } },
-    "About" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关于" } } } },
+    },
+    "ESC" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ESC"
+          }
+        }
+      }
+    },
+    "Events" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "事件"
+          }
+        }
+      }
+    },
+    "Family" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字体"
+          }
+        }
+      }
+    },
+    "Find in Sidebar" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在侧栏中搜索"
+          }
+        }
+      }
+    },
+    "Float just-completed to top" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刚完成的置顶"
+          }
+        }
+      }
+    },
+    "Focus Next Pane" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "聚焦下一面板"
+          }
+        }
+      }
+    },
+    "Follow system" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随系统"
+          }
+        }
+      }
+    },
+    "Font" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字体"
+          }
+        }
+      }
+    },
+    "Font, cursor, scrollback" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字体、光标、滚动"
+          }
+        }
+      }
+    },
+    "General" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通用"
+          }
+        }
+      }
+    },
+    "Glass effect" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "毛玻璃"
+          }
+        }
+      }
+    },
+    "Glint" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint"
+          }
+        }
+      }
+    },
+    "Glint auto-installs a reporter into ~/.claude/settings.json on launch. Existing hooks are preserved." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 启动时会自动把上报脚本合并进 ~/.claude/settings.json,已有 hook 会被保留。"
+          }
+        }
+      }
+    },
+    "Glint is dark-mode only for now." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 目前仅支持深色模式。"
+          }
+        }
+      }
+    },
+    "Glint uses Sparkle to check the GitHub Releases feed and install updates in place." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 使用 Sparkle 检查 GitHub Releases 并原地安装更新。"
+          }
+        }
+      }
+    },
+    "Glint will look for new releases in the background." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 会在后台查找新版本。"
+          }
+        }
+      }
+    },
+    "Glint writes its hook entries into ~/.codex/hooks.json so codex sessions surface the same status as Claude." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 会把 hook 写入 ~/.codex/hooks.json,让 codex 会话与 Claude 一样上报状态。"
+          }
+        }
+      }
+    },
+    "Hide Glint" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏 Glint"
+          }
+        }
+      }
+    },
+    "Hide Sidebar" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏侧栏"
+          }
+        }
+      }
+    },
+    "Hook bridge not yet implemented." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hook 桥接尚未实现。"
+          }
+        }
+      }
+    },
+    "Hook script" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hook 脚本"
+          }
+        }
+      }
+    },
+    "Hooks Glint reacts to from Claude Code." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glint 监听的 Claude Code Hook。"
+          }
+        }
+      }
+    },
+    "Hooks merged into your Claude settings." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hook 已合并到你的 Claude 配置。"
+          }
+        }
+      }
+    },
+    "Hooks merged into your Codex config." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hook 已合并到你的 Codex 配置。"
+          }
+        }
+      }
+    },
+    "In Command Palette" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "命令面板内"
+          }
+        }
+      }
+    },
+    "Install" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装"
+          }
+        }
+      }
+    },
+    "Installed" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装"
+          }
+        }
+      }
+    },
+    "Keyboard reference" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "键盘参考"
+          }
+        }
+      }
+    },
+    "Language" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言"
+          }
+        }
+      }
+    },
+    "Lines retained per pane." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个面板保留的行数。"
+          }
+        }
+      }
+    },
+    "Local Dev" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地开发"
+          }
+        }
+      }
+    },
+    "Manually look for a new release right now." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即手动查找新版本。"
+          }
+        }
+      }
+    },
+    "Minimize" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最小化"
+          }
+        }
+      }
+    },
+    "Move Selection Down" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下移选项"
+          }
+        }
+      }
+    },
+    "Move Selection Up" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上移选项"
+          }
+        }
+      }
+    },
+    "needs approval" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待批准"
+          }
+        }
+      }
+    },
+    "New Workspace" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新建工作区"
+          }
+        }
+      }
+    },
+    "Next Workspace" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下一工作区"
+          }
+        }
+      }
+    },
+    "no cwd" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无目录"
+          }
+        }
+      }
+    },
+    "Not installed" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未安装"
+          }
+        }
+      }
+    },
+    "Not wired" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未接入"
+          }
+        }
+      }
+    },
+    "Notifications" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通知"
+          }
+        }
+      }
+    },
+    "Open a new pane on the right" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在右侧打开一个新面板"
+          }
+        }
+      }
+    },
+    "pane" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "面板"
+          }
+        }
+      }
+    },
+    "panes" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "面板"
+          }
+        }
+      }
+    },
+    "Panes" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "面板"
+          }
+        }
+      }
+    },
+    "Path of the bash reporter that posts to Glint's local socket." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "向 Glint 本地 socket 上报的 bash 脚本路径。"
+          }
+        }
+      }
+    },
+    "Play a chime when an agent is waiting for your approval in a background workspace." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台工作区中代理等待批准时播放提示音。"
+          }
+        }
+      }
+    },
+    "Play a softer chime when a background agent finishes its turn." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "后台代理完成任务时播放一个轻柔的提示音。"
+          }
+        }
+      }
+    },
+    "Previous Workspace" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上一工作区"
+          }
+        }
+      }
+    },
+    "Quit Glint" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出 Glint"
+          }
+        }
+      }
+    },
+    "Re-select the workspace you had focused when Glint last quit." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新选中上次退出 Glint 时聚焦的工作区。"
+          }
+        }
+      }
+    },
+    "Receive pre-release builds." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "接收预发布版本。"
+          }
+        }
+      }
+    },
+    "Rename" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重命名"
+          }
+        }
+      }
+    },
+    "Restore last workspace" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复上次的工作区"
+          }
+        }
+      }
+    },
+    "Roomy" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "宽敞"
+          }
+        }
+      }
+    },
+    "Run Selection" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "执行选中项"
+          }
+        }
+      }
+    },
+    "running tool" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调用工具"
+          }
+        }
+      }
+    },
+    "Scrollback" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "滚动"
+          }
+        }
+      }
+    },
+    "Scrollback is kept per-pane. Increasing this raises memory usage." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "滚动记录按面板独立保存,增大此值会增加内存占用。"
+          }
+        }
+      }
+    },
+    "Search" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索"
+          }
+        }
+      }
+    },
+    "Sets the highlight color across selection, focus rings, and active states." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于选中、焦点环和活跃状态的高亮色。"
+          }
+        }
+      }
+    },
+    "Settings" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
+          }
+        }
+      }
+    },
+    "Settings (⌘,)" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置 (⌘,)"
+          }
+        }
+      }
+    },
+    "Settings…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置…"
+          }
+        }
+      }
+    },
+    "Shortcuts" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "快捷键"
+          }
+        }
+      }
+    },
+    "Show or hide the workspace sidebar" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示或隐藏工作区侧栏"
+          }
+        }
+      }
+    },
+    "Show Sidebar" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示侧栏"
+          }
+        }
+      }
+    },
+    "Show the compacting state on workspace cards when context overflows." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "上下文溢出时,在工作区卡片上显示压缩状态。"
+          }
+        }
+      }
+    },
+    "Sidebar density" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "侧栏密度"
+          }
+        }
+      }
+    },
+    "Sidebar vibrancy" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "侧栏毛玻璃"
+          }
+        }
+      }
+    },
+    "Size" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "字号"
+          }
+        }
+      }
+    },
+    "Sound on permission request" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待批准时播放提示音"
+          }
+        }
+      }
+    },
+    "Sound on turn complete" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任务完成时播放提示音"
+          }
+        }
+      }
+    },
+    "Spacing between workspace cards." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区卡片之间的间距。"
+          }
+        }
+      }
+    },
+    "Split Horizontal" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "横向分屏"
+          }
+        }
+      }
+    },
+    "Split Vertical" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "纵向分屏"
+          }
+        }
+      }
+    },
+    "Stable" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "稳定版"
+          }
+        }
+      }
+    },
+    "Stack a new pane below" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在下方堆叠一个新面板"
+          }
+        }
+      }
+    },
+    "Start with the sidebar hidden. ⌃⌘S to toggle." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时隐藏侧栏。⌘\\ 切换。"
+          }
+        }
+      }
+    },
+    "Start with the sidebar hidden. ⌘/ to toggle." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时隐藏侧栏。⌘/ 切换。"
+          }
+        }
+      }
+    },
+    "Start with the sidebar hidden. ⌘\\ to toggle." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动时隐藏侧栏。⌘\\ 切换。"
+          }
+        }
+      }
+    },
+    "Startup" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动"
+          }
+        }
+      }
+    },
+    "Startup, layout, updates" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "启动、布局、更新"
+          }
+        }
+      }
+    },
+    "Status" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态"
+          }
+        }
+      }
+    },
+    "Style" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "样式"
+          }
+        }
+      }
+    },
+    "Terminal" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "终端"
+          }
+        }
+      }
+    },
+    "Theme" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主题"
+          }
+        }
+      }
+    },
+    "Theme, accent, glass" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主题、强调色、毛玻璃"
+          }
+        }
+      }
+    },
+    "thinking…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "思考中…"
+          }
+        }
+      }
+    },
+    "Toggle Sidebar" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换侧栏"
+          }
+        }
+      }
+    },
+    "Toolbar vibrancy" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工具栏毛玻璃"
+          }
+        }
+      }
+    },
+    "Total workspaces stored locally." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地存储的工作区总数。"
+          }
+        }
+      }
+    },
+    "Turns vibrancy on or off for the sidebar and toolbar. Off gives a flat look — useful on older Macs." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为侧栏和工具栏开启或关闭毛玻璃。关闭后呈现扁平外观,在旧款 Mac 上更流畅。"
+          }
+        }
+      }
+    },
+    "Type a command or workspace…" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入命令或工作区…"
+          }
+        }
+      }
+    },
+    "Underline" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下划线"
+          }
+        }
+      }
+    },
+    "Uninstall" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "卸载"
+          }
+        }
+      }
+    },
+    "Updates" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更新"
+          }
+        }
+      }
+    },
+    "Used for all panes. Falls back to SF Mono." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于所有面板,缺失时回退到 SF Mono。"
+          }
+        }
+      }
+    },
+    "Version" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本"
+          }
+        }
+      }
+    },
+    "Visible only when the palette is open." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅在命令面板打开时生效。"
+          }
+        }
+      }
+    },
+    "Window" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "窗口"
+          }
+        }
+      }
+    },
+    "Workspace" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区"
+          }
+        }
+      }
+    },
+    "WORKSPACE" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区"
+          }
+        }
+      }
+    },
+    "Workspaces" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区"
+          }
+        }
+      }
+    },
+    "WORKSPACES" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作区"
+          }
+        }
+      }
+    },
+    "中文（简体）" : {
 
-    "Startup, layout, updates" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动、布局、更新" } } } },
-    "Theme, accent, glass" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主题、强调色、毛玻璃" } } } },
-    "Font, cursor, scrollback" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "字体、光标、滚动" } } } },
-    "Claude Code, Codex, hook routing" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code、Codex、Hook 路由" } } } },
-    "Keyboard reference" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "键盘参考" } } } },
-
-    "Startup" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动" } } } },
-    "Restore last workspace" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "恢复上次的工作区" } } } },
-    "Re-select the workspace you had focused when Glint last quit." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "重新选中上次退出 Glint 时聚焦的工作区。" } } } },
-    "Collapse sidebar on launch" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时折叠侧栏" } } } },
-    "Start with the sidebar hidden. ⌃⌘S to toggle." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时隐藏侧栏。⌘\\ 切换。" } } } },
-    "Start with the sidebar hidden. ⌘\\ to toggle." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时隐藏侧栏。⌘\\ 切换。" } } } },
-    "Start with the sidebar hidden. ⌘/ to toggle." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "启动时隐藏侧栏。⌘/ 切换。" } } } },
-    "Float just-completed to top" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "刚完成的置顶" } } } },
-    "Bubble workspaces whose agent just finished a turn to the top of the sidebar. Sinks back when you open it." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Agent 刚完成一轮的工作区会浮到侧栏顶部,打开后会落回原位。" } } } },
-    "Workspaces" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作区" } } } },
-    "Total workspaces stored locally." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地存储的工作区总数。" } } } },
-    "Auto-name new workspaces" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动命名新建工作区" } } } },
-    "Derive a name from the focused pane's cwd until you rename." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在你手动重命名之前,从聚焦面板的工作目录推导名称。" } } } },
-    "Updates" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "更新" } } } },
-    "Auto-update is not wired yet. Pull main and rebuild for now." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动更新尚未接入,现阶段请拉取 main 重新编译。" } } } },
-    "Check for updates automatically" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动检查更新" } } } },
-    "Glint will look for new releases in the background." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint 会在后台查找新版本。" } } } },
-    "Check now" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "立即检查" } } } },
-    "Check" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "检查" } } } },
-    "Manually look for a new release right now." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "立即手动查找新版本。" } } } },
-    "Glint uses Sparkle to check the GitHub Releases feed and install updates in place." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint 使用 Sparkle 检查 GitHub Releases 并原地安装更新。" } } } },
-    "Beta channel" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Beta 通道" } } } },
-    "Receive pre-release builds." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "接收预发布版本。" } } } },
-
-    "Language" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "语言" } } } },
-    "Display language for Glint's UI." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint 界面的显示语言。" } } } },
-    "Follow system" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "跟随系统" } } } },
-
-    "Theme" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "主题" } } } },
-    "Color scheme" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "配色方案" } } } },
-    "Glint is dark-mode only for now." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint 目前仅支持深色模式。" } } } },
-    "Dark" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "深色" } } } },
-    "Accent" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "强调色" } } } },
-    "Sets the highlight color across selection, focus rings, and active states." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于选中、焦点环和活跃状态的高亮色。" } } } },
-    "Density" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "密度" } } } },
-    "Sidebar density" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "侧栏密度" } } } },
-    "Spacing between workspace cards." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工作区卡片之间的间距。" } } } },
-    "Compact" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "紧凑" } } } },
-    "Comfortable" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "舒适" } } } },
-    "Roomy" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "宽敞" } } } },
-    "Glass effect" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "毛玻璃" } } } },
-    "Enable glass effect" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "开启毛玻璃" } } } },
-    "Turns vibrancy on or off for the sidebar and toolbar. Off gives a flat look — useful on older Macs." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "为侧栏和工具栏开启或关闭毛玻璃。关闭后呈现扁平外观,在旧款 Mac 上更流畅。" } } } },
-    "Disabling vibrancy can help on older Macs." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在旧款 Mac 上关闭毛玻璃可能更流畅。" } } } },
-    "Sidebar vibrancy" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "侧栏毛玻璃" } } } },
-    "Toolbar vibrancy" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "工具栏毛玻璃" } } } },
-
-    "Font" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "字体" } } } },
-    "Family" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "字体" } } } },
-    "Used for all panes. Falls back to SF Mono." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "用于所有面板,缺失时回退到 SF Mono。" } } } },
-    "Size" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "字号" } } } },
-    "Cursor" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "光标" } } } },
-    "Style" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "样式" } } } },
-    "Block" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "方块" } } } },
-    "Bar" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "竖线" } } } },
-    "Underline" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下划线" } } } },
-    "Blink" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "闪烁" } } } },
-    "Buffer" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "缓冲区" } } } },
-    "Scrollback" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "滚动" } } } },
-    "Lines retained per pane." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "每个面板保留的行数。" } } } },
-    "Scrollback is kept per-pane. Increasing this raises memory usage." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "滚动记录按面板独立保存,增大此值会增加内存占用。" } } } },
-
-    "Claude Code" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Claude Code" } } } },
-    "Glint auto-installs a reporter into ~/.claude/settings.json on launch. Existing hooks are preserved." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint 启动时会自动把上报脚本合并进 ~/.claude/settings.json,已有 hook 会被保留。" } } } },
-    "Status" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "状态" } } } },
-    "Hooks merged into your Claude settings." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Hook 已合并到你的 Claude 配置。" } } } },
-    "Installed" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "已安装" } } } },
-    "Not installed" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未安装" } } } },
-    "Install" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "安装" } } } },
-    "Uninstall" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "卸载" } } } },
-    "Hook script" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Hook 脚本" } } } },
-    "Path of the bash reporter that posts to Glint's local socket." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "向 Glint 本地 socket 上报的 bash 脚本路径。" } } } },
-    "Events" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "事件" } } } },
-    "Hooks Glint reacts to from Claude Code." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint 监听的 Claude Code Hook。" } } } },
-    "Auto-compact tracking" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动压缩追踪" } } } },
-    "Show the compacting state on workspace cards when context overflows." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上下文溢出时,在工作区卡片上显示压缩状态。" } } } },
-    "Codex" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Codex" } } } },
-    "Glint writes its hook entries into ~/.codex/hooks.json so codex sessions surface the same status as Claude." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Glint 会把 hook 写入 ~/.codex/hooks.json,让 codex 会话与 Claude 一样上报状态。" } } } },
-    "Hooks merged into your Codex config." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Hook 已合并到你的 Codex 配置。" } } } },
-    "Hook bridge not yet implemented." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Hook 桥接尚未实现。" } } } },
-    "Not wired" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "未接入" } } } },
-    "Notifications" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通知" } } } },
-    "Sound on permission request" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "等待批准时播放提示音" } } } },
-    "Play a chime when an agent is waiting for your approval in a background workspace." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "后台工作区中代理等待批准时播放提示音。" } } } },
-    "Sound on turn complete" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "任务完成时播放提示音" } } } },
-    "Play a softer chime when a background agent finishes its turn." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "后台代理完成任务时播放一个轻柔的提示音。" } } } },
-    "Chimes only fire for background workspaces — the one you're looking at stays quiet." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "提示音只在后台工作区触发,你正在查看的工作区保持安静。" } } } },
-
-    "Window" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "窗口" } } } },
-    "Toggle Sidebar" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "切换侧栏" } } } },
-    "Panes" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "面板" } } } },
-    "Split Horizontal" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "横向分屏" } } } },
-    "Split Vertical" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "纵向分屏" } } } },
-    "Close Pane" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭面板" } } } },
-    "Focus Next Pane" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "聚焦下一面板" } } } },
-    "Next Workspace" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下一工作区" } } } },
-    "Previous Workspace" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上一工作区" } } } },
-    "Minimize" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "最小化" } } } },
-    "Hide Glint" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "隐藏 Glint" } } } },
-    "Quit Glint" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "退出 Glint" } } } },
-    "Find in Sidebar" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在侧栏中搜索" } } } },
-    "In Command Palette" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "命令面板内" } } } },
-    "Visible only when the palette is open." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅在命令面板打开时生效。" } } } },
-    "Move Selection Up" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "上移选项" } } } },
-    "Move Selection Down" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "下移选项" } } } },
-    "Run Selection" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "执行选中项" } } } },
-    "Close Palette" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭面板" } } } },
-
-    "Build" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "构建" } } } },
-    "Version" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "版本" } } } },
-    "Channel" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "通道" } } } },
-    "Local Dev" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "本地开发" } } } },
-    "Stable" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "稳定版" } } } },
-    "Bundle ID" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "Bundle ID" } } } },
-    "Auto-update" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自动更新" } } } },
-    "no cwd" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "无目录" } } } },
-    "A native mac terminal made for AI agents." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "为 AI 代理打造的原生 Mac 终端。" } } } },
-
-    "Close (Esc)" : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "关闭 (Esc)" } } } }
-  }
+    }
+  },
+  "version" : "1.0"
 }

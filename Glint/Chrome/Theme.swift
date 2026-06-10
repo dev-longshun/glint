@@ -15,7 +15,11 @@ enum Theme {
     static let text1 = Color(red: 0.925, green: 0.929, blue: 0.949)        // #ECEDF2
     static let text2 = Color(red: 0.717, green: 0.725, blue: 0.784)        // #B7B9C8
     static let text3 = Color(red: 0.494, green: 0.510, blue: 0.565)        // #7E8290
-    static let text4 = Color(red: 0.337, green: 0.353, blue: 0.424)        // #565A6C
+    // text4 is used for 10–11pt captions; the original #565A6C only hit
+    // ~2.9:1 against bgWindow — below WCAG AA (4.5:1) at these sizes.
+    // #757A91 measures ~4.6:1 on bgWindow/bgPane while staying darker and
+    // bluer than text3 (~5.1:1) so the muted hierarchy survives.
+    static let text4 = Color(red: 0.459, green: 0.478, blue: 0.569)        // #757A91
 
     // accents
     static let accent       = Color(red: 0.369, green: 0.361, blue: 0.902) // #5E5CE6 systemIndigo
