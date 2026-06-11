@@ -18,7 +18,7 @@ struct PaneView: View {
            let ws = store.workspaces.first(where: { $0.id == wsID }),
            let pane = ws.panes[paneID] {
             paneBody(workspaceID: wsID,
-                     focusedPane: ws.focusedPane,
+                     focusedPane: ws.selectedTab?.focusedPane ?? paneID,
                      cwd: pane.workingDirectory)
         } else {
             Theme.bgPane

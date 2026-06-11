@@ -182,6 +182,14 @@ struct CommandPalette: View {
             shortcut: "",
             action: { store.addWorkspace() }
         ))
+
+        items.append(.action(
+            title: "New Tab",
+            subtitle: "Open a tab in this workspace",
+            symbol: "plus.rectangle.on.rectangle",
+            shortcut: "⌘T",
+            action: { store.newTab() }
+        ))
         // Naming note: the store's `.horizontal` means an HSplit — panes
         // side by side (see PaneTreeView) — which reads inverted as a
         // label. User-facing copy is direction-explicit instead; the enum

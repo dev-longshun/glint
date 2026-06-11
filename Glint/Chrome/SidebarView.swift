@@ -721,10 +721,17 @@ private struct WorkspaceCard: View {
     private var cwdLine: String {
         let n = ws.panes.count
         let unit = String(localized: n == 1 ? "pane" : "panes")
-        let focused = ws.panes[ws.focusedPane]?.workingDirectory
+        let focused = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
         let firstCwd = ws.panes.values.compactMap(\.workingDirectory).first
         let cwd = focused ?? firstCwd
         let shortCwd = cwd.map(prettyCwd) ?? String(localized: "no cwd")
+        // Surface the tab count only once it's meaningful (>1), so single-tab
+        // workspaces read exactly as before.
+        let tabN = ws.tabs.count
+        if tabN > 1 {
+            let tabUnit = String(localized: "tabs")
+            return "\(tabN) \(tabUnit) · \(n) \(unit) · \(shortCwd)"
+        }
         return "\(n) \(unit) · \(shortCwd)"
     }
 

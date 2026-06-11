@@ -68,6 +68,23 @@ struct GlintApp: App {
                     .keyboardShortcut("]", modifiers: .command)
                 Button("Focus Previous Pane") { workspaceStore.focusPrevious() }
                     .keyboardShortcut("[", modifiers: .command)
+                Divider()
+                // Tabs deliberately avoid the workspace vocabulary (⌘1…9,
+                // ⌘⇧[ ]) so existing muscle memory is untouched: ⌘T opens,
+                // ⌘⇧W closes, and ⌃Tab / ⌃⇧Tab cycle (iTerm-compatible, and
+                // not a sequence the terminal itself needs).
+                Button("New Tab") { workspaceStore.newTab() }
+                    .keyboardShortcut("t", modifiers: .command)
+                Button("Close Tab") {
+                    if let ws = workspaceStore.selectedWorkspace {
+                        workspaceStore.closeTab(ws.selectedTabID)
+                    }
+                }
+                .keyboardShortcut("w", modifiers: [.command, .shift])
+                Button("Next Tab") { workspaceStore.nextTab() }
+                    .keyboardShortcut(.tab, modifiers: .control)
+                Button("Previous Tab") { workspaceStore.previousTab() }
+                    .keyboardShortcut(.tab, modifiers: [.control, .shift])
             }
             CommandGroup(after: .toolbar) {
                 Button("Command Palette") {

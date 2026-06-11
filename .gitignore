@@ -17,6 +17,7 @@ Package.resolved
 # Build output of scripts/setup-ghosttykit.sh (zig builds it from the
 # ghostty submodule; not committed)
 Vendor/GhosttyKit.xcframework/
+Vendor/GhosttyKit.xcframework.upstream/
 Vendor/.ghosttykit-sha
 Vendor/*.tar.gz
 

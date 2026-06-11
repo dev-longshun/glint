@@ -106,6 +106,13 @@ struct ToolbarHeader: View {
                     .transition(.opacity.combined(with: .move(edge: .leading)))
             }
 
+            // Tabs ride in the otherwise-empty middle of the header, centered
+            // between the brand group and the trailing buttons by the two
+            // flanking spacers. TabBar renders nothing for a single-tab
+            // workspace, so the header looks exactly as before until you open
+            // a second tab.
+            Spacer(minLength: 12)
+            TabBar()
             Spacer(minLength: 12)
             HStack(spacing: 4) {
                 ToolbarIconButton(symbol: "command", help: "Command Palette (⌘K)") {
@@ -149,6 +156,173 @@ struct ToolbarHeader: View {
         }
     }
 
+}
+
+// MARK: - Tabs (in-header, variant B: centered chips)
+
+/// The centered cluster of tab chips that lives in the middle of the header.
+/// Renders nothing until the current workspace has ≥2 tabs, so single-tab
+/// users never see a lone chip — they open a second tab with ⌘T (or the
+/// command palette), at which point the cluster appears with a "+" affordance.
+struct TabBar: View {
+    @EnvironmentObject var store: WorkspaceStore
+
+    var body: some View {
+        if let ws = store.selectedWorkspace, ws.tabs.count >= 2 {
+            HStack(spacing: 5) {
+                ForEach(ws.tabs) { tab in
+                    TabChip(ws: ws, tab: tab, isActive: tab.id == ws.selectedTabID)
+                }
+                newTabButton
+            }
+            .fixedSize()
+        }
+    }
+
+    private var newTabButton: some View {
+        Button { store.newTab() } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 26, height: 26)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.text3)
+        .help("New Tab (⌘T)")
+    }
+}
+
+/// A single tab chip: agent/process icon + cwd-derived label + a trailing slot
+/// that shows the agent status dot, swapping to a close (×) button on hover
+/// (Safari-style). Active chips get a faint fill and an accent underline.
+private struct TabChip: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let ws: Workspace
+    let tab: WorkspaceTab
+    let isActive: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        let kind = store.tabIconKind(tab, in: ws)
+        let status = store.tabAgentStatus(tab, in: ws)
+        Button { store.selectTab(tab.id) } label: {
+            HStack(spacing: 7) {
+                TabIcon(kind: kind, size: 15)
+                Text(ws.tabDisplayName(tab))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(isActive ? Theme.text1 : Theme.text3)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 150)
+                trailingSlot(status: status)
+            }
+            .padding(.leading, 9)
+            .padding(.trailing, 8)
+            .frame(height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(chipFill)
+            )
+            .overlay(alignment: .bottom) {
+                if isActive {
+                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                        .fill(store.accent.opacity(0.9))
+                        .frame(height: 2)
+                        .padding(.horizontal, 9)
+                        .padding(.bottom, 1.5)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(ws.tabDisplayName(tab))
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .animation(.easeOut(duration: 0.12), value: isActive)
+    }
+
+    private var chipFill: Color {
+        if isActive { return Color.white.opacity(0.08) }
+        if hovering { return Color.white.opacity(0.04) }
+        return .clear
+    }
+
+    /// Fixed-width trailing slot so the chip doesn't resize when the close
+    /// button replaces the status dot on hover.
+    @ViewBuilder
+    private func trailingSlot(status: PaneAgentStatus?) -> some View {
+        ZStack {
+            if hovering {
+                Button { store.closeTab(tab.id) } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .frame(width: 15, height: 15)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .fill(Color.white.opacity(0.001)) // keep hit area
+                        )
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(isActive ? Theme.text2 : Theme.text3)
+            } else if let status, status != .idle {
+                Circle()
+                    .fill(Self.statusDotColor(status))
+                    .frame(width: 7, height: 7)
+                    .shadow(color: Self.statusDotColor(status).opacity(0.6), radius: 3)
+            }
+        }
+        .frame(width: 15, height: 15)
+    }
+
+    // Mirrors SidebarView/WorkspaceSwitcherRow's dot palette so a tab's dot
+    // reads the same color as its workspace card.
+    private static func statusDotColor(_ s: PaneAgentStatus) -> Color {
+        switch s {
+        case .thinking, .tool:  return Color(red: 0.55, green: 0.50, blue: 0.95)
+        case .needsPermission:  return Color(red: 1.0, green: 0.27, blue: 0.23)
+        case .compacting:       return Color(red: 0.35, green: 0.66, blue: 0.82)
+        case .justCompleted:    return Color(red: 0.30, green: 0.78, blue: 0.46)
+        case .failed:           return Color(red: 0.90, green: 0.28, blue: 0.26)
+        case .idle:             return .clear
+        }
+    }
+}
+
+/// The little icon at the leading edge of a tab chip. Uses the same static
+/// brand marks the sidebar shows for its workspace cards (the `Claude` /
+/// `CodexMark` assets — the still versions of the animated mascots, so a tab
+/// adds zero per-frame cost), falling back to an SF Symbol / glyph for plain
+/// shells and other tools.
+private struct TabIcon: View {
+    let kind: WorkspaceIconKind
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            switch kind {
+            case .claude:
+                Image("Claude")
+                    .resizable().interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+            case .codex:
+                Image("CodexMark")
+                    .resizable().interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+            default:
+                if let sf = kind.sfSymbol {
+                    Image(systemName: sf)
+                        .font(.system(size: size * 0.82, weight: .medium))
+                        .foregroundStyle(Theme.text2)
+                } else {
+                    Text(kind.letter)
+                        .font(.system(size: size * 0.8, weight: .semibold))
+                        .foregroundStyle(Theme.text2)
+                }
+            }
+        }
+        .frame(width: size, height: size)
+    }
 }
 
 // MARK: - Brand mark
@@ -513,6 +687,10 @@ private struct WorkspaceSwitcherRow: View {
         }
         let n = ws.panes.count
         let unit = String(localized: n == 1 ? "pane" : "panes")
+        let tabN = ws.tabs.count
+        if tabN > 1 {
+            return "\(tabN) \(String(localized: "tabs")) · \(n) \(unit)"
+        }
         return "\(n) \(unit)"
     }
 

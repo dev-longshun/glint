@@ -14,6 +14,11 @@ struct PaneID: Hashable, Identifiable, Codable {
     var id: UInt32 { value }
 }
 
+struct TabID: Hashable, Identifiable, Codable {
+    let value: UInt32
+    var id: UInt32 { value }
+}
+
 indirect enum SplitNode: Codable {
     case leaf(PaneID)
     case split(direction: SplitDirection, ratio: CGFloat, a: SplitNode, b: SplitNode)
@@ -51,12 +56,34 @@ indirect enum SplitNode: Codable {
     }
 }
 
+extension SplitNode {
+    /// Every pane in this subtree, left-to-right (pre-order).
+    var leaves: [PaneID] {
+        switch self {
+        case .leaf(let id):            return [id]
+        case .split(_, _, let a, let b): return a.leaves + b.leaves
+        }
+    }
+}
+
 struct Pane: Identifiable, Codable {
     let id: PaneID
     var title: String
     /// Last-known working directory; used to re-spawn the shell in the same
     /// place after a restart. Updated periodically while running.
     var workingDirectory: String?
+}
+
+/// One tab inside a workspace. Owns its own split tree and focused pane; the
+/// panes themselves live in the workspace's global `panes` registry (so the
+/// `(workspace, pane)` key for surfaces / scrollback / agent state is the
+/// same no matter which tab a pane is in).
+struct WorkspaceTab: Identifiable, Codable {
+    let id: TabID
+    /// User-chosen name; nil ⇒ derive a label from the focused pane's cwd.
+    var name: String?
+    var root: SplitNode
+    var focusedPane: PaneID
 }
 
 struct Workspace: Identifiable, Codable {
@@ -73,9 +100,17 @@ struct Workspace: Identifiable, Codable {
     /// is persisted — the live agent *status* (thinking/needsPermission/…) is
     /// runtime-only and intentionally not saved. See `iconKind(for:)`.
     var iconHint: String?
-    var root: SplitNode
+    /// Open tabs, in display order. Never empty — a workspace always has at
+    /// least one tab.
+    var tabs: [WorkspaceTab]
+    /// The currently visible tab.
+    var selectedTabID: TabID
+    /// Monotonic TabID source within this workspace (values are never reused).
+    var nextTabSeq: UInt32
+    /// Pane registry, GLOBAL to the workspace (not per-tab). PaneIDs are
+    /// unique within the workspace, so `WorkspacePaneKey(workspace, pane)` is
+    /// unaffected by which tab a pane lives in.
     var panes: [PaneID: Pane]
-    var focusedPane: PaneID
     var nextPaneSeq: UInt32
 
     var accent: Color {
@@ -83,21 +118,25 @@ struct Workspace: Identifiable, Codable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, userNamed, accentHex, symbol, iconHint, root, panes, focusedPane, nextPaneSeq
+        case id, name, userNamed, accentHex, symbol, iconHint
+        case tabs, selectedTabID, nextTabSeq, panes, nextPaneSeq
+        // Legacy single-tree keys, still read so pre-tabs saves migrate.
+        case root, focusedPane
     }
 
     init(id: UUID, name: String, userNamed: Bool, accentHex: String, symbol: String,
-         root: SplitNode, panes: [PaneID: Pane], focusedPane: PaneID, nextPaneSeq: UInt32,
-         iconHint: String? = nil) {
+         tabs: [WorkspaceTab], selectedTabID: TabID, nextTabSeq: UInt32,
+         panes: [PaneID: Pane], nextPaneSeq: UInt32, iconHint: String? = nil) {
         self.id = id
         self.name = name
         self.userNamed = userNamed
         self.accentHex = accentHex
         self.symbol = symbol
         self.iconHint = iconHint
-        self.root = root
+        self.tabs = tabs
+        self.selectedTabID = selectedTabID
+        self.nextTabSeq = nextTabSeq
         self.panes = panes
-        self.focusedPane = focusedPane
         self.nextPaneSeq = nextPaneSeq
     }
 
@@ -113,10 +152,47 @@ struct Workspace: Identifiable, Codable {
         // Older saves predate the persisted icon hint — fine, it stays nil and
         // the icon is derived live until an agent reports.
         self.iconHint = try c.decodeIfPresent(String.self, forKey: .iconHint)
-        self.root = try c.decode(SplitNode.self, forKey: .root)
         self.panes = try c.decode([PaneID: Pane].self, forKey: .panes)
-        self.focusedPane = try c.decode(PaneID.self, forKey: .focusedPane)
         self.nextPaneSeq = try c.decode(UInt32.self, forKey: .nextPaneSeq)
+
+        if let tabs = try? c.decode([WorkspaceTab].self, forKey: .tabs), !tabs.isEmpty {
+            self.tabs = tabs
+            self.selectedTabID = (try? c.decode(TabID.self, forKey: .selectedTabID)) ?? tabs[0].id
+            let maxSeq = tabs.map(\.id.value).max() ?? 0
+            self.nextTabSeq = (try? c.decode(UInt32.self, forKey: .nextTabSeq))
+                .map { Swift.max($0, maxSeq + 1) } ?? (maxSeq + 1)
+        } else {
+            // Migrate a pre-tabs save: its single (root, focusedPane) becomes
+            // tab 0. Fall back to the first pane / a fresh leaf if those keys
+            // are somehow absent, so decoding never throws on an old file.
+            let root = (try? c.decode(SplitNode.self, forKey: .root))
+                ?? .leaf(panes.keys.sorted { $0.value < $1.value }.first ?? PaneID(value: 0))
+            let focused = (try? c.decode(PaneID.self, forKey: .focusedPane))
+                ?? root.leaves.first ?? PaneID(value: 0)
+            self.tabs = [WorkspaceTab(id: TabID(value: 0), name: nil,
+                                      root: root, focusedPane: focused)]
+            self.selectedTabID = TabID(value: 0)
+            self.nextTabSeq = 1
+        }
+    }
+
+    // Explicit because CodingKeys carries the legacy `root`/`focusedPane`
+    // cases (read by the migration decoder) which have no stored property —
+    // that blocks Encodable synthesis. We write only the current shape; the
+    // legacy keys are never emitted, so saves are clean going forward.
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(userNamed, forKey: .userNamed)
+        try c.encode(accentHex, forKey: .accentHex)
+        try c.encode(symbol, forKey: .symbol)
+        try c.encodeIfPresent(iconHint, forKey: .iconHint)
+        try c.encode(tabs, forKey: .tabs)
+        try c.encode(selectedTabID, forKey: .selectedTabID)
+        try c.encode(nextTabSeq, forKey: .nextTabSeq)
+        try c.encode(panes, forKey: .panes)
+        try c.encode(nextPaneSeq, forKey: .nextPaneSeq)
     }
 }
 
@@ -169,27 +245,44 @@ struct PersistedState: Codable {
 extension Workspace {
     static func fresh(name: String, accentHex: String, symbol: String) -> Workspace {
         let first = PaneID(value: 0)
+        let tab = WorkspaceTab(id: TabID(value: 0), name: nil,
+                               root: .leaf(first), focusedPane: first)
         return Workspace(
             id: UUID(),
             name: name,
             userNamed: false,
             accentHex: accentHex,
             symbol: symbol,
-            root: .leaf(first),
+            tabs: [tab],
+            selectedTabID: tab.id,
+            nextTabSeq: 1,
             panes: [first: Pane(id: first, title: "zsh", workingDirectory: nil)],
-            focusedPane: first,
             nextPaneSeq: 1
         )
     }
 
+    /// The currently visible tab (the model guarantees one exists, but the
+    /// accessor stays optional so a transient inconsistent state can't crash).
+    var selectedTab: WorkspaceTab? { tabs.first { $0.id == selectedTabID } }
+    var selectedTabIndex: Int? { tabs.firstIndex { $0.id == selectedTabID } }
+
     /// What to show as the workspace label in the sidebar. If the user has
     /// renamed it, use their name; otherwise derive a short label from the
-    /// first pane's working directory.
+    /// selected tab's focused pane's working directory.
     var displayName: String {
         if userNamed && !name.isEmpty { return name }
-        let cwd = panes[focusedPane]?.workingDirectory
+        let cwd = (selectedTab?.focusedPane).flatMap { panes[$0]?.workingDirectory }
             ?? panes.values.compactMap(\.workingDirectory).first
         return Self.shortLabel(forCwd: cwd) ?? name
+    }
+
+    /// Label for a tab chip: the user's name if set, otherwise a short cwd
+    /// label from the tab's focused pane, otherwise a generic fallback.
+    func tabDisplayName(_ tab: WorkspaceTab) -> String {
+        if let n = tab.name, !n.isEmpty { return n }
+        let cwd = panes[tab.focusedPane]?.workingDirectory
+            ?? tab.root.leaves.compactMap { panes[$0]?.workingDirectory }.first
+        return Self.shortLabel(forCwd: cwd) ?? String(localized: "Terminal")
     }
 
     private static func shortLabel(forCwd path: String?) -> String? {
@@ -843,11 +936,11 @@ final class WorkspaceStore: ObservableObject {
     }
 
     var currentRoot: SplitNode {
-        selectedWorkspace?.root ?? .leaf(PaneID(value: 0))
+        selectedWorkspace?.selectedTab?.root ?? .leaf(PaneID(value: 0))
     }
 
     var currentFocusedPane: PaneID {
-        selectedWorkspace?.focusedPane ?? PaneID(value: 0)
+        selectedWorkspace?.selectedTab?.focusedPane ?? PaneID(value: 0)
     }
 
     var currentPanes: [PaneID: Pane] {
@@ -855,23 +948,24 @@ final class WorkspaceStore: ObservableObject {
     }
 
     var focusedPaneValue: Pane? {
-        selectedWorkspace?.panes[currentFocusedPane]
+        guard let ws = selectedWorkspace, let f = ws.selectedTab?.focusedPane else { return nil }
+        return ws.panes[f]
     }
 
     // MARK: pane operations on the current workspace
 
     func splitFocused(_ direction: SplitDirection) {
-        guard let i = currentIndex else { return }
+        guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
         let new = PaneID(value: workspaces[i].nextPaneSeq)
         workspaces[i].nextPaneSeq += 1
         workspaces[i].panes[new] = Pane(id: new, title: "zsh", workingDirectory: nil)
-        workspaces[i].root = Self.splitLeaf(
-            workspaces[i].root,
-            target: workspaces[i].focusedPane,
+        workspaces[i].tabs[t].root = Self.splitLeaf(
+            workspaces[i].tabs[t].root,
+            target: workspaces[i].tabs[t].focusedPane,
             direction: direction,
             newID: new
-        ) ?? workspaces[i].root
-        workspaces[i].focusedPane = new
+        ) ?? workspaces[i].tabs[t].root
+        workspaces[i].tabs[t].focusedPane = new
     }
 
     /// Shells whose presence as the foreground process means "nothing of
@@ -935,15 +1029,14 @@ final class WorkspaceStore: ObservableObject {
     }
 
     func closeFocused() {
-        guard let i = currentIndex else { return }
-        guard workspaces[i].panes.count > 1 else {
-            // The last pane can't be closed (a workspace is never empty).
-            // Beep instead of a silent no-op so ⌘W at least acknowledges
-            // the keypress.
-            NSSound.beep()
+        guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
+        // Last pane in this tab → close the whole tab instead (which itself
+        // beeps when it's also the workspace's last tab).
+        guard workspaces[i].tabs[t].root.leaves.count > 1 else {
+            closeTab(workspaces[i].tabs[t].id)
             return
         }
-        let target = workspaces[i].focusedPane
+        let target = workspaces[i].tabs[t].focusedPane
         let key = WorkspacePaneKey(workspace: workspaces[i].id, pane: target)
         if paneNeedsCloseConfirmation(key),
            !Self.confirmDestruction(
@@ -954,8 +1047,8 @@ final class WorkspaceStore: ObservableObject {
            ) {
             return
         }
-        let (newRoot, survivor) = Self.removeLeaf(workspaces[i].root, target: target)
-        if let newRoot { workspaces[i].root = newRoot }
+        let (newRoot, survivor) = Self.removeLeaf(workspaces[i].tabs[t].root, target: target)
+        if let newRoot { workspaces[i].tabs[t].root = newRoot }
         workspaces[i].panes.removeValue(forKey: target)
         surfaceViews.removeValue(forKey: key)
         // The pane is gone for good — drop its scrollback snapshot too.
@@ -965,30 +1058,30 @@ final class WorkspaceStore: ObservableObject {
         // ghost entries forever.
         paneAgentState.removeValue(forKey: key)
         paneProcesses.removeValue(forKey: key)
-        workspaces[i].focusedPane = survivor
-            ?? workspaces[i].panes.keys.sorted { $0.value < $1.value }.first
+        workspaces[i].tabs[t].focusedPane = survivor
+            ?? workspaces[i].tabs[t].root.leaves.first
             ?? PaneID(value: 0)
     }
 
     func focusNext() {
-        guard let i = currentIndex else { return }
-        let leaves = Self.collectLeaves(workspaces[i].root).sorted { $0.value < $1.value }
+        guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
+        let leaves = workspaces[i].tabs[t].root.leaves.sorted { $0.value < $1.value }
         guard !leaves.isEmpty,
-              let pos = leaves.firstIndex(of: workspaces[i].focusedPane) else { return }
-        workspaces[i].focusedPane = leaves[(pos + 1) % leaves.count]
+              let pos = leaves.firstIndex(of: workspaces[i].tabs[t].focusedPane) else { return }
+        workspaces[i].tabs[t].focusedPane = leaves[(pos + 1) % leaves.count]
     }
 
     func focusPrevious() {
-        guard let i = currentIndex else { return }
-        let leaves = Self.collectLeaves(workspaces[i].root).sorted { $0.value < $1.value }
+        guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
+        let leaves = workspaces[i].tabs[t].root.leaves.sorted { $0.value < $1.value }
         guard !leaves.isEmpty,
-              let pos = leaves.firstIndex(of: workspaces[i].focusedPane) else { return }
-        workspaces[i].focusedPane = leaves[(pos - 1 + leaves.count) % leaves.count]
+              let pos = leaves.firstIndex(of: workspaces[i].tabs[t].focusedPane) else { return }
+        workspaces[i].tabs[t].focusedPane = leaves[(pos - 1 + leaves.count) % leaves.count]
     }
 
     func focus(_ id: PaneID) {
-        guard let i = currentIndex else { return }
-        workspaces[i].focusedPane = id
+        guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
+        workspaces[i].tabs[t].focusedPane = id
     }
 
     func selectWorkspace(_ id: UUID) {
@@ -1009,9 +1102,94 @@ final class WorkspaceStore: ObservableObject {
     /// path addresses the root split. Driven by divider drags in
     /// PaneTreeView; persisted with the rest of the tree.
     func setSplitRatio(path: [Bool], ratio: CGFloat) {
-        guard let i = currentIndex else { return }
+        guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
         let clamped = min(max(ratio, 0.1), 0.9)
-        workspaces[i].root = Self.settingRatio(workspaces[i].root, path: path[...], ratio: clamped)
+        workspaces[i].tabs[t].root = Self.settingRatio(workspaces[i].tabs[t].root, path: path[...], ratio: clamped)
+    }
+
+    // MARK: tab operations on the current workspace
+
+    /// Open a new tab in the current workspace, inheriting the focused pane's
+    /// cwd (terminal convention: a new tab opens "here"). Inserts it right
+    /// after the current tab and selects it.
+    func newTab() {
+        guard let i = currentIndex else { return }
+        let inheritedCwd = (workspaces[i].selectedTab?.focusedPane)
+            .flatMap { workspaces[i].panes[$0]?.workingDirectory }
+        let pane = PaneID(value: workspaces[i].nextPaneSeq)
+        workspaces[i].nextPaneSeq += 1
+        workspaces[i].panes[pane] = Pane(id: pane, title: "zsh", workingDirectory: inheritedCwd)
+        let tab = WorkspaceTab(id: TabID(value: workspaces[i].nextTabSeq), name: nil,
+                               root: .leaf(pane), focusedPane: pane)
+        workspaces[i].nextTabSeq += 1
+        if let sel = workspaces[i].selectedTabIndex {
+            workspaces[i].tabs.insert(tab, at: sel + 1)
+        } else {
+            workspaces[i].tabs.append(tab)
+        }
+        workspaces[i].selectedTabID = tab.id
+    }
+
+    /// Close a tab and every pane it holds, cleaning up each pane's surface,
+    /// scrollback snapshot, and live side-state. Confirms once if any pane is
+    /// running something. The workspace's last tab can't be closed — beep
+    /// instead, mirroring the last-pane rule.
+    func closeTab(_ tabID: TabID) {
+        guard let i = currentIndex,
+              let t = workspaces[i].tabs.firstIndex(where: { $0.id == tabID }) else { return }
+        guard workspaces[i].tabs.count > 1 else {
+            NSSound.beep()
+            return
+        }
+        let wsID = workspaces[i].id
+        let panes = workspaces[i].tabs[t].root.leaves
+        let busy = panes.contains {
+            paneNeedsCloseConfirmation(WorkspacePaneKey(workspace: wsID, pane: $0))
+        }
+        if busy,
+           !Self.confirmDestruction(
+               message: String(localized: "Close this tab?"),
+               informative: String(localized: "Something is still running in it and will be terminated."),
+               confirmTitle: String(localized: "Close Tab"),
+               suppressionKey: "glint.suppressCloseTabConfirm"
+           ) {
+            return
+        }
+        let wasSelected = workspaces[i].selectedTabID == tabID
+        for pane in panes {
+            let key = WorkspacePaneKey(workspace: wsID, pane: pane)
+            workspaces[i].panes.removeValue(forKey: pane)
+            surfaceViews.removeValue(forKey: key)
+            ScrollbackArchive.delete(
+                id: ScrollbackArchive.fileID(forPaneKey: "\(wsID.uuidString):\(pane.value)"))
+            paneAgentState.removeValue(forKey: key)
+            paneProcesses.removeValue(forKey: key)
+        }
+        workspaces[i].tabs.remove(at: t)
+        if wasSelected {
+            let nextIdx = min(t, workspaces[i].tabs.count - 1)
+            workspaces[i].selectedTabID = workspaces[i].tabs[nextIdx].id
+        }
+    }
+
+    func selectTab(_ tabID: TabID) {
+        guard let i = currentIndex,
+              workspaces[i].tabs.contains(where: { $0.id == tabID }) else { return }
+        workspaces[i].selectedTabID = tabID
+    }
+
+    func nextTab() {
+        guard let i = currentIndex, let t = workspaces[i].selectedTabIndex,
+              workspaces[i].tabs.count > 1 else { return }
+        let n = (t + 1) % workspaces[i].tabs.count
+        workspaces[i].selectedTabID = workspaces[i].tabs[n].id
+    }
+
+    func previousTab() {
+        guard let i = currentIndex, let t = workspaces[i].selectedTabIndex,
+              workspaces[i].tabs.count > 1 else { return }
+        let n = (t - 1 + workspaces[i].tabs.count) % workspaces[i].tabs.count
+        workspaces[i].selectedTabID = workspaces[i].tabs[n].id
     }
 
     /// Cycle to the next workspace in sidebar order, wrapping at the end.
@@ -1166,13 +1344,6 @@ final class WorkspaceStore: ObservableObject {
         case .split(_, _, let a, _): return firstLeaf(a)
         }
     }
-
-    private static func collectLeaves(_ node: SplitNode) -> [PaneID] {
-        switch node {
-        case .leaf(let id): return [id]
-        case .split(_, _, let a, let b): return collectLeaves(a) + collectLeaves(b)
-        }
-    }
 }
 
 // MARK: - Workspace icon kind
@@ -1290,6 +1461,24 @@ extension WorkspaceStore {
         return rank(b) > rank(a) ? b : a
     }
 
+    /// Most attention-worthy agent status across a single tab's panes — drives
+    /// the tab chip's status dot. nil = no agent reporting / all idle.
+    func tabAgentStatus(_ tab: WorkspaceTab, in workspace: Workspace) -> PaneAgentStatus? {
+        var best: PaneAgentStatus?
+        for paneID in tab.root.leaves {
+            let key = WorkspacePaneKey(workspace: workspace.id, pane: paneID)
+            guard let entry = paneAgentState[key] else { continue }
+            best = mergeStatus(best, entry.status)
+        }
+        return best
+    }
+
+    /// Icon for a single tab chip. Live only (tabs don't persist an icon hint
+    /// the way workspaces do).
+    func tabIconKind(_ tab: WorkspaceTab, in workspace: Workspace) -> WorkspaceIconKind {
+        liveIconKind(paneIDs: tab.root.leaves, workspaceID: workspace.id)
+    }
+
     /// Icon to display for a workspace. Prefers what's running live; after a
     /// restart (no process has reported yet → live falls back to `.shell`) it
     /// restores the persisted agent identity so the workspace keeps its icon.
@@ -1328,15 +1517,21 @@ extension WorkspaceStore {
     /// Pick the most representative icon for a workspace based on what its
     /// panes are currently running. AI / SSH / dev tools beat plain shell.
     private func liveIconKind(for workspace: Workspace) -> WorkspaceIconKind {
+        liveIconKind(paneIDs: Array(workspace.panes.keys), workspaceID: workspace.id)
+    }
+
+    /// Shared icon picker over an arbitrary pane set — used for both the whole
+    /// workspace (all panes) and a single tab (just that tab's leaves).
+    private func liveIconKind(paneIDs: [PaneID], workspaceID: UUID) -> WorkspaceIconKind {
         // Agent push-state wins over pid polling — if any pane reported a
-        // claude/codex hook in this workspace, surface that. With several
-        // agent panes (e.g. claude + codex side by side) the busy one wins;
-        // when all are equally busy/idle, the most recently active wins.
-        // `panes` is a Dictionary, so without this ordering the icon would
-        // be hash-order roulette.
+        // claude/codex hook, surface that. With several agent panes (e.g.
+        // claude + codex side by side) the busy one wins; when all are equally
+        // busy/idle, the most recently active wins. `paneIDs` may come from a
+        // Dictionary's keys, so without this ordering the icon would be
+        // hash-order roulette.
         var bestAgent: PaneAgentState?
-        for paneID in workspace.panes.keys {
-            let key = WorkspacePaneKey(workspace: workspace.id, pane: paneID)
+        for paneID in paneIDs {
+            let key = WorkspacePaneKey(workspace: workspaceID, pane: paneID)
             guard let entry = paneAgentState[key] else { continue }
             guard let cur = bestAgent else { bestAgent = entry; continue }
             let (curRank, newRank) = (statusRank(cur.status), statusRank(entry.status))
@@ -1348,8 +1543,8 @@ extension WorkspaceStore {
             return bestAgent.kind == .codex ? .codex : .claude
         }
 
-        let names = workspace.panes.keys.compactMap {
-            paneProcesses[WorkspacePaneKey(workspace: workspace.id, pane: $0)]?.lowercased()
+        let names = paneIDs.compactMap {
+            paneProcesses[WorkspacePaneKey(workspace: workspaceID, pane: $0)]?.lowercased()
         }
 
         // Priority: ssh > AI agents > editors > runtimes > shell.
