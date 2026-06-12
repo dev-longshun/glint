@@ -1262,6 +1262,17 @@
         }
       }
     },
+    "Preview": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "试听"
+          }
+        }
+      }
+    },
     "Previous Workspace": {
       "extractionState": "stale",
       "localizations": {
@@ -1609,6 +1620,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "其中仍有任务在运行,关闭后会被终止。"
+          }
+        }
+      }
+    },
+    "Sound": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音效"
           }
         }
       }

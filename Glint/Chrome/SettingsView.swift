@@ -391,14 +391,11 @@ private struct GeneralPane: View {
         SettingsCard("Language") {
             SettingsRow("Language",
                         subtitle: "Display language for Glint's UI.") {
-                Picker("", selection: $store.preferredLanguage) {
-                    Text("Follow system").tag("system")
-                    Divider()
-                    Text("English").tag("en")
-                    Text("中文（简体）").tag("zh-Hans")
-                }
-                .labelsHidden()
-                .fixedSize()
+                GlintDropdown(selection: $store.preferredLanguage, items: [
+                    (value: "system", label: "Follow system"),
+                    (value: "en", label: "English"),
+                    (value: "zh-Hans", label: "中文（简体）"),
+                ], listWidth: 170)
             }
         }
 
@@ -544,11 +541,9 @@ private struct TerminalPane: View {
     var body: some View {
         SettingsCard("Font") {
             SettingsRow("Family", subtitle: "Used for all panes. Falls back to Menlo if missing.") {
-                Picker("", selection: $store.terminalFontFamily) {
-                    ForEach(fontFamilies, id: \.self) { Text($0).tag($0) }
-                }
-                .labelsHidden()
-                .fixedSize()
+                GlintDropdown(selection: $store.terminalFontFamily,
+                              items: fontFamilies.map { (value: $0, label: $0) },
+                              listWidth: 230)
             }
             SettingsDivider()
             SettingsRow("Size", subtitle: "\(Int(store.terminalFontSize))pt") {
@@ -565,13 +560,11 @@ private struct TerminalPane: View {
 
         SettingsCard("Cursor") {
             SettingsRow("Style", subtitle: nil) {
-                Picker("", selection: $store.terminalCursorStyle) {
-                    Text("Block").tag("block")
-                    Text("Bar").tag("bar")
-                    Text("Underline").tag("underline")
-                }
-                .labelsHidden()
-                .fixedSize()
+                GlintDropdown(selection: $store.terminalCursorStyle, items: [
+                    (value: "block", label: "Block"),
+                    (value: "bar", label: "Bar"),
+                    (value: "underline", label: "Underline"),
+                ], listWidth: 150)
             }
             SettingsDivider()
             SettingsRow("Blink", subtitle: nil) {
@@ -582,13 +575,9 @@ private struct TerminalPane: View {
 
         SettingsCard("Buffer", footer: "Scrollback is kept per-pane. Increasing this raises memory usage.") {
             SettingsRow("Scrollback", subtitle: "Lines retained per pane.") {
-                Picker("", selection: $store.terminalScrollback) {
-                    ForEach(scrollbackChoices, id: \.self) { n in
-                        Text(n.formatted()).tag(n)
-                    }
-                }
-                .labelsHidden()
-                .fixedSize()
+                GlintDropdown(selection: $store.terminalScrollback,
+                              items: scrollbackChoices.map { (value: $0, label: $0.formatted()) },
+                              listWidth: 150)
             }
         }
     }
@@ -690,22 +679,310 @@ private struct AgentsPane: View {
                      footer: "Chimes only fire for background workspaces — the one you're looking at stays quiet.") {
             SettingsRow("Sound on permission request",
                         subtitle: "Play a chime when an agent is waiting for your approval in a background workspace.") {
-                Toggle("", isOn: $store.soundOnPermissionRequest)
-                    .toggleStyle(.switch).labelsHidden()
+                HStack(spacing: 10) {
+                    SoundPicker(selection: $store.soundPermissionName)
+                        .disabled(!store.soundOnPermissionRequest)
+                    Toggle("", isOn: $store.soundOnPermissionRequest)
+                        .toggleStyle(.switch).labelsHidden()
+                }
             }
             SettingsDivider()
             SettingsRow("Sound on turn complete",
                         subtitle: "Play a softer chime when a background agent finishes its turn.") {
-                Toggle("", isOn: $store.soundOnTurnComplete)
-                    .toggleStyle(.switch).labelsHidden()
+                HStack(spacing: 10) {
+                    SoundPicker(selection: $store.soundCompleteName)
+                        .disabled(!store.soundOnTurnComplete)
+                    Toggle("", isOn: $store.soundOnTurnComplete)
+                        .toggleStyle(.switch).labelsHidden()
+                }
             }
             SettingsDivider()
             SettingsRow("Sound on error",
                         subtitle: "Play an error tone when a background agent's turn ends in an API error.") {
-                Toggle("", isOn: $store.soundOnError)
-                    .toggleStyle(.switch).labelsHidden()
+                HStack(spacing: 10) {
+                    SoundPicker(selection: $store.soundErrorName)
+                        .disabled(!store.soundOnError)
+                    Toggle("", isOn: $store.soundOnError)
+                        .toggleStyle(.switch).labelsHidden()
+                }
             }
         }
+    }
+}
+
+/// Custom replacement for the native menu Picker, matching the glass
+/// dropdown language shared by the sound picker and the header's tab/
+/// workspace popovers. Items are (value, label) pairs; labels run through
+/// the string catalog (font names and numbers simply pass through
+/// verbatim when no entry exists).
+private struct GlintDropdown<Value: Hashable>: View {
+    @Binding var selection: Value
+    let items: [(value: Value, label: String)]
+    /// Width of the popover list; the trigger button sizes to its content.
+    var listWidth: CGFloat = 180
+
+    @State private var isOpen = false
+    @State private var hover = false
+
+    private var selectedLabel: String {
+        items.first(where: { $0.value == selection })?.label ?? ""
+    }
+
+    var body: some View {
+        Button { isOpen.toggle() } label: {
+            HStack(spacing: 6) {
+                Text(LocalizedStringKey(selectedLabel))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.text1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundStyle(Theme.text3)
+                    .rotationEffect(.degrees(isOpen ? 180 : 0))
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 22)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.white.opacity(hover || isOpen ? 0.09 : 0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.12), value: isOpen)
+        .popover(isPresented: $isOpen, arrowEdge: .bottom) {
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    ForEach(items, id: \.value) { item in
+                        GlintDropdownRow(label: item.label,
+                                         isSelected: item.value == selection) {
+                            selection = item.value
+                            isOpen = false
+                        }
+                    }
+                }
+                .padding(6)
+            }
+            .frame(width: listWidth)
+            .frame(maxHeight: 300)
+            .background(
+                ZStack {
+                    VisualEffectBackground(material: .menu)
+                    LinearGradient(
+                        colors: [
+                            Theme.sidebarTintTop.opacity(0.96),
+                            Theme.sidebarTintBottom.opacity(0.96),
+                        ],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                }
+            )
+        }
+    }
+}
+
+private struct GlintDropdownRow: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let label: String
+    let isSelected: Bool
+    let select: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(store.accent)
+                .opacity(isSelected ? 1 : 0)
+                .frame(width: 12)
+            Text(LocalizedStringKey(label))
+                .font(.system(size: 12.5, weight: isSelected ? .medium : .regular))
+                .foregroundStyle(isSelected ? Theme.text1 : Theme.text2)
+            Spacer(minLength: 12)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 27)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(hover ? Color.white.opacity(0.07) : .clear)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .onTapGesture(perform: select)
+        .onHover { hover = $0 }
+    }
+}
+
+/// Custom dropdown of the macOS system alert sounds for one of the
+/// notification cues, styled like the header's tab/workspace popovers
+/// (tinted glass, caption header, hover rows). Each row carries its own
+/// play button so any sound can be auditioned without selecting it;
+/// clicking the row itself selects and plays once as confirmation. Sound
+/// names are macOS proper names ("Glass", "Funk", …) and are deliberately
+/// not localized — the Sound preference pane shows them in English too.
+private struct SoundPicker: View {
+    @Binding var selection: String
+    @State private var isOpen = false
+    @State private var hover = false
+
+    var body: some View {
+        Button { isOpen.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "speaker.wave.2")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(Theme.text3)
+                Text(selection)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Theme.text1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundStyle(Theme.text3)
+                    .rotationEffect(.degrees(isOpen ? 180 : 0))
+            }
+            .padding(.horizontal, 9)
+            .frame(height: 22)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.white.opacity(hover || isOpen ? 0.09 : 0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.12), value: isOpen)
+        .popover(isPresented: $isOpen, arrowEdge: .bottom) {
+            SoundPickerList(selection: $selection) { isOpen = false }
+        }
+    }
+}
+
+private struct SoundPickerList: View {
+    @Binding var selection: String
+    let dismiss: () -> Void
+    /// Name of the sound currently auditioning — its row shows an accent
+    /// speaker glyph for the sound's typical duration.
+    @State private var playing: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(NSLocalizedString("Sound", comment: "").uppercased())
+                    .font(.system(size: 10, weight: .semibold))
+                    .kerning(1.1)
+                    .foregroundStyle(Theme.text4)
+                Spacer()
+                Text("\(WorkspaceStore.systemSoundNames.count)")
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(Theme.text4)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+
+            ScrollView {
+                LazyVStack(spacing: 1) {
+                    ForEach(WorkspaceStore.systemSoundNames, id: \.self) { name in
+                        SoundPickerRow(
+                            name: name,
+                            isSelected: name == selection,
+                            isPlaying: playing == name,
+                            preview: { preview(name) },
+                            select: {
+                                selection = name
+                                NSSound(named: name)?.play()
+                                dismiss()
+                            }
+                        )
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.bottom, 6)
+            }
+            .frame(maxHeight: 300)
+        }
+        .frame(width: 210)
+        .background(
+            ZStack {
+                // Same tinted glass as the header's tab/workspace popovers
+                // so every dropdown in the app feels like one surface.
+                VisualEffectBackground(material: .menu)
+                LinearGradient(
+                    colors: [
+                        Theme.sidebarTintTop.opacity(0.96),
+                        Theme.sidebarTintBottom.opacity(0.96),
+                    ],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+            }
+        )
+    }
+
+    private func preview(_ name: String) {
+        NSSound(named: name)?.play()
+        playing = name
+        Task {
+            try? await Task.sleep(for: .seconds(1))
+            if playing == name { playing = nil }
+        }
+    }
+}
+
+/// One sound in the picker popover: select-on-click row with a trailing
+/// speaker button that just previews the sound, leaving the selection
+/// (and the popover) untouched.
+private struct SoundPickerRow: View {
+    @EnvironmentObject var store: WorkspaceStore
+    let name: String
+    let isSelected: Bool
+    let isPlaying: Bool
+    let preview: () -> Void
+    let select: () -> Void
+    @State private var hover = false
+    @State private var playHover = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(store.accent)
+                .opacity(isSelected ? 1 : 0)
+                .frame(width: 12)
+            Text(name)
+                .font(.system(size: 12.5, weight: isSelected ? .medium : .regular))
+                .foregroundStyle(isSelected ? Theme.text1 : Theme.text2)
+            Spacer(minLength: 12)
+            Button(action: preview) {
+                Image(systemName: isPlaying ? "speaker.wave.2.fill" : "play.circle")
+                    .font(.system(size: isPlaying ? 10 : 12))
+                    .foregroundStyle(isPlaying ? store.accent
+                                     : (playHover ? Theme.text1 : Theme.text3))
+                    .frame(width: 20, height: 20)
+                    .background(
+                        Circle().fill(Color.white.opacity(playHover ? 0.10 : 0))
+                    )
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .onHover { playHover = $0 }
+            .opacity(hover || isPlaying || isSelected ? 1 : 0.45)
+            .help(Text("Preview"))
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 27)
+        .background(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(hover ? Color.white.opacity(0.07) : .clear)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .onTapGesture(perform: select)
+        .onHover { hover = $0 }
     }
 }
 

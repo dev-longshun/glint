@@ -479,6 +479,29 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(soundOnError, forKey: "glint.soundOnError") }
     }
 
+    /// NSSound names for the three audio cues, persisted; the defaults are
+    /// the original hardcoded chimes.
+    @Published var soundPermissionName: String = UserDefaults.standard.string(forKey: "glint.soundPermissionName") ?? "Funk" {
+        didSet { UserDefaults.standard.set(soundPermissionName, forKey: "glint.soundPermissionName") }
+    }
+    @Published var soundCompleteName: String = UserDefaults.standard.string(forKey: "glint.soundCompleteName") ?? "Glass" {
+        didSet { UserDefaults.standard.set(soundCompleteName, forKey: "glint.soundCompleteName") }
+    }
+    @Published var soundErrorName: String = UserDefaults.standard.string(forKey: "glint.soundErrorName") ?? "Basso" {
+        didSet { UserDefaults.standard.set(soundErrorName, forKey: "glint.soundErrorName") }
+    }
+
+    /// Names offered by the sound pickers in Settings: the system alert
+    /// sounds (the .aiff files in /System/Library/Sounds — same set the
+    /// macOS Sound preference pane lists).
+    static let systemSoundNames: [String] = {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: "/System/Library/Sounds")) ?? []
+        let names = files.filter { $0.hasSuffix(".aiff") }
+            .map { String($0.dropLast(".aiff".count)) }
+            .sorted()
+        return names.isEmpty ? ["Basso", "Funk", "Glass"] : names
+    }()
+
     /// Float workspaces whose agents just finished a turn (`.justCompleted`)
     /// to the top of the sidebar list. The status auto-clears when the user
     /// focuses that workspace's pane, so the card sinks back to its drag-
@@ -877,11 +900,11 @@ final class WorkspaceStore: ObservableObject {
         if !userIsWatching && oldStatus != state.status {
             switch state.status {
             case .needsPermission where soundOnPermissionRequest:
-                NSSound(named: "Funk")?.play()
+                NSSound(named: soundPermissionName)?.play()
             case .justCompleted where soundOnTurnComplete:
-                NSSound(named: "Glass")?.play()
+                NSSound(named: soundCompleteName)?.play()
             case .failed where soundOnError:
-                NSSound(named: "Basso")?.play()
+                NSSound(named: soundErrorName)?.play()
             default:
                 break
             }
