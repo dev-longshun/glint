@@ -175,4 +175,10 @@ extension Notification.Name {
     /// optimistically clear a busy agent status — no CLI agent emits a
     /// hook on user interrupt.
     static let glintPaneEscPressed = Notification.Name("glint.pane.escPressed")
+    /// Posted by GhosttySurfaceView when the user presses plain Return in a
+    /// pane. If that pane is currently waiting for an agent permission choice,
+    /// the keypress means the user submitted a decision; Codex does not emit a
+    /// dedicated "approved" hook, so the store can clear the red waiting state
+    /// optimistically until the next hook confirms the outcome.
+    static let glintPaneReturnPressed = Notification.Name("glint.pane.returnPressed")
 }

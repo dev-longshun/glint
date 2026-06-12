@@ -320,6 +320,7 @@ enum CodexHookInstaller {
         "PermissionRequest",
         "PreCompact",
         "Stop",
+        "StopFailure",
     ]
 
     static func isInstalled() -> Bool {

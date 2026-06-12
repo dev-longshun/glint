@@ -754,6 +754,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             NotificationCenter.default.post(
                 name: .glintPaneEscPressed, object: nil, userInfo: ["pane": pk])
         }
+        if (event.keyCode == 36 || event.keyCode == 76),
+           mods.intersection([.command, .option, .control, .shift]).isEmpty,
+           let pk = paneKey {
+            NotificationCenter.default.post(
+                name: .glintPaneReturnPressed, object: nil, userInfo: ["pane": pk])
+        }
         let hasBindingMod = mods.contains(.control) || mods.contains(.command)
             || optionActsAsMeta(mods, surface: s)
         if hasBindingMod || Self.isSpecialKey(event.keyCode) {

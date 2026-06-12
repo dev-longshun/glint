@@ -719,6 +719,13 @@ final class WorkspaceStore: ObservableObject {
         ) { [weak self] note in
             Task { @MainActor in self?.handlePaneEsc(note.userInfo) }
         })
+        observerTokens.append(NotificationCenter.default.addObserver(
+            forName: .glintPaneReturnPressed,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            Task { @MainActor in self?.handlePaneReturn(note.userInfo) }
+        })
     }
 
     deinit {
@@ -939,6 +946,24 @@ final class WorkspaceStore: ObservableObject {
             // workspace clears them, not a stray Esc.
             break
         }
+    }
+
+    /// User submitted a permission choice in an agent pane. Codex currently
+    /// reports the prompt (`PermissionRequest`) but not the approval decision
+    /// itself; the next hook may be `PostToolUse` or `Stop` after the tool
+    /// finishes. Clear the waiting state as soon as Return is pressed so the
+    /// tab/sidebar reflect that Glint is no longer blocked on the user.
+    func handlePaneReturn(_ info: [AnyHashable: Any]?) {
+        guard let info,
+              let paneStr = info["pane"] as? String,
+              let key = Self.parsePaneKey(paneStr),
+              var state = paneAgentState[key],
+              state.status == .needsPermission else { return }
+        let now = Date()
+        state.status = .tool
+        state.updatedAt = now
+        state.turnStartedAt = now
+        paneAgentState[key] = state
     }
 
     /// Clear any `.justCompleted` / `.failed` panes back to `.idle` — but
