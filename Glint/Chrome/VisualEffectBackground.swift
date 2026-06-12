@@ -55,6 +55,19 @@ struct WindowDragSurface: NSViewRepresentable {
     }
 }
 
+/// The opposite: an invisible NSView that refuses window dragging. SwiftUI
+/// surfaces painted with plain `Color` have no NSView of their own, so with
+/// `isMovableByWindowBackground` every empty stretch drags the window —
+/// slide this behind regions (sidebar content) that should stay put.
+struct NoDragSurface: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { NoDragView() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class NoDragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { false }
+    }
+}
+
 // MARK: - Liquid Glass (macOS 26)
 
 /// Whether the OS can render Liquid Glass at all. Call sites that keep a

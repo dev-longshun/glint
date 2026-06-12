@@ -43,8 +43,8 @@ struct ContentView: View {
             }
             .background(Theme.bgPane)
             // Floating mode: the terminal owns the full height and the
-            // toolbar's glass islands ride on top of it. Empty stretches of
-            // the strip stay click-through to the panes below.
+            // toolbar's glass islands ride on top of it. The strip itself
+            // is an invisible window-drag handle (see ToolbarHeader).
             .overlay(alignment: .top) {
                 if floatingHeader {
                     ToolbarHeader()
@@ -110,9 +110,6 @@ struct ToolbarHeader: View {
                 .keyboardShortcut("/", modifiers: .command)
 
                 GlintBrandMark()
-                    // Floating mode has no band to grab, so the wordmark
-                    // area doubles as the window-drag handle.
-                    .background(WindowDragSurface())
                     .padding(.trailing, 10)
 
                 // With the sidebar collapsed the workspace switcher joins
@@ -138,8 +135,8 @@ struct ToolbarHeader: View {
             // the whole flexible middle (it needs to know its width to decide
             // how far to degrade chips), but renders nothing for a single-tab
             // workspace, so the header looks exactly as before until you open
-            // a second tab. Empty space stays click-through, so window drag
-            // keeps working.
+            // a second tab. Empty space falls through to the header's drag
+            // strip, so window drag keeps working.
             TabBar()
                 .padding(.horizontal, 12)
             HStack(spacing: 4) {
@@ -162,6 +159,12 @@ struct ToolbarHeader: View {
         .padding(.leading, store.sidebarCollapsed && !isFullscreen ? 78 : 12)
         .padding(.trailing, 14)
         .frame(height: 52)
+        // Invisible drag strip across the whole header: buttons and tabs
+        // still win the click (they sit above), but every empty stretch —
+        // including the gaps between floating islands — drags the window.
+        // This trades away click-through to the terminal's top 52pt, which
+        // only ever showed scrollback passing under the glass.
+        .background(WindowDragSurface())
         .onReceive(NotificationCenter.default.publisher(
             for: NSWindow.willEnterFullScreenNotification)) { _ in
             isFullscreen = true

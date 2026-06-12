@@ -16,11 +16,16 @@ struct SidebarView: View {
     /// 78pt gutter).
     @State private var isFullscreen = false
     @State private var newWorkspaceHovered = false
+    /// Tracks whether ⌘ is held so the cards can reveal their ⌘1…⌘9
+    /// switch shortcuts (Spotlight-style modifier HUD).
+    @StateObject private var cmdKey = CommandKeyObserver()
 
     var body: some View {
         VStack(spacing: 0) {
-            // top spacer for traffic-light area (NSWindow draws them automatically here)
+            // top spacer for traffic-light area (NSWindow draws them automatically here).
+            // This strip is the sidebar's only window-drag handle.
             Color.clear.frame(height: isFullscreen ? 8 : 38)
+                .background(WindowDragSurface())
                 .onReceive(NotificationCenter.default.publisher(
                     for: NSWindow.willEnterFullScreenNotification)) { _ in
                     isFullscreen = true
@@ -30,41 +35,58 @@ struct SidebarView: View {
                     isFullscreen = false
                 }
 
-            searchField
-                .padding(.horizontal, 12)
-                .padding(.bottom, 4)
-                .onChange(of: store.sidebarSearchFocusTick) { _, _ in
-                    searchFocused = true
-                }
-
-            ScrollView {
-                VStack(spacing: 0) {
-                    sectionHeader("Workspaces", count: filteredWorkspaces.count)
-                    VStack(spacing: 6) {
-                        ForEach(filteredWorkspaces) { ws in
-                            WorkspaceCard(ws: ws, draggingID: $draggingWorkspaceID)
-                        }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.top, 2)
-                    .animation(.spring(response: 0.32, dampingFraction: 0.85),
-                               value: filteredWorkspaces.map(\.id))
-                }
-                .padding(.bottom, 12)
-            }
-            .scrollContentBackground(.hidden)
-
             VStack(spacing: 0) {
-                QuotaSection(claude: usage.claude, codex: usage.codex)
-                newWorkspaceCard
-                    .padding(.horizontal, 10)
-                    .padding(.top, 10)
-                    .padding(.bottom, 10)
+                searchField
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 4)
+                    .onChange(of: store.sidebarSearchFocusTick) { _, _ in
+                        searchFocused = true
+                    }
+
+                ScrollView {
+                    VStack(spacing: 0) {
+                        sectionHeader("Workspaces", count: filteredWorkspaces.count)
+                        VStack(spacing: 6) {
+                            ForEach(filteredWorkspaces) { ws in
+                                WorkspaceCard(ws: ws,
+                                              draggingID: $draggingWorkspaceID,
+                                              shortcutBadge: cmdKey.commandHeld ? shortcutNumber(for: ws) : nil)
+                            }
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.top, 2)
+                        .animation(.spring(response: 0.32, dampingFraction: 0.85),
+                                   value: filteredWorkspaces.map(\.id))
+                    }
+                    .padding(.bottom, 12)
+                }
+                .scrollContentBackground(.hidden)
+
+                VStack(spacing: 0) {
+                    QuotaSection(claude: usage.claude, codex: usage.codex)
+                    newWorkspaceCard
+                        .padding(.horizontal, 10)
+                        .padding(.top, 10)
+                        .padding(.bottom, 10)
+                }
+                .overlay(alignment: .top) {
+                    Rectangle().fill(Theme.divider).frame(height: 1)
+                }
             }
-            .overlay(alignment: .top) {
-                Rectangle().fill(Theme.divider).frame(height: 1)
-            }
+            // From the search field down, empty stretches must NOT drag the
+            // window (isMovableByWindowBackground would otherwise grab every
+            // gap between cards).
+            .background(NoDragSurface())
         }
+    }
+
+    /// The ⌘n shortcut that would select this workspace, or nil past ⌘9.
+    /// Indexed against `store.workspaces` (the order ⌘1…⌘9 actually use),
+    /// NOT the filtered/sorted display order.
+    private func shortcutNumber(for ws: Workspace) -> Int? {
+        guard let idx = store.workspaces.firstIndex(where: { $0.id == ws.id }),
+              idx < 9 else { return nil }
+        return idx + 1
     }
 
     private var filteredWorkspaces: [Workspace] {
@@ -325,6 +347,51 @@ private struct QuotaColumn: View {
     }
 }
 
+/// Publishes whether the Command key is currently held. Local monitor only —
+/// fires while the app is active; deactivation force-clears the flag so a
+/// ⌘Tab away never strands the badges on screen.
+private final class CommandKeyObserver: ObservableObject {
+    @Published var commandHeld = false
+    private var monitor: Any?
+    private var deactivationObserver: NSObjectProtocol?
+
+    init() {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
+            self?.commandHeld = event.modifierFlags.contains(.command)
+            return event
+        }
+        deactivationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil, queue: .main
+        ) { [weak self] _ in
+            self?.commandHeld = false
+        }
+    }
+
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
+    }
+}
+
+/// "⌘n" pill shown in a card's top-right corner while ⌘ is held.
+private struct ShortcutBadge: View {
+    let number: Int
+    var body: some View {
+        HStack(spacing: 1) {
+            Image(systemName: "command")
+                .font(.system(size: 8.5, weight: .semibold))
+            Text("\(number)")
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+        }
+        .foregroundStyle(Theme.text2)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2.5)
+        .background(Capsule().fill(Color.black.opacity(0.45)))
+        .overlay(Capsule().stroke(Color.white.opacity(0.08), lineWidth: 1))
+    }
+}
+
 private struct WorkspaceCard: View {
     @EnvironmentObject var store: WorkspaceStore
     /// System "Reduce Motion" — when on, the looping decorations (border
@@ -332,6 +399,9 @@ private struct WorkspaceCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ws: Workspace
     @Binding var draggingID: UUID?
+    /// When non-nil, the card shows its ⌘n switch shortcut in the top-right
+    /// corner (driven by the sidebar's ⌘-held observer).
+    var shortcutBadge: Int? = nil
 
     @State private var isEditing = false
     @State private var draftName = ""
@@ -400,6 +470,13 @@ private struct WorkspaceCard: View {
         .overlay(permissionPulseOverlay(status: status).accessibilityHidden(true))
         .overlay(alignment: .leading) {
             workingBeaconOverlay(status: status).accessibilityHidden(true)
+        }
+        .overlay(alignment: .topTrailing) {
+            if let n = shortcutBadge {
+                ShortcutBadge(number: n)
+                    .padding(4)
+                    .accessibilityHidden(true)
+            }
         }
         .scaleEffect(isHovered ? 1.005 : 1.0, anchor: .center)
         .shadow(color: Color.black.opacity(isHovered ? 0.22 : 0),
