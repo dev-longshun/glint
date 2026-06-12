@@ -100,19 +100,13 @@ struct ToolbarHeader: View {
             // over the terminal is unreadable — text on text — so the brand
             // always needs glass between itself and the grid.
             HStack(spacing: 4) {
-                Button {
+                ToolbarIconButton(
+                    symbol: store.sidebarCollapsed ? "sidebar.left" : "sidebar.leading",
+                    help: store.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar",
+                    fontSize: 16
+                ) {
                     store.sidebarCollapsed.toggle()
-                } label: {
-                    Image(systemName: store.sidebarCollapsed
-                          ? "sidebar.left"
-                          : "sidebar.leading")
-                        .font(.system(size: 16, weight: .medium))
-                        .frame(width: 38, height: 38)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(Theme.text3)
-                .help(store.sidebarCollapsed ? "Show Sidebar" : "Hide Sidebar")
                 .keyboardShortcut("/", modifiers: .command)
 
                 GlintBrandMark()
@@ -120,13 +114,24 @@ struct ToolbarHeader: View {
                     // area doubles as the window-drag handle.
                     .background(WindowDragSurface())
                     .padding(.trailing, 10)
+
+                // With the sidebar collapsed the workspace switcher joins
+                // the leading capsule (Photos-style cluster) instead of
+                // floating as its own island; a hairline seam separates it
+                // from the brand.
+                if store.sidebarCollapsed {
+                    if floating {
+                        Rectangle()
+                            .fill(Color.white.opacity(0.10))
+                            .frame(width: 1, height: 16)
+                    }
+                    WorkspaceSwitcher()
+                        .padding(.leading, floating ? 0 : 6)
+                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                }
             }
             .liquidGlass(enabled: floating, cornerRadius: 19)
-
-            if store.sidebarCollapsed {
-                WorkspaceSwitcher()
-                    .transition(.opacity.combined(with: .move(edge: .leading)))
-            }
+            .arrowPointer()
 
             // Tabs ride in the otherwise-empty middle of the header, centered
             // between the brand group and the trailing buttons. TabBar owns
@@ -149,6 +154,7 @@ struct ToolbarHeader: View {
             // share one resting glass capsule (38pt tall → radius 19). Pre-26
             // or glass-off, the buttons stay bare as before.
             .liquidGlass(enabled: store.glassEffect, cornerRadius: 19)
+            .arrowPointer()
         }
         // Traffic lights take ~78pt when sidebar is collapsed; otherwise the
         // sidebar reserves that gutter for us. In full screen there are no
@@ -248,6 +254,7 @@ struct TabBar: View {
         // (radius 15) concentric to the capsule's 19.
         .padding(glassCluster ? 4 : 0)
         .liquidGlass(enabled: glassCluster, cornerRadius: 19)
+        .arrowPointer()
         .fixedSize()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeOut(duration: 0.15), value: plan)
@@ -374,15 +381,13 @@ private struct TabChip: View {
             .frame(height: 30)
             .background {
                 if inGlassCluster {
-                    // Music-app filter style: the selected tab is a solid
-                    // accent capsule (hue carries selection — luminance
-                    // alone turns to mud on dark glass) with a soft brand
-                    // glow; unselected tabs are bare text that gains a
-                    // faint capsule only on hover.
+                    // The selected tab is a muted accent-tinted capsule: hue
+                    // still carries selection (luminance alone turns to mud
+                    // on dark glass) but stays quiet — a solid bright pill
+                    // pulled the eye away from the terminal. Unselected tabs
+                    // are bare text that gains a faint capsule on hover.
                     Capsule(style: .continuous)
                         .fill(chipFill)
-                        .shadow(color: isActive ? store.accent.opacity(0.35) : .clear,
-                                radius: 6, y: 1)
                 } else {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(chipFill)
@@ -415,7 +420,7 @@ private struct TabChip: View {
     private var chipFill: Color {
         // Slightly translucent so the glass still refracts through the
         // accent pill.
-        if isActive { return inGlassCluster ? store.accent.opacity(0.85)
+        if isActive { return inGlassCluster ? store.accent.opacity(0.28)
                                             : Color.white.opacity(0.08) }
         if hovering { return Color.white.opacity(inGlassCluster ? 0.07 : 0.04) }
         return .clear
@@ -438,27 +443,23 @@ private struct TabChip: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                // On the solid accent pill the close glyph needs to be
-                // near-white; the grays vanish into the accent.
-                .foregroundStyle(inGlassCluster && isActive
-                                 ? Color.white.opacity(0.9)
-                                 : (isActive ? Theme.text2 : Theme.text3))
+                .foregroundStyle(isActive ? Theme.text2 : Theme.text3)
             } else if let status, status != .idle {
-                TabStatusDot(status: status)
+                AgentStatusBeacon(status: status)
             }
         }
         .frame(width: 15, height: 15)
     }
 }
 
-/// The status dot on a tab chip (and in the overflow popover's rows).
-/// Same traffic-light logic as the sidebar pane cards' AgentStatusDot,
-/// in the same macOS window-button palette, so the two read as one system:
+/// The agent status beacon: a single breathing dot shared by tab chips,
+/// the overflow popover's rows, and the sidebar cards' icon badge, so all
+/// three read as one system (macOS window-button palette):
 ///   red    → needsPermission / failed (blocked on the user)
 ///   yellow → thinking / tool / compacting (busy)
 ///   green  → justCompleted
 /// Busy and blocked states breathe; green holds a steady glow.
-private struct TabStatusDot: View {
+struct AgentStatusBeacon: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: PaneAgentStatus
 
@@ -478,7 +479,7 @@ private struct TabStatusDot: View {
         s == .thinking || s == .tool || s == .needsPermission || s == .compacting
     }
 
-    /// TrafficLightPill's base colors (the macOS window-button palette).
+    /// The macOS window-button palette's base colors.
     private static func nsColor(_ s: PaneAgentStatus) -> NSColor {
         switch s {
         case .needsPermission, .failed:
@@ -860,7 +861,7 @@ private struct TabOverflowRow: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.text3)
             } else if let status, status != .idle {
-                TabStatusDot(status: status)
+                AgentStatusBeacon(status: status)
             }
         }
         .frame(width: 16, height: 16)
@@ -906,13 +907,14 @@ private struct TabOverflowRow: View {
 private struct ToolbarIconButton: View {
     let symbol: String
     let help: LocalizedStringKey
+    var fontSize: CGFloat = 15
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: fontSize, weight: .medium))
                 .frame(width: 38, height: 38)
                 .background(
                     // Circular hover well, inset so it always stays inside
@@ -1045,19 +1047,27 @@ private struct WorkspaceSwitcher: View {
                     .foregroundStyle(Theme.text3)
                     .rotationEffect(.degrees(isOpen ? 180 : 0))
             }
-            .padding(.leading, 5)
-            .padding(.trailing, 8)
-            .padding(.vertical, 4)
-            .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
-                    .fill(pillFill)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .strokeBorder(pillStroke, lineWidth: 0.5)
-                    )
-            )
-            .liquidGlass(enabled: liquidGlassAvailable && store.glassEffect,
-                         cornerRadius: 7, interactive: true)
+            .padding(.leading, glassPill ? 8 : 5)
+            .padding(.trailing, glassPill ? 12 : 8)
+            .padding(.vertical, glassPill ? 0 : 4)
+            .frame(height: glassPill ? 38 : nil)
+            .background {
+                if glassPill {
+                    // Lives inside the leading glass capsule (no glass of
+                    // its own); this well only adds hover/open feedback,
+                    // inset to match the buttons' circular wells.
+                    Capsule(style: .continuous)
+                        .fill(Color.white.opacity(isOpen ? 0.10 : hover ? 0.06 : 0))
+                        .padding(2)
+                } else {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(pillFill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(pillStroke, lineWidth: 0.5)
+                        )
+                }
+            }
             .animation(.easeOut(duration: 0.15), value: isOpen)
             .animation(.easeOut(duration: 0.12), value: hover)
             .fixedSize()
@@ -1069,6 +1079,10 @@ private struct WorkspaceSwitcher: View {
                 .environmentObject(store)
         }
     }
+
+    /// Same condition as the other header islands — the pill restyles as a
+    /// full-height glass capsule when the floating chrome is active.
+    private var glassPill: Bool { liquidGlassAvailable && store.glassEffect }
 
     private var pillFill: Color {
         if isOpen { return Color.white.opacity(0.10) }

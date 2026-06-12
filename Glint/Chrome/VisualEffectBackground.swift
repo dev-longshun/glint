@@ -98,6 +98,19 @@ struct LiquidGlassSurface<Fallback: View>: ViewModifier {
 }
 
 extension View {
+    /// Forces the standard arrow pointer while hovering. The floating header
+    /// islands sit over the terminal, whose NSView installs an iBeam cursor
+    /// rect across its whole bounds — SwiftUI views assert no cursor of their
+    /// own, so without this the islands inherit the text cursor.
+    @ViewBuilder
+    func arrowPointer() -> some View {
+        if #available(macOS 15.0, *) {
+            self.pointerStyle(.default)
+        } else {
+            self
+        }
+    }
+
     /// Liquid Glass with no fallback — for accents (chips, button wells)
     /// whose pre-26 look is already painted by the call site.
     func liquidGlass(enabled: Bool,

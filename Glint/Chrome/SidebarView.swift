@@ -1079,39 +1079,16 @@ private final class GIFFrameCache {
 ///   yellow → thinking / tool / compacting (busy)
 ///   green  → justCompleted
 ///   idle / nil → invisible
+/// The status badge on a workspace card's icon: the same single breathing
+/// dot the tab chips use (AgentStatusBeacon), so card and tab read as one
+/// system. Replaced the old three-light traffic pill.
 private struct AgentStatusDot: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: PaneAgentStatus?
 
     var body: some View {
-        Group {
-            if let status, status != .idle {
-                // The lit light's pulse runs as a Core Animation loop on
-                // the render server — a SwiftUI `repeatForever` here
-                // re-renders every frame on the main thread (see
-                // EdgeBeacon).
-                TrafficLightPill(
-                    activeLight: light(for: status),
-                    pulsing: needsPulse(status)
-                )
-                .frame(width: 20, height: 11)
-            }
+        if let status, status != .idle {
+            AgentStatusBeacon(status: status)
         }
-    }
-
-    private func light(for s: PaneAgentStatus) -> TrafficLightPill.Light {
-        switch s {
-        case .needsPermission, .failed:     return .red
-        case .thinking, .tool, .compacting: return .yellow
-        case .justCompleted, .idle:         return .green
-        }
-    }
-
-    private func needsPulse(_ s: PaneAgentStatus) -> Bool {
-        // Reduce Motion: render the light steady at full opacity — the
-        // color alone carries the status.
-        guard !reduceMotion else { return false }
-        return s == .thinking || s == .tool || s == .needsPermission || s == .compacting
     }
 }
 
@@ -1212,171 +1189,6 @@ private struct EdgeBeacon: NSViewRepresentable {
             breath.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
             breath.isRemovedOnCompletion = false
             bar.add(breath, forKey: Self.breathKey)
-        }
-    }
-}
-
-/// The traffic-light status pill: a dark capsule with red/yellow/green
-/// lights, the active one lit with a radial highlight + glow, the rest
-/// dimmed. The busy-state pulse runs as a Core Animation scale/opacity
-/// loop on the render server.
-private struct TrafficLightPill: NSViewRepresentable {
-    enum Light: Int {
-        case red = 0, yellow = 1, green = 2
-
-        /// (base, highlight) — macOS window-button palette.
-        var colors: (CGColor, CGColor) {
-            switch self {
-            case .red:
-                return (CGColor(red: 1.00, green: 0.37, blue: 0.34, alpha: 1),
-                        CGColor(red: 1.00, green: 0.60, blue: 0.58, alpha: 1))
-            case .yellow:
-                return (CGColor(red: 1.00, green: 0.74, blue: 0.18, alpha: 1),
-                        CGColor(red: 1.00, green: 0.87, blue: 0.54, alpha: 1))
-            case .green:
-                return (CGColor(red: 0.16, green: 0.78, blue: 0.25, alpha: 1),
-                        CGColor(red: 0.49, green: 0.91, blue: 0.57, alpha: 1))
-            }
-        }
-    }
-
-    let activeLight: Light
-    let pulsing: Bool
-
-    func makeNSView(context: Context) -> PillLayerView {
-        let view = PillLayerView()
-        view.apply(activeLight: activeLight, pulsing: pulsing)
-        return view
-    }
-
-    func updateNSView(_ view: PillLayerView, context: Context) {
-        view.apply(activeLight: activeLight, pulsing: pulsing)
-    }
-
-    final class PillLayerView: NSView {
-        private static let pulseKey = "glint.trafficlight.pulse"
-        private let pill = CALayer()
-        private let gloss = CAGradientLayer()
-        private let lights = [CAGradientLayer(), CAGradientLayer(), CAGradientLayer()]
-        private var activeLight: Light = .yellow
-        private var pulsing = false
-
-        override init(frame: NSRect) {
-            super.init(frame: frame)
-            wantsLayer = true
-            for light in lights {
-                light.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-                light.type = .radial
-                light.startPoint = CGPoint(x: 0.35, y: 0.65)
-                light.endPoint = CGPoint(x: 1.0, y: 0.0)
-            }
-        }
-
-        required init?(coder: NSCoder) { fatalError("not used") }
-
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
-
-        func apply(activeLight: Light, pulsing: Bool) {
-            guard activeLight != self.activeLight || pulsing != self.pulsing else { return }
-            self.activeLight = activeLight
-            self.pulsing = pulsing
-            configureLayers()
-        }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            configureLayers()
-        }
-
-        override func layout() {
-            super.layout()
-            configureLayers()
-        }
-
-        private func configureLayers() {
-            guard let layer, bounds.width > 1, bounds.height > 1 else { return }
-            // Gradient layers rasterize at contentsScale (default 1.0) —
-            // without matching the backing scale the lights blur on Retina.
-            let scaleFactor = window?.backingScaleFactor ?? 2
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            // Near-black indigo capsule (the sidebar palette), separated
-            // from whatever it overlaps by a drop shadow instead of a
-            // solid cutout ring — adapts to icon and card alike.
-            if pill.superlayer !== layer { layer.addSublayer(pill) }
-            pill.frame = bounds
-            pill.cornerRadius = bounds.height / 2
-            pill.backgroundColor = CGColor(red: 0.055, green: 0.055, blue: 0.090, alpha: 1)
-            pill.borderColor = CGColor(gray: 1.0, alpha: 0.10)
-            pill.borderWidth = 0.5
-            pill.shadowColor = CGColor(gray: 0, alpha: 1)
-            pill.shadowOpacity = 0.55
-            pill.shadowRadius = 2.5
-            pill.shadowOffset = CGSize(width: 0, height: -0.5)
-            pill.contentsScale = scaleFactor
-            // Faint top-edge gloss so the capsule reads as a rounded body,
-            // not a flat sticker.
-            if gloss.superlayer !== layer { layer.addSublayer(gloss) }
-            gloss.frame = bounds.insetBy(dx: 0.5, dy: 0.5)
-            gloss.cornerRadius = gloss.frame.height / 2
-            gloss.colors = [CGColor(gray: 1.0, alpha: 0.07), CGColor(gray: 1.0, alpha: 0.0)]
-            gloss.startPoint = CGPoint(x: 0.5, y: 1.0)
-            gloss.endPoint = CGPoint(x: 0.5, y: 0.55)
-            gloss.contentsScale = scaleFactor
-
-            let pitch = bounds.width / 3.7
-            for (i, light) in lights.enumerated() {
-                if light.superlayer !== layer { layer.addSublayer(light) }
-                let on = i == activeLight.rawValue
-                let d: CGFloat = on ? 4.4 : 3.4
-                light.bounds = CGRect(x: 0, y: 0, width: d, height: d)
-                light.position = CGPoint(x: bounds.midX + CGFloat(i - 1) * pitch, y: bounds.midY)
-                light.cornerRadius = d / 2
-                light.contentsScale = scaleFactor
-                if on {
-                    let (base, hi) = activeLight.colors
-                    light.colors = [hi, base]
-                    light.borderColor = CGColor(gray: 1.0, alpha: 0.22)
-                    light.borderWidth = 0.5
-                    light.shadowColor = base
-                    light.shadowOpacity = 0.7
-                    light.shadowRadius = 1.6
-                    light.shadowOffset = .zero
-                } else {
-                    // Unlit sockets: visible enough that the three-light
-                    // layout reads, dim enough not to compete with the lit one.
-                    let dim = CGColor(gray: 1.0, alpha: 0.17)
-                    light.colors = [dim, dim]
-                    light.borderColor = CGColor(gray: 1.0, alpha: 0.10)
-                    light.borderWidth = 0.5
-                    light.shadowOpacity = 0
-                }
-            }
-            CATransaction.commit()
-
-            let active = lights[activeLight.rawValue]
-            for light in lights where light !== active {
-                light.removeAnimation(forKey: Self.pulseKey)
-            }
-            if pulsing {
-                guard active.animation(forKey: Self.pulseKey) == nil else { return }
-                let scale = CABasicAnimation(keyPath: "transform.scale")
-                scale.fromValue = 1.0
-                scale.toValue = 1.12
-                let fade = CABasicAnimation(keyPath: "opacity")
-                fade.fromValue = 1.0
-                fade.toValue = 0.65
-                let group = CAAnimationGroup()
-                group.animations = [scale, fade]
-                group.duration = 0.9
-                group.autoreverses = true
-                group.repeatCount = .infinity
-                group.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                group.isRemovedOnCompletion = false
-                active.add(group, forKey: Self.pulseKey)
-            } else {
-                active.removeAnimation(forKey: Self.pulseKey)
-            }
         }
     }
 }
