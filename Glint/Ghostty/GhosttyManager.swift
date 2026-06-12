@@ -115,6 +115,24 @@ final class GhosttyManager {
             return v == 0 ? 10_000 : v
         }()
 
+        // With the floating Liquid Glass header (macOS 26 + glass on) the
+        // pane area runs to the top of the window, so the grid needs a top
+        // padding matching the 52pt island strip — otherwise a fresh prompt
+        // is born under the glass. Asymmetric padding is the native fix;
+        // its known cost is that every surface inherits it, so the lower
+        // pane of a vertical split carries the same top gap.
+        let padTop: Int = {
+            if #available(macOS 26.0, *),
+               (UserDefaults.standard.object(forKey: "glint.glassEffect") as? Bool) ?? true {
+                return 52
+            }
+            return 12
+        }()
+        // window-padding-balance REPLACES explicit padding with evenly
+        // re-distributed values and caps the top at ~half a cell
+        // (renderer/size.zig balancePadding), which silently destroys the
+        // asymmetric 52pt strip — so it must be off whenever we rely on it.
+        let padBalance = padTop == 12
         let overrides = """
         background = 0B0A14
         foreground = ECEDF2
@@ -128,8 +146,8 @@ final class GhosttyManager {
         font-size = \(size)
         scrollback-limit = \(scrollback)
         window-padding-x = 14
-        window-padding-y = 12
-        window-padding-balance = true
+        window-padding-y = \(padTop),12
+        window-padding-balance = \(padBalance)
         adjust-cell-height = 10%
         macos-titlebar-style = hidden
         """

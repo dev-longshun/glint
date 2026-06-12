@@ -579,11 +579,7 @@ private struct WorkspaceCard: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             } else {
-                Text(cwdLine)
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundStyle(active ? Theme.text3 : Theme.text4)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                workspaceMetadataRow(active: active)
             }
         }
         .id(key)
@@ -591,8 +587,32 @@ private struct WorkspaceCard: View {
         .animation(.easeInOut(duration: 0.18), value: key)
     }
 
+    private func workspaceMetadataRow(active: Bool) -> some View {
+        HStack(spacing: 5) {
+            if let tabs = tabCountText {
+                metadataBadge(tabs, active: active)
+            }
+            metadataBadge(paneCountText, active: active)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func metadataBadge(_ text: String, active: Bool) -> some View {
+        Text(text)
+            .font(.system(size: 9.5, weight: .semibold))
+            .foregroundStyle(active ? Theme.text2 : Theme.text3)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(active ? 0.10 : 0.06))
+            )
+    }
+
     /// Stable identity for the secondary row — bucket `idle` and `nil`
-    /// together (both render the cwd line), and each real status keeps
+    /// together (both render the metadata row), and each real status keeps
     /// its own key so transitions between e.g. thinking → tool also
     /// crossfade rather than snapping mid-word.
     private func secondaryRowKey(_ s: PaneAgentStatus?) -> String {
@@ -715,26 +735,31 @@ private struct WorkspaceCard: View {
     }
 
     private var cwdLine: String {
-        let n = ws.panes.count
-        let unit = String(localized: n == 1 ? "pane" : "panes")
-        let focused = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
-        let firstCwd = ws.panes.values.compactMap(\.workingDirectory).first
-        let cwd = focused ?? firstCwd
-        let shortCwd = cwd.map(prettyCwd) ?? String(localized: "no cwd")
         // Surface the tab count only once it's meaningful (>1), so single-tab
         // workspaces read exactly as before.
-        let tabN = ws.tabs.count
-        if tabN > 1 {
-            let tabUnit = String(localized: "tabs")
-            return "\(tabN) \(tabUnit) · \(n) \(unit) · \(shortCwd)"
+        if let tabs = tabCountText {
+            return "\(tabs) · \(paneCountText)"
         }
-        return "\(n) \(unit) · \(shortCwd)"
+        return paneCountText
+    }
+
+    private var paneCountText: String {
+        let n = ws.panes.count
+        let unit = String(localized: n == 1 ? "pane" : "panes")
+        return "\(n) \(unit)"
+    }
+
+    private var tabCountText: String? {
+        let n = ws.tabs.count
+        guard n > 1 else { return nil }
+        let unit = String(localized: "tabs")
+        return "\(n) \(unit)"
     }
 
     /// Spoken description for VoiceOver: the agent-status text the card
     /// already renders, plus a spelled-out elapsed time ("1 minute, 24
     /// seconds") when the visual row shows a timer. Idle cards read the
-    /// same pane-count/cwd line they display.
+    /// same metadata line they display.
     private func accessibilityStatus(summary: (status: PaneAgentStatus, since: Date)?) -> String {
         guard let summary, summary.status != .idle else { return cwdLine }
         var parts = [plainStatusText(summary.status)]
@@ -791,20 +816,6 @@ private struct WorkspaceCard: View {
         }
     }
 
-    /// One hue for every border: status semantics live in the traffic-light
-    /// pill, the edge beacon, and (for done) the one-shot completion flash —
-    /// so a persistent border only marks the one state that stays blocked on
-    /// the user (permission), plus the current selection. A just-completed
-    /// card draws no border of its own; selecting it shows the selection
-    /// border like any other card.
-    private func prettyCwd(_ path: String) -> String {
-        let home = NSHomeDirectory()
-        if path == home { return "~" }
-        if path.hasPrefix(home + "/") {
-            return "~" + path.dropFirst(home.count)
-        }
-        return path
-    }
 }
 
 /// Official Claude mark, bundled as an asset (`Claude.imageset`). Clipped
@@ -1473,4 +1484,3 @@ private func strokeBorderPath(in rect: CGRect, cornerRadius: CGFloat,
     return CGPath(roundedRect: inset, cornerWidth: radius,
                   cornerHeight: radius, transform: nil)
 }
-

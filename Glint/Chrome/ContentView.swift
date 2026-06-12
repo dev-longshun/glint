@@ -33,6 +33,12 @@ struct ContentView: View {
                     ToolbarHeader()
                 }
                 PaneTreeView(node: store.currentRoot, workspaceID: store.selectedWorkspaceID)
+                    // Floating mode overlaps the islands with the grid on
+                    // purpose — scrollback passing under the glass is the
+                    // effect. Fresh prompts are kept out from under the
+                    // islands by the padded shell launcher (see
+                    // GhosttyManager.paddedShellLauncherPath), not by
+                    // insetting the layout.
                     .background(Theme.bgPane)
             }
             .background(Theme.bgPane)
