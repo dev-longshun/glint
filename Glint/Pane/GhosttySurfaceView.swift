@@ -248,6 +248,24 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         if let sock = agentSocketPath { envPairs.append((strdup("GLINT_AGENT_SOCK"), strdup(sock))) }
         defer { envPairs.forEach { free($0.0); free($0.1) } }
 
+        // Launch command is decided per-surface: a pane restoring a
+        // scrollback snapshot gets the plain login shell — the padded
+        // launcher's clear-screen would wipe the freshly injected viewport,
+        // leaving the prompt at the top and history only in scrollback.
+        // Fresh panes get the launcher (hides the login banner + pads the
+        // prompt below the floating glass header).
+        let restoreData: Data? = {
+            guard scrollbackEnabled, let id = scrollbackID,
+                  let data = ScrollbackArchive.read(id: id), !data.isEmpty else { return nil }
+            return data
+        }()
+        var cmdBuf: UnsafeMutablePointer<CChar>? = nil
+        if restoreData == nil, let launcher = GhosttyManager.paddedShellLauncherPath() {
+            cmdBuf = strdup(launcher)
+            cfg.command = UnsafePointer(cmdBuf)
+        }
+        defer { if cmdBuf != nil { free(cmdBuf) } }
+
         var envArray: [ghostty_env_var_s] = envPairs.map {
             ghostty_env_var_s(key: UnsafePointer($0.0), value: UnsafePointer($0.1))
         }
@@ -270,8 +288,8 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // scrollback into the fresh surface (clean even for TUIs — it's the
         // final character grid, not a replay of the render stream). Gated by a
         // setting. Snapshots are taken later via `read_text`, off the hot path.
-        if scrollbackEnabled {
-            restoreScrollback(into: s)
+        if let restoreData {
+            restoreScrollback(into: s, data: restoreData)
         }
 
         // Route the initial size through the same CATransaction path the
@@ -286,10 +304,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// codes + newlines only — no cursor moves, mode switches, or negotiation),
     /// rebuilt from the final grid, so it can't corrupt the new terminal even if
     /// the prior session ended inside a full-screen TUI.
-    private func restoreScrollback(into s: ghostty_surface_t) {
-        guard let id = scrollbackID,
-              let data = ScrollbackArchive.read(id: id), !data.isEmpty,
-              !data.isEmpty else { return }
+    private func restoreScrollback(into s: ghostty_surface_t, data: Data) {
         var text = String(decoding: data, as: UTF8.self)
         guard !text.isEmpty else { return }
         // Saved with \n line breaks; the terminal needs CRLF or each line would

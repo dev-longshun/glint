@@ -115,24 +115,12 @@ final class GhosttyManager {
             return v == 0 ? 10_000 : v
         }()
 
-        // With the floating Liquid Glass header (macOS 26 + glass on) the
-        // pane area runs to the top of the window, so the grid needs a top
-        // padding matching the 52pt island strip — otherwise a fresh prompt
-        // is born under the glass. Asymmetric padding is the native fix;
-        // its known cost is that every surface inherits it, so the lower
-        // pane of a vertical split carries the same top gap.
-        let padTop: Int = {
-            if #available(macOS 26.0, *),
-               (UserDefaults.standard.object(forKey: "glint.glassEffect") as? Bool) ?? true {
-                return 52
-            }
-            return 12
-        }()
-        // window-padding-balance REPLACES explicit padding with evenly
-        // re-distributed values and caps the top at ~half a cell
-        // (renderer/size.zig balancePadding), which silently destroys the
-        // asymmetric 52pt strip — so it must be off whenever we rely on it.
-        let padBalance = padTop == 12
+        // NOTE: an asymmetric `window-padding-y = 52,12` was tried for the
+        // floating header and rejected — padding never renders scrollback,
+        // so it kills the content-under-glass effect (and balance must be
+        // off for it to even apply; renderer/size.zig balancePadding
+        // replaces explicit values). Fresh-prompt visibility is handled by
+        // the padded shell launcher below instead.
         let overrides = """
         background = 0B0A14
         foreground = ECEDF2
@@ -146,8 +134,8 @@ final class GhosttyManager {
         font-size = \(size)
         scrollback-limit = \(scrollback)
         window-padding-x = 14
-        window-padding-y = \(padTop),12
-        window-padding-balance = \(padBalance)
+        window-padding-y = 12
+        window-padding-balance = true
         adjust-cell-height = 10%
         macos-titlebar-style = hidden
         """
@@ -156,6 +144,56 @@ final class GhosttyManager {
             source.withCString { src in
                 ghostty_config_load_string(cfg, ovr, UInt(strlen(ovr)), src)
             }
+        }
+    }
+
+    /// With the floating Liquid Glass header (macOS 26 + glass on), the grid
+    /// deliberately overlaps the islands so scrolled content refracts through
+    /// them — but a fresh shell's prompt would be born on row 0, under the
+    /// glass. Wrap the login shell in a launcher that (1) clears the screen,
+    /// erasing login(1)'s "Last login:" banner that would otherwise peek out
+    /// between the islands, and (2) prints a few blank lines so the prompt
+    /// starts below the strip. The blanks are real grid rows that scroll away
+    /// like any other content — deliberately NOT ghostty padding, which never
+    /// renders scrollback and would kill the under-glass effect.
+    ///
+    /// Applied PER-SURFACE (`ghostty_surface_config_s.command`) by
+    /// `GhosttySurfaceView.createSurface`, not via the global config: panes
+    /// that restore a scrollback snapshot must keep the plain shell — the
+    /// launcher's clear-screen would wipe the restored viewport, leaving the
+    /// prompt at the top with history hidden in scrollback.
+    ///
+    /// The launcher lives at a space-free path (~/.config/glint) because
+    /// ghostty's `command` value is split on whitespace.
+    static func paddedShellLauncherPath() -> String? {
+        guard #available(macOS 26.0, *) else { return nil }
+        guard (UserDefaults.standard.object(forKey: "glint.glassEffect") as? Bool) ?? true else {
+            return nil
+        }
+        let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+        let dir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/glint", isDirectory: true)
+        let url = dir.appendingPathComponent("padded-shell.sh")
+        let script = """
+        #!/bin/sh
+        # Written by Glint at launch (and overwritten on every start): clears
+        # the login banner and pads the top of a fresh terminal so the prompt
+        # starts below the floating glass header. The blank rows scroll away
+        # like normal content.
+        printf '\\033[2J\\033[H\\n\\n\\n'
+        exec '\(shell)' -l
+        """
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            if (try? String(contentsOf: url, encoding: .utf8)) != script {
+                try script.write(to: url, atomically: true, encoding: .utf8)
+            }
+            try FileManager.default.setAttributes([.posixPermissions: 0o755],
+                                                  ofItemAtPath: url.path)
+            return url.path
+        } catch {
+            NSLog("Glint: failed to write padded shell launcher: \(error)")
+            return nil
         }
     }
 
