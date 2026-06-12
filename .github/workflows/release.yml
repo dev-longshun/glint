@@ -21,8 +21,6 @@ jobs:
     env:
       APP_NAME: Glint
       BUNDLE_ID: app.glint.Glint
-      HAS_APPLE_CERT: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
-      HAS_LOCAL_CODE_SIGN_CERT: ${{ secrets.LOCAL_CODE_SIGN_CERT_P12_BASE64 != '' }}
       # Tag is set by an owner with push permission, but isolate via env
       # so we never interpolate ${{ github.ref_name }} directly into shell.
       TAG_NAME: ${{ github.ref_name }}
@@ -123,6 +121,7 @@ jobs:
       - name: Codesign + notarize
         if: ${{ env.HAS_APPLE_CERT == 'true' }}
         env:
+          HAS_APPLE_CERT: ${{ secrets.APPLE_CERT_P12_BASE64 != '' }}
           APPLE_CERT_P12_BASE64: ${{ secrets.APPLE_CERT_P12_BASE64 }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERT_PASSWORD }}
           APPLE_NOTARY_ID: ${{ secrets.APPLE_NOTARY_ID }}
@@ -130,18 +129,6 @@ jobs:
           APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
           BUNDLE_ID: ${{ env.BUNDLE_ID }}
         run: bash scripts/sign-and-notarize.sh dist/Glint.app
-
-      # ─── Optional: stable local/self-signed signing ───────────────────
-      # Used when there is no Developer ID cert but we still want a stable
-      # signing identity across releases, so macOS Keychain ACLs can survive
-      # app updates. This does not notarize the app.
-      - name: Codesign with local certificate
-        if: ${{ env.HAS_APPLE_CERT != 'true' && env.HAS_LOCAL_CODE_SIGN_CERT == 'true' }}
-        env:
-          LOCAL_CODE_SIGN_CERT_P12_BASE64: ${{ secrets.LOCAL_CODE_SIGN_CERT_P12_BASE64 }}
-          LOCAL_CODE_SIGN_CERT_PASSWORD: ${{ secrets.LOCAL_CODE_SIGN_CERT_PASSWORD }}
-          LOCAL_CODE_SIGN_IDENTITY: ${{ secrets.LOCAL_CODE_SIGN_IDENTITY }}
-        run: bash scripts/sign-local.sh dist/Glint.app
 
       - name: Build DMG
         env:
