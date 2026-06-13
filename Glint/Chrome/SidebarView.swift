@@ -11,6 +11,13 @@ struct SidebarView: View {
     /// card's preview onAppear and cleared on the preview's onDisappear,
     /// so every sibling can render its insertion indicator relative to it.
     @State private var draggingWorkspaceID: UUID?
+    /// Live frame (in the `kSidebarReorderSpace` coordinate space) of every
+    /// rendered card, keyed by workspace id. Populated via a preference from
+    /// each card's background GeometryReader. The reorder hit-tests the drag
+    /// pointer against these frames — a deterministic "which card is the
+    /// cursor over" that the flaky `.dropDestination`/`isTargeted` callbacks
+    /// never gave us.
+    @State private var cardFrames: [UUID: CGRect] = [:]
     /// Traffic lights vanish in full screen, so the reserved strip above
     /// the search field must vanish with them (same fix as ToolbarHeader's
     /// 78pt gutter).
@@ -49,10 +56,22 @@ struct SidebarView: View {
                         VStack(spacing: 6) {
                             ForEach(filteredWorkspaces) { ws in
                                 WorkspaceCard(ws: ws,
-                                              draggingID: $draggingWorkspaceID,
-                                              shortcutBadge: cmdKey.commandHeld ? shortcutNumber(for: ws) : nil)
+                                              isDragging: draggingWorkspaceID == ws.id,
+                                              shortcutBadge: cmdKey.commandHeld ? shortcutNumber(for: ws) : nil,
+                                              onReorderChange: { pointerY in handleReorderDrag(id: ws.id, pointerY: pointerY) },
+                                              onReorderEnd: { handleReorderEnd() })
+                                    .background(
+                                        GeometryReader { gp in
+                                            Color.clear.preference(
+                                                key: CardFrameKey.self,
+                                                value: [ws.id: gp.frame(in: .named(kSidebarReorderSpace))])
+                                        }
+                                    )
+                                    .zIndex(draggingWorkspaceID == ws.id ? 1 : 0)
                             }
                         }
+                        .coordinateSpace(name: kSidebarReorderSpace)
+                        .onPreferenceChange(CardFrameKey.self) { cardFrames = $0 }
                         .padding(.horizontal, 10)
                         .padding(.top, 2)
                         .animation(.spring(response: 0.32, dampingFraction: 0.85),
@@ -78,6 +97,40 @@ struct SidebarView: View {
             // gap between cards).
             .background(NoDragSurface())
         }
+    }
+
+    // MARK: drag-to-reorder (manual gesture, deterministic pointer hit-test)
+
+    /// A reorder drag moved: mark the source as dragging and slide it into
+    /// whichever card the pointer is currently over. Driven by the card's
+    /// `DragGesture.onChanged`, so it fires on *pointer* movement — layout
+    /// shifts under a stationary pointer never trigger a phantom move (the
+    /// fatal flaw of the `.dropDestination` approach).
+    private func handleReorderDrag(id: UUID, pointerY: CGFloat) {
+        if draggingWorkspaceID != id { draggingWorkspaceID = id }
+        guard let targetID = cardID(atPointerY: pointerY),
+              targetID != id,
+              let targetIdx = store.workspaces.firstIndex(where: { $0.id == targetID })
+        else { return }
+        store.moveWorkspace(id: id, to: targetIdx)
+    }
+
+    private func handleReorderEnd() {
+        draggingWorkspaceID = nil
+    }
+
+    /// The workspace whose measured card frame the pointer is over, clamped
+    /// to the first/last card when the pointer is above/below the stack.
+    private func cardID(atPointerY y: CGFloat) -> UUID? {
+        let ordered = cardFrames.sorted { $0.value.midY < $1.value.midY }
+        guard let first = ordered.first, let last = ordered.last else { return nil }
+        if y <= first.value.midY { return first.key }
+        if y >= last.value.midY { return last.key }
+        if let hit = ordered.first(where: { y >= $0.value.minY && y <= $0.value.maxY }) {
+            return hit.key
+        }
+        // Pointer fell in an inter-card gap — snap to the nearest midpoint.
+        return ordered.min(by: { abs($0.value.midY - y) < abs($1.value.midY - y) })?.key
     }
 
     /// The ⌘n shortcut that would select this workspace, or nil past ⌘9.
@@ -392,27 +445,37 @@ private struct ShortcutBadge: View {
     }
 }
 
+/// Coordinate space the reorder gesture and card-frame measurements share,
+/// so a `DragGesture` location and a card's `frame(in:)` use the same origin.
+private let kSidebarReorderSpace = "sidebarReorder"
+
+/// Collects every rendered card's frame, keyed by workspace id.
+private struct CardFrameKey: PreferenceKey {
+    static var defaultValue: [UUID: CGRect] = [:]
+    static func reduce(value: inout [UUID: CGRect], nextValue: () -> [UUID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 private struct WorkspaceCard: View {
     @EnvironmentObject var store: WorkspaceStore
     /// System "Reduce Motion" — when on, the looping decorations (border
     /// glow, pulsing dots/borders, mascot animation) render as static states.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ws: Workspace
-    @Binding var draggingID: UUID?
+    /// True while this card is the one being dragged (drives the lift).
+    var isDragging: Bool = false
     /// When non-nil, the card shows its ⌘n switch shortcut in the top-right
     /// corner (driven by the sidebar's ⌘-held observer).
     var shortcutBadge: Int? = nil
+    /// Reorder gesture callbacks (owned by `SidebarView`): the pointer's
+    /// y in `kSidebarReorderSpace` on every change, and a drag-ended signal.
+    var onReorderChange: (CGFloat) -> Void = { _ in }
+    var onReorderEnd: () -> Void = {}
 
     @State private var isEditing = false
     @State private var draftName = ""
     @FocusState private var nameFieldFocused: Bool
-    /// Timestamp of the last reorder this card was the *target* of. Used
-    /// to swallow the spring-animation sweep: after we swap, the target
-    /// card slides under the cursor again mid-animation and SwiftUI re-
-    /// fires `isTargeted`, which would bounce the dragged card back. A
-    /// short cooldown matched to the spring response kills the oscillation
-    /// without affecting genuine user-intent swaps onto a different card.
-    @State private var lastTargetedAt: Date = .distantPast
     /// Hover affordance — drives the 1pt scale + soft shadow that makes
     /// cards feel "liftable" without being a heavy hover state. Driven
     /// by `.onHover`; doesn't touch ghostty.
@@ -524,53 +587,22 @@ private struct WorkspaceCard: View {
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text(verbatim: ws.displayName))
         .accessibilityValue(Text(verbatim: accessibilityStatus(summary: summary)))
-        .draggable(ws.id.uuidString) {
-            // The preview view's lifecycle is the cleanest drag-lifecycle
-            // signal SwiftUI exposes for `.draggable` — onAppear when the
-            // drag session starts, onDisappear when it ends (drop OR
-            // cancel). We use it to drive `draggingID` so sibling cards
-            // can render their insert indicator and fade the source.
-            dragPreview
-                .onAppear { draggingID = ws.id }
-                .onDisappear {
-                    if draggingID == ws.id { draggingID = nil }
-                }
-        }
-        .dropDestination(for: String.self) { items, _ in
-            // The actual reorder already happened while hovering — see the
-            // `isTargeted` branch below. Returning true just confirms the
-            // drop so SwiftUI doesn't snap the preview back.
-            guard let raw = items.first,
-                  let sourceID = UUID(uuidString: raw),
-                  sourceID != ws.id
-            else { return false }
-            return true
-        } isTargeted: { targeted in
-            // Real-time reorder: as soon as the cursor enters another card,
-            // slide the dragged workspace into that slot. The ForEach's
-            // spring animation handles the visual rearrangement.
-            guard targeted,
-                  let draggingID,
-                  draggingID != ws.id,
-                  let targetIdx = store.workspaces.firstIndex(where: { $0.id == ws.id })
-            else { return }
-            // Spring-sweep guard: after we swap, this same card animates
-            // back under the cursor and `isTargeted` re-fires, which would
-            // bounce the row back. Spring response is 0.32s; 0.35s
-            // covers settling without blocking the user from dragging
-            // onto a *different* card (each card has its own timestamp).
-            let now = Date()
-            if now.timeIntervalSince(lastTargetedAt) < 0.35 { return }
-            lastTargetedAt = now
-            store.moveWorkspace(id: draggingID, to: targetIdx)
-        }
-    }
-
-    /// Invisible drag preview — we only need the view's lifecycle hooks to
-    /// drive `draggingID`. The row reorders live under the cursor, so a
-    /// floating ghost above the cursor just adds visual noise.
-    private var dragPreview: some View {
-        Color.clear.frame(width: 1, height: 1)
+        // Lift the dragged card above its neighbours.
+        .scaleEffect(isDragging ? 1.03 : 1.0, anchor: .center)
+        .shadow(color: Color.black.opacity(isDragging ? 0.35 : 0),
+                radius: isDragging ? 12 : 0, y: isDragging ? 5 : 0)
+        .animation(.easeOut(duration: 0.14), value: isDragging)
+        // Manual drag-to-reorder. We drive the whole interaction from the
+        // pointer's absolute position (via the shared coordinate space)
+        // instead of the system drag-and-drop's `.dropDestination`/
+        // `isTargeted` callbacks, whose start/end timing on macOS was
+        // unreliable (stale drag state → phantom moves). `minimumDistance`
+        // keeps plain clicks (select) from starting a drag.
+        .gesture(
+            DragGesture(minimumDistance: 6, coordinateSpace: .named(kSidebarReorderSpace))
+                .onChanged { value in onReorderChange(value.location.y) }
+                .onEnded { _ in onReorderEnd() }
+        )
     }
 
     private func startEditing() {
