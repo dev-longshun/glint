@@ -198,11 +198,20 @@ final class GhosttyManager {
     }
 
     /// Sync Glint's zsh-init dir at ~/.config/glint/zsh-init and return its
-    /// path, for use as `ZDOTDIR` when spawning a surface's shell. Two files
+    /// path, for use as `ZDOTDIR` when spawning a surface's shell. Four files
     /// land there:
+    ///   * `.zshenv` — stub that sources the user's real .zshenv (so things
+    ///     like `~/.cargo/env` still run).
+    ///   * `.zprofile` — stub that sources the user's real .zprofile (this is
+    ///     where `brew shellenv`, OrbStack, asdf/fnm typically inject PATH;
+    ///     skipping it breaks tools like `pnpm` that live under brew prefix).
     ///   * `.zshrc` — sources the user's real .zshrc first (zero-break), then
     ///     layers per-pane `HISTFILE` and ghost-text completion on top.
     ///   * `zsh-autosuggestions.zsh` — vendored upstream v0.7.1, MIT.
+    ///
+    /// The two stubs are necessary because zsh resolves `.zshenv` / `.zprofile`
+    /// from `$ZDOTDIR`, not `$HOME`, once we swap it; without them the user's
+    /// PATH-setting login files silently never run.
     ///
     /// Returns nil when the feature is disabled or the bundle resources can't
     /// be located, in which case the caller skips ZDOTDIR injection entirely
@@ -233,6 +242,8 @@ final class GhosttyManager {
             .appendingPathComponent(".config/glint/zsh-init", isDirectory: true)
         let zshrcOut = dir.appendingPathComponent(".zshrc")
         let autosuggestOut = dir.appendingPathComponent("zsh-autosuggestions.zsh")
+        let zshenvOut = dir.appendingPathComponent(".zshenv")
+        let zprofileOut = dir.appendingPathComponent(".zprofile")
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             // Re-copy only when content differs — Sparkle-style updates land
@@ -240,11 +251,39 @@ final class GhosttyManager {
             // already-running shells keep what they sourced at startup.
             try syncBundleFile(from: bundleZshrc, to: zshrcOut)
             try syncBundleFile(from: bundleAutosuggest, to: autosuggestOut)
+            try syncStringFile(Self.delegatedStubScript(rcName: "zshenv"), to: zshenvOut)
+            try syncStringFile(Self.delegatedStubScript(rcName: "zprofile"), to: zprofileOut)
             return dir.path
         } catch {
             NSLog("Glint: failed to write zsh-init dir: \(error)")
             return nil
         }
+    }
+
+    /// Stub `.zshenv` / `.zprofile` content that hands control back to the
+    /// user's real file in `$GLINT_USER_ZDOTDIR` (their original ZDOTDIR or
+    /// $HOME). Without these, swapping ZDOTDIR to Glint's dir means zsh stops
+    /// finding the user's PATH-setting login scripts entirely.
+    private static func delegatedStubScript(rcName: String) -> String {
+        return """
+        # Written by Glint. Delegates back to the user's real .\(rcName)
+        # so PATH setup (brew shellenv, asdf, fnm, ~/.cargo/env, OrbStack,
+        # etc.) keeps running even though ZDOTDIR points at Glint's dir.
+        if [[ -n ${GLINT_USER_ZDOTDIR-} && -r $GLINT_USER_ZDOTDIR/.\(rcName) ]]; then
+            _glint_saved_zdotdir=$ZDOTDIR
+            ZDOTDIR=$GLINT_USER_ZDOTDIR
+            source $GLINT_USER_ZDOTDIR/.\(rcName)
+            ZDOTDIR=$_glint_saved_zdotdir
+            unset _glint_saved_zdotdir
+        fi
+        """
+    }
+
+    private static func syncStringFile(_ content: String, to dst: URL) throws {
+        if let existing = try? String(contentsOf: dst, encoding: .utf8), existing == content {
+            return
+        }
+        try content.write(to: dst, atomically: true, encoding: .utf8)
     }
 
     private static func syncBundleFile(from src: URL, to dst: URL) throws {
