@@ -403,7 +403,7 @@ final class WorkspaceStore: ObservableObject {
     /// animation by design: the traffic-light status dot carries that state.
     @Published var claudeIconStyle: ClaudeIconStyle = {
         let raw = UserDefaults.standard.string(forKey: "glint.claudeIconStyle") ?? ""
-        return ClaudeIconStyle(rawValue: raw) ?? .mascot
+        return ClaudeIconStyle(rawValue: raw) ?? .spark
     }() {
         didSet {
             UserDefaults.standard.set(claudeIconStyle.rawValue, forKey: "glint.claudeIconStyle")
