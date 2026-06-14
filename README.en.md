@@ -6,6 +6,8 @@ A polished macOS terminal made for AI agents. SwiftUI + AppKit, with [Ghostty](h
 
 ![Glint screenshot](docs/screenshot.png)
 
+![Workspace state overview](docs/screenshot-sidebar.png)
+
 ## Install
 
 ### Homebrew (recommended)

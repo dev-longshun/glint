@@ -6,6 +6,8 @@
 
 ![Glint 截图](docs/screenshot.png)
 
+![工作区状态一览](docs/screenshot-sidebar.png)
+
 ## 安装
 
 ### Homebrew(推荐)
