@@ -235,7 +235,10 @@ jobs:
           # temp location first, then restore after switching branches.
           cp appcast.xml "$RUNNER_TEMP/appcast.xml"
           git fetch origin main
-          git checkout main
+          # -f discards the dirty working-tree appcast.xml (already backed
+          # up above); a plain checkout aborts because it refuses to
+          # overwrite local changes.
+          git checkout -f main
           cp "$RUNNER_TEMP/appcast.xml" appcast.xml
           git add appcast.xml
           if git diff --cached --quiet; then
