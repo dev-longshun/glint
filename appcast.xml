@@ -6,15 +6,15 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.18-beta.6</title>
-      <sparkle:version>202606141525</sparkle:version>
-      <sparkle:shortVersionString>0.1.18-beta.6</sparkle:shortVersionString>
+      <title>Glint 0.1.18-beta.7</title>
+      <sparkle:version>202606150228</sparkle:version>
+      <sparkle:shortVersionString>0.1.18-beta.7</sparkle:shortVersionString>
       <sparkle:channel>beta</sparkle:channel>
-      <pubDate>Sun, 14 Jun 2026 15:27:01 +0000</pubDate>
+      <pubDate>Mon, 15 Jun 2026 02:29:38 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.6</h3><ul>
-    <li><strong>revert: drop ZDOTDIR-swap per-pane history (back to industry default)</strong><br><span style="color:#666">撤掉 ZDOTDIR 注入方案——zsh 的 rc 加载语义跟 $ZDOTDIR 绑定,我们镜像不完(beta.4/5 PATH 丢失就是这个根因),且 Prezto/oh-my-zsh 等读 ZDOTDIR 也会撞;业界(Kitty/Wezterm/Alacritty/Ghostty)都不做这事是有道理的;需要这能力的用户推荐装 atuin。</span></li>
-    <li>release: appcast for v0.1.18-beta.5</li>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.7</h3><ul>
+    <li><strong>ghosttykit: publish xcframework-fb620db-v1</strong><br><span style="color:#666">更新 GhosttyKit 预构建,匹配新 ghostty 子模块</span></li>
+    <li><strong>feat(header): use ghostty viewport-top-offset for floating header inset</strong><br><span style="color:#666">浮岛 header 改用 ghostty viewport-top-offset 渲染滚动内容,prompt 紧贴 islands 下沿,不再插空行</span></li>
   </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.18-beta.5</h3><ul>
     <li><strong>fix(shell): also delegate .zshenv and .zprofile to user&#x27;s real dir</strong><br><span style="color:#666">修复 beta.4 漏写 .zshenv/.zprofile 委托,导致 brew/orbstack/cargo 在恢复的终端里 PATH 丢失(pnpm not found 就是这个根因);现在补两个 stub,新开 pane 立即恢复正常。</span></li>
     <li>release: appcast for v0.1.18-beta.4</li>
@@ -70,7 +70,7 @@
     <li><strong>fix: stop re-prompting for keychain on every Claude-usage update</strong><br><span style="color:#666">修复侧栏 Claude 额度每次版本更新都要重新钥匙串认证的问题——token 改存到 Application Support 下的 AES-GCM 加密文件,不再放钥匙串</span></li>
     <li>release: appcast for v0.1.17-beta.6</li>
   </ul></div>]]></description>
-      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.18-beta.6/Glint-0.1.18-beta.6.dmg" length="15262329" type="application/octet-stream" sparkle:edSignature="nZy/7+y+X4lVekTGdgyopwETagqa8K/TcMr91JaEW91CMPQYi7BbGdjsdGrDVcJ0d0X2WuyzQm2165Ka8+hMCw==" />
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.18-beta.7/Glint-0.1.18-beta.7.dmg" length="15262040" type="application/octet-stream" sparkle:edSignature="+/BakiOr8KOOUCmGS6BoYcjcNeOBQvPnmVSPBsJE1f8zbuMMfjcnjM9dlcoJYSu4PS9vWUUgPxtgxqvtBCvlBg==" />
     </item>
     <item>
       <title>Glint 0.1.18-beta.5</title>
