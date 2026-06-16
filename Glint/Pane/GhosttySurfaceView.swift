@@ -1500,7 +1500,15 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     override func scrollWheel(with event: NSEvent) {
         guard let s = surface else { super.scrollWheel(with: event); return }
         var packed: Int32 = 0
-        if event.hasPreciseScrollingDeltas { packed |= 1 }
+        var dx = event.scrollingDeltaX
+        var dy = event.scrollingDeltaY
+        if event.hasPreciseScrollingDeltas {
+            packed |= 1
+            // Match upstream Ghostty.app: raw trackpad deltas feel sluggish; ×2 is the
+            // tuning the mainline app ships in SurfaceView_AppKit.scrollWheel.
+            dx *= 2
+            dy *= 2
+        }
         let momentum: Int32
         switch event.momentumPhase {
         case .began:      momentum = 1
@@ -1512,10 +1520,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         default:          momentum = 0
         }
         packed |= momentum << 1
-        ghostty_surface_mouse_scroll(s,
-                                     event.scrollingDeltaX,
-                                     event.scrollingDeltaY,
-                                     packed)
+        ghostty_surface_mouse_scroll(s, dx, dy, packed)
     }
 
     // MARK: - NSTextInputClient (printable text + IME)
