@@ -931,6 +931,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         if mods.contains(.command),
            !mods.contains(.shift), !mods.contains(.option), !mods.contains(.control),
            event.keyCode == 9 {
+            // Finder file copy → paste the shell-quoted full path(s), same
+            // as a drag-drop. Takes priority over the image branch so that
+            // copying an image *file* yields its path, not the ⌃V detour.
+            if pasteClipboardFileURLs(into: s) {
+                return
+            }
             if clipboardHasPasteableImage() {
                 var syn: UInt8 = 0x16
                 withUnsafePointer(to: &syn) { ptr in
@@ -1081,6 +1087,21 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     override func mouseDown(with event: NSEvent) {
         if window?.firstResponder !== self {
             window?.makeFirstResponder(self)
+            swallowingFocusClick = true
+            return
+        }
+        // ⌘-click on a file path → open it in the default app. Resolves
+        // absolute paths, ~, and paths relative to the surface's cwd. Falls
+        // through to ghostty for anything that isn't an existing file, so
+        // ⌘-click URL opening and ⌘-drag selection keep working.
+        if event.modifierFlags.contains(.command),
+           !event.modifierFlags.contains(.shift),
+           !event.modifierFlags.contains(.control),
+           openFileUnderPointer(event) {
+            // Swallow the matching release/drag too, so ghostty never sees
+            // this ⌘-click. Otherwise, if the cell also carries an OSC 8
+            // hyperlink, ghostty fires its own OPEN_URL and the file opens
+            // twice (the second open surfaces a Finder "-50" error).
             swallowingFocusClick = true
             return
         }
@@ -1243,6 +1264,27 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
               !urls.isEmpty else {
             return false
         }
+        return injectFileURLs(urls, into: s)
+    }
+
+    /// If the general pasteboard holds file URLs (a Finder copy), inject
+    /// their shell-quoted paths and return true. Returns false when there
+    /// are no file URLs so callers can fall through to text/image paths.
+    private func pasteClipboardFileURLs(into s: ghostty_surface_t) -> Bool {
+        guard let urls = NSPasteboard.general.readObjects(
+                  forClasses: [NSURL.self],
+                  options: [.urlReadingFileURLsOnly: true]) as? [URL],
+              !urls.isEmpty else {
+            return false
+        }
+        return injectFileURLs(urls, into: s)
+    }
+
+    /// Inject shell-quoted paths into the terminal. Joins multiple files
+    /// with a space — handy for `mv a.txt b.txt dest/` style commands.
+    /// Shared by drag-drop and ⌘V/right-click paste of Finder files.
+    @discardableResult
+    private func injectFileURLs(_ urls: [URL], into s: ghostty_surface_t) -> Bool {
         let joined = urls.map { shellQuote($0.path) }.joined(separator: " ")
         // shellQuote keeps quoting intact, but a filename can legally embed
         // a newline — gate on the actual injected string, same as paste.
@@ -1259,6 +1301,88 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private func shellQuote(_ path: String) -> String {
         if !path.contains("'") { return "'\(path)'" }
         return "'\(path.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    // MARK: - ⌘-click to open files
+
+    /// ⌘-click handler: read the word under the pointer and, if it resolves
+    /// to an existing file, open it with the system opener. Returns true when
+    /// a file was opened so the caller can swallow the click.
+    private func openFileUnderPointer(_ event: NSEvent) -> Bool {
+        guard let s = surface else { return false }
+        // quicklook_word selects at ghostty's tracked cursor position, so
+        // make sure it reflects this click before we read the word.
+        forwardMousePos(event)
+        var text = ghostty_text_s()
+        guard ghostty_surface_quicklook_word(s, &text) else { return false }
+        defer { ghostty_surface_free_text(s, &text) }
+        guard let cstr = text.text, text.text_len > 0 else { return false }
+        // `text` is a length-counted const char* (not guaranteed nul-terminated).
+        let token = cstr.withMemoryRebound(to: UInt8.self, capacity: Int(text.text_len)) { bytes in
+            String(decoding: UnsafeBufferPointer(start: bytes, count: Int(text.text_len)), as: UTF8.self)
+        }
+        guard let url = resolveFilePath(token) else { return false }
+        // The token is untrusted terminal output — a hostile program can print
+        // any path and the user only has to ⌘-click it. Never *launch* code:
+        // apps, bundles, installers, URL shortcuts, and anything carrying the
+        // POSIX execute bit are revealed in Finder instead of opened with their
+        // default handler. Plain documents (source, logs, images, PDFs) open.
+        if shouldRevealRatherThanOpen(url) {
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        } else {
+            NSWorkspace.shared.open(url)
+        }
+        return true
+    }
+
+    /// Launch-capable file types and bundles that must never be opened via
+    /// their default handler from untrusted terminal content — they execute
+    /// code, run installers, or redirect to arbitrary URLs.
+    private static let revealOnlyExtensions: Set<String> = [
+        "app", "bundle", "appex", "xpc", "kext", "osax", "prefpane",
+        "command", "tool", "terminal", "workflow", "action", "scptd",
+        "webloc", "url", "fileloc", "inetloc",
+        "pkg", "mpkg", "dmg",
+    ]
+
+    /// True when a ⌘-clicked path should be revealed in Finder rather than
+    /// opened, because opening it could execute code.
+    private func shouldRevealRatherThanOpen(_ url: URL) -> Bool {
+        if Self.revealOnlyExtensions.contains(url.pathExtension.lowercased()) {
+            return true
+        }
+        let values = try? url.resourceValues(forKeys: [
+            .isDirectoryKey, .isPackageKey, .isExecutableKey, .isAliasFileKey,
+        ])
+        if values?.isDirectory == true || values?.isPackage == true { return true }
+        // Execute bit catches bare binaries and runnable scripts regardless of
+        // extension. `isExecutableKey` reflects the POSIX x bit for the file.
+        if values?.isExecutable == true { return true }
+        return false
+    }
+
+    /// Resolve a terminal word to a local file URL, or nil if it isn't an
+    /// existing file. Strips a stray surrounding quote pair, expands `~`,
+    /// and resolves relative paths against the surface's working directory
+    /// (OSC 7 cwd, falling back to proc_pidinfo).
+    private func resolveFilePath(_ token: String) -> URL? {
+        var path = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        if path.count >= 2, let first = path.first, first == path.last,
+           first == "'" || first == "\"" {
+            path = String(path.dropFirst().dropLast())
+        }
+        guard !path.isEmpty else { return nil }
+        let expanded = NSString(string: path).expandingTildeInPath
+        let resolved: String
+        if expanded.hasPrefix("/") {
+            resolved = expanded
+        } else if let cwd = currentCwd(), !cwd.isEmpty {
+            resolved = URL(fileURLWithPath: cwd).appendingPathComponent(expanded).path
+        } else {
+            return nil
+        }
+        guard FileManager.default.fileExists(atPath: resolved) else { return nil }
+        return URL(fileURLWithPath: resolved)
     }
 
     // MARK: - gestures
@@ -1323,6 +1447,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     @objc private func menuPaste(_ sender: Any?) {
         guard let s = surface else { return }
+        if pasteClipboardFileURLs(into: s) { return }
         if pasteImageFromClipboardIfPresent() { return }
         pasteClipboardText(into: s)
     }
@@ -1490,6 +1615,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     @objc func paste(_ sender: Any?) {
         guard let s = surface else { return }
+        if pasteClipboardFileURLs(into: s) { return }
         if clipboardHasPasteableImage() {
             var syn: UInt8 = 0x16
             withUnsafePointer(to: &syn) { ptr in
