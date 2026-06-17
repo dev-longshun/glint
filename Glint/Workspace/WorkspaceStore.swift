@@ -1418,6 +1418,19 @@ final class WorkspaceStore: ObservableObject {
         acknowledgeCompletionIfNeeded(for: workspaces[i].id)
     }
 
+    /// Reorder a tab within the current workspace. `targetIndex` is the
+    /// index of the chip the user dropped onto (in the workspace's `tabs`
+    /// array). Mirrors `moveWorkspace`'s before/after resolution so the
+    /// drop-onto-self / drop-past-self semantics match the sidebar.
+    func moveTab(id: TabID, to targetIndex: Int) {
+        guard let i = currentIndex,
+              let source = workspaces[i].tabs.firstIndex(where: { $0.id == id }) else { return }
+        let clamped = max(0, min(targetIndex, workspaces[i].tabs.count - 1))
+        if source == clamped { return }
+        let offset = source < clamped ? clamped + 1 : clamped
+        workspaces[i].tabs.move(fromOffsets: IndexSet(integer: source), toOffset: offset)
+    }
+
     func nextTab() {
         guard let i = currentIndex, let t = workspaces[i].selectedTabIndex,
               workspaces[i].tabs.count > 1 else { return }

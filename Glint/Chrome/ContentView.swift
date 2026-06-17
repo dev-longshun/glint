@@ -213,6 +213,14 @@ struct ToolbarHeader: View {
 /// folded away.
 struct TabBar: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// TabID of the chip currently mid-drag (nil otherwise). Used to lift
+    /// the dragged chip above its neighbours and skip it in the pointer
+    /// hit-test below.
+    @State private var draggingTabID: TabID?
+    /// Live frame of every visible chip in `kTabReorderSpace`, populated
+    /// from each chip's background GeometryReader. Same shape as the
+    /// sidebar's reorder map but keyed by TabID and hit-tested on X.
+    @State private var chipFrames: [TabID: CGRect] = [:]
 
     var body: some View {
         GeometryReader { geo in
@@ -241,7 +249,20 @@ struct TabBar: View {
             ForEach(ws.tabs) { tab in
                 if !plan.overflowed.contains(tab.id) {
                     TabChip(ws: ws, tab: tab,
-                            isActive: tab.id == ws.selectedTabID)
+                            isActive: tab.id == ws.selectedTabID,
+                            isDragging: draggingTabID == tab.id,
+                            onReorderChange: { pointerX in
+                                handleReorderDrag(id: tab.id, pointerX: pointerX)
+                            },
+                            onReorderEnd: { handleReorderEnd() })
+                        .background(
+                            GeometryReader { gp in
+                                Color.clear.preference(
+                                    key: ChipFrameKey.self,
+                                    value: [tab.id: gp.frame(in: .named(kTabReorderSpace))])
+                            }
+                        )
+                        .zIndex(draggingTabID == tab.id ? 1 : 0)
                 }
             }
             if !plan.overflowed.isEmpty {
@@ -252,6 +273,8 @@ struct TabBar: View {
             }
             NewTabButton { store.newTab() }
         }
+        .coordinateSpace(name: kTabReorderSpace)
+        .onPreferenceChange(ChipFrameKey.self) { chipFrames = $0 }
         // Uniform 4pt inset: 30pt chips → a 38pt capsule, the same height
         // and radius as the leading/trailing islands, with the chip pills
         // (radius 15) concentric to the capsule's 19.
@@ -261,6 +284,52 @@ struct TabBar: View {
         .fixedSize()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.easeOut(duration: 0.15), value: plan)
+        // Match the sidebar's reorder spring so chips slide into their
+        // new slot the same way workspace cards do — keyed on the tab id
+        // order so only an actual swap fires it.
+        .animation(.spring(response: 0.32, dampingFraction: 0.85),
+                   value: ws.tabs.map(\.id))
+    }
+
+    /// Same shape as `SidebarView.handleReorderDrag`, just in 1D: ask the
+    /// hit-test (which includes the dragged chip itself) for the nearest
+    /// chip to the pointer, then let the `targetID != id` guard short-
+    /// circuit when the pointer is still over the source. Excluding the
+    /// source from the hit-test would trigger a premature swap the moment
+    /// the drag started — the pointer would instantly map to a neighbour.
+    private func handleReorderDrag(id: TabID, pointerX: CGFloat) {
+        if draggingTabID != id { draggingTabID = id }
+        guard let targetID = chipID(atPointerX: pointerX),
+              targetID != id,
+              let ws = store.selectedWorkspace,
+              let targetIdx = ws.tabs.firstIndex(where: { $0.id == targetID })
+        else { return }
+        store.moveTab(id: id, to: targetIdx)
+    }
+
+    private func handleReorderEnd() {
+        draggingTabID = nil
+    }
+
+    /// The visible chip whose measured frame the pointer X is over, clamped
+    /// to the first/last when the pointer is past either edge.
+    private func chipID(atPointerX x: CGFloat) -> TabID? {
+        let ordered = chipFrames.sorted { $0.value.midX < $1.value.midX }
+        guard let first = ordered.first, let last = ordered.last else { return nil }
+        if x <= first.value.midX { return first.key }
+        if x >= last.value.midX { return last.key }
+        // Pointer fell in an inter-chip gap — snap to the nearest midpoint.
+        return ordered.min(by: { abs($0.value.midX - x) < abs($1.value.midX - x) })?.key
+    }
+}
+
+private let kTabReorderSpace = "tabReorder"
+
+/// Collects every rendered tab chip's frame, keyed by TabID.
+private struct ChipFrameKey: PreferenceKey {
+    static var defaultValue: [TabID: CGRect] = [:]
+    static func reduce(value: inout [TabID: CGRect], nextValue: () -> [TabID: CGRect]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
     }
 }
 
@@ -360,60 +429,82 @@ private struct TabChip: View {
     let ws: Workspace
     let tab: WorkspaceTab
     let isActive: Bool
+    /// True while this chip is the one being dragged (drives the lift).
+    var isDragging: Bool = false
+    /// Reorder gesture callbacks (owned by `TabBar`): pointer X in
+    /// `kTabReorderSpace` on every change, and a drag-ended signal.
+    var onReorderChange: (CGFloat) -> Void = { _ in }
+    var onReorderEnd: () -> Void = {}
     @State private var hovering = false
 
     var body: some View {
         let kind = store.tabIconKind(tab, in: ws)
         let status = store.tabAgentStatus(tab, in: ws)
-        Button { store.selectTab(tab.id) } label: {
-            HStack(spacing: 4) {
-                TabIcon(kind: kind, size: 18, status: status)
-                    // Unselected tabs recede to bare dimmed text+icon in the
-                    // glass cluster, so the accent pill is the only chrome.
-                    .opacity(isActive || !inGlassCluster ? 1 : 0.7)
-                Text(ws.tabDisplayName(tab))
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(isActive ? Theme.text1 : Theme.text3)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: 150)
-                trailingSlot(status: status)
-            }
-            .padding(.leading, 4)
-            .padding(.trailing, 5)
-            .frame(height: 30)
-            .background {
-                if inGlassCluster {
-                    // The selected tab is a muted accent-tinted capsule: hue
-                    // still carries selection (luminance alone turns to mud
-                    // on dark glass) but stays quiet — a solid bright pill
-                    // pulled the eye away from the terminal. Unselected tabs
-                    // are bare text that gains a faint capsule on hover.
-                    Capsule(style: .continuous)
-                        .fill(chipFill)
-                } else {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(chipFill)
-                }
-            }
-            .overlay(alignment: .bottom) {
-                // Segmented-pill style carries selection in the fill; the
-                // accent underline only belongs to the band layout.
-                if isActive && !inGlassCluster {
-                    RoundedRectangle(cornerRadius: 1, style: .continuous)
-                        .fill(store.accent.opacity(0.9))
-                        .frame(height: 2)
-                        .padding(.horizontal, 4)
-                        .padding(.bottom, 1.5)
-                }
-            }
-            .contentShape(Rectangle())
+        HStack(spacing: 4) {
+            TabIcon(kind: kind, size: 18, status: status)
+                // Unselected tabs recede to bare dimmed text+icon in the
+                // glass cluster, so the accent pill is the only chrome.
+                .opacity(isActive || !inGlassCluster ? 1 : 0.7)
+            Text(ws.tabDisplayName(tab))
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(isActive ? Theme.text1 : Theme.text3)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: 150)
+            trailingSlot(status: status)
         }
-        .buttonStyle(.plain)
+        .padding(.leading, 4)
+        .padding(.trailing, 5)
+        .frame(height: 30)
+        .background {
+            if inGlassCluster {
+                // The selected tab is a muted accent-tinted capsule: hue
+                // still carries selection (luminance alone turns to mud
+                // on dark glass) but stays quiet — a solid bright pill
+                // pulled the eye away from the terminal. Unselected tabs
+                // are bare text that gains a faint capsule on hover.
+                Capsule(style: .continuous)
+                    .fill(chipFill)
+            } else {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(chipFill)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            // Segmented-pill style carries selection in the fill; the
+            // accent underline only belongs to the band layout.
+            if isActive && !inGlassCluster {
+                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    .fill(store.accent.opacity(0.9))
+                    .frame(height: 2)
+                    .padding(.horizontal, 4)
+                    .padding(.bottom, 1.5)
+            }
+        }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(Text(verbatim: ws.tabDisplayName(tab)))
+        .onTapGesture { store.selectTab(tab.id) }
         .onHover { hovering = $0 }
         .help(ws.tabDisplayName(tab))
+        // Lift the dragged chip above its neighbours — same shape as the
+        // sidebar's WorkspaceCard, scaled down a touch since chips are
+        // smaller and the header is shallow.
+        .scaleEffect(isDragging ? 1.04 : 1.0, anchor: .center)
+        .shadow(color: Color.black.opacity(isDragging ? 0.28 : 0),
+                radius: isDragging ? 6 : 0, y: isDragging ? 2 : 0)
         .animation(.easeOut(duration: 0.12), value: hovering)
         .animation(.easeOut(duration: 0.12), value: isActive)
+        .animation(.easeOut(duration: 0.14), value: isDragging)
+        // Same manual reorder pattern as WorkspaceCard — pointer hit-test
+        // against measured frames, driven by a min-distance drag so plain
+        // clicks still select.
+        .gesture(
+            DragGesture(minimumDistance: 6, coordinateSpace: .named(kTabReorderSpace))
+                .onChanged { value in onReorderChange(value.location.x) }
+                .onEnded { _ in onReorderEnd() }
+        )
     }
 
     /// Same condition as TabBar.glassCluster — chips restyle as segments
