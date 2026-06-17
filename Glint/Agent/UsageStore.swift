@@ -136,10 +136,27 @@ final class UsageStore: ObservableObject {
     /// the only thing that clears it, and that's handled in the toggle's didSet.
     private func apply(_ quota: AgentQuota?, to agent: Agent) {
         switch agent {
-        case .claude: guard claudeEnabled, let quota else { return }; claude = quota
-        case .codex:  guard codexEnabled,  let quota else { return }; codex = quota
+        case .claude:
+            guard claudeEnabled else { return }
+            if let quota {
+                claude = quota
+                Self.saveQuota(quota, agent: agent)
+                return
+            }
+            #if DEBUG
+            // Network fetch came back empty (typically 429 — two processes
+            // share the same token). Pull whatever prod last cached so a
+            // long-running dev session tracks prod's freshness instead of
+            // freezing on the launch-time seed.
+            if let fromProd = Self.loadQuota(.claude), fromProd != claude {
+                claude = fromProd
+            }
+            #endif
+        case .codex:
+            guard codexEnabled, let quota else { return }
+            codex = quota
+            Self.saveQuota(quota, agent: agent)
         }
-        Self.saveQuota(quota, agent: agent)
     }
 
     // MARK: Snapshot persistence (non-sensitive — UserDefaults is fine)
@@ -151,8 +168,24 @@ final class UsageStore: ObservableObject {
     }
 
     private static func loadQuota(_ agent: Agent) -> AgentQuota? {
-        guard let data = UserDefaults.standard.data(forKey: snapshotKey(agent)) else { return nil }
-        return try? JSONDecoder().decode(AgentQuota.self, from: data)
+        let key = snapshotKey(agent)
+        if let data = UserDefaults.standard.data(forKey: key),
+           let quota = try? JSONDecoder().decode(AgentQuota.self, from: data) {
+            return quota
+        }
+        #if DEBUG
+        // Fall back to prod's snapshot: two processes polling the anthropic
+        // usage endpoint with the same token trip a 429, so the dev poll
+        // never gets a chance to seed its own copy. Reading prod's domain
+        // lets the bar show the freshest numbers prod last fetched instead
+        // of staying empty until the rate limit window clears.
+        if let prodDomain = UserDefaults.standard.persistentDomain(forName: "app.glint.Glint"),
+           let data = prodDomain[key] as? Data,
+           let quota = try? JSONDecoder().decode(AgentQuota.self, from: data) {
+            return quota
+        }
+        #endif
+        return nil
     }
 
     private static func saveQuota(_ quota: AgentQuota?, agent: Agent) {
@@ -502,12 +535,60 @@ enum ClaudeUsageReader {
     /// Read + decrypt our own copied token from the file cache. A decrypt
     /// failure (corrupt file, or one written on a different machine) yields nil,
     /// so we transparently re-seed from Claude's item.
+    ///
+    /// In DEBUG, also fall back to the production cache when our own file is
+    /// missing or older than the prod copy. Dev runs under a separate bundle
+    /// id + ad-hoc signature, so its keychain ACL grant never sticks across
+    /// rebuilds — without this fallback, the very first `refreshFromSource`
+    /// after a stale dev cache silently fails and the Claude row never lights
+    /// up. Same machine, same hwUUID-derived AES key, so prod's file decrypts
+    /// here too.
     private static func readGlintToken() -> String? {
-        guard let url = tokenCacheURL,
+        let own = decryptedToken(at: tokenCacheURL)
+        #if DEBUG
+        if let prodFresher = prodTokenIfFresher(than: tokenCacheURL) {
+            return prodFresher
+        }
+        #endif
+        return own
+    }
+
+    private static func decryptedToken(at url: URL?) -> String? {
+        guard let url,
               let data = try? Data(contentsOf: url),
               let token = decryptToken(data), !token.isEmpty else { return nil }
         return token
     }
+
+    #if DEBUG
+    /// Path to prod's cache file (peer of Glint-Dev under Application Support),
+    /// computed alongside SupportDir.url so we don't drag in another helper.
+    private static var prodTokenCacheURL: URL? {
+        guard let appSupport = try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: false) else { return nil }
+        return appSupport
+            .appendingPathComponent("Glint", isDirectory: true)
+            .appendingPathComponent("claude-usage-token", isDirectory: false)
+    }
+
+    /// Return prod's cached token only when it's fresher than `devURL` (or dev
+    /// has none), so an old prod install can't shadow a dev that's actively
+    /// refreshing on its own.
+    private static func prodTokenIfFresher(than devURL: URL?) -> String? {
+        guard let prodURL = prodTokenCacheURL else { return nil }
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: prodURL.path) else { return nil }
+        let prodModified = (try? fm.attributesOfItem(atPath: prodURL.path)[.modificationDate]) as? Date
+        let devModified: Date? = devURL.flatMap { url in
+            (try? fm.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date
+        }
+        switch (prodModified, devModified) {
+        case let (p?, d?) where p <= d: return nil  // dev's at least as fresh
+        default: return decryptedToken(at: prodURL)
+        }
+    }
+    #endif
 
     /// Encrypt + persist the token into our file cache (0600, owner-only).
     /// Best-effort: a failure just means we re-read Claude's item next time.

@@ -61,6 +61,14 @@ targets:
           - "-framework"
           - "UserNotifications"
           - "-lc++"
+      configs:
+        # Dev builds get a separate bundle id so macOS treats them as a
+        # different app: UserDefaults.standard reads from app.glint.Glint.dev,
+        # Persistence writes into the Glint-Dev dir, and toggles you flip
+        # in one build don't leak into the other. First dev launch copies
+        # the prod glint.* defaults across (see GlintApp.init).
+        Debug:
+          PRODUCT_BUNDLE_IDENTIFIER: app.glint.Glint.dev
     dependencies:
       - framework: Vendor/GhosttyKit.xcframework
         embed: false
