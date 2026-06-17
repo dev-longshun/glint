@@ -137,6 +137,29 @@ current_html = (
     "</div>"
 )
 
+# ─── Also emit a Markdown version of the same notes for the GitHub Release ──
+# softprops/action-gh-release picks this up via `body_path:`, so the Release
+# page shows the bilingual CN: trailer changelog instead of GitHub's default
+# "Full Changelog: …" stub (which is empty for projects that commit straight
+# to main). Keeping both renderers in one script means the appcast and the
+# Release page stay in lock-step — one source of truth.
+def md_li(en, zh):
+    if zh:
+        return f"- **{en}**  \n  {zh}"
+    return f"- {en}"
+
+if entries:
+    md_body = "\n".join(md_li(en, zh) for en, zh in entries)
+else:
+    md_body = "_Maintenance release · 维护更新_"
+
+md_notes = f"## 更新内容 · What's new in {version}\n\n{md_body}\n"
+
+md_path = os.environ.get("RELEASE_NOTES_MD")
+if md_path:
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(md_notes)
+
 # ─── Splice/refresh the appcast item ──
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 ET.register_namespace("sparkle", SPARKLE)

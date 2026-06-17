@@ -201,6 +201,12 @@ jobs:
           TAG: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
           SIG_LINE: ${{ steps.sparkle.outputs.sig_line }}
+          # Side-channel: update-appcast.sh writes a Markdown copy of the
+          # bilingual changelog here when this is set. The Release step
+          # below feeds it to softprops as body_path so the GitHub Release
+          # page shows the actual CN:/EN per-commit notes instead of the
+          # generated "Full Changelog: …" stub.
+          RELEASE_NOTES_MD: release-notes.md
         run: bash scripts/update-appcast.sh
 
       - name: Create GitHub Release
@@ -212,6 +218,11 @@ jobs:
           files: |
             ${{ env.DMG }}
             ${{ env.HAS_SPARKLE_KEY == 'true' && 'appcast.xml' || '' }}
+          # body_path wins over generate_release_notes when both are set, so
+          # the Release page shows our bilingual changelog. Falls back to
+          # generate_release_notes when the md file doesn't exist (Sparkle
+          # key missing → update-appcast.sh skipped → no release-notes.md).
+          body_path: ${{ env.HAS_SPARKLE_KEY == 'true' && 'release-notes.md' || '' }}
           generate_release_notes: true
           fail_on_unmatched_files: false
           # Beta tags (v0.2.0-beta.1, …) are GitHub prereleases: hidden from
