@@ -352,6 +352,7 @@ struct SidebarView: View {
 /// with its percent and a compact reset countdown. Renders nothing when no
 /// agent has data, so the divider+New Workspace sit flush as before.
 private struct QuotaSection: View {
+    @EnvironmentObject var store: WorkspaceStore
     let claude: AgentQuota?
     let codex: AgentQuota?
 
@@ -366,11 +367,16 @@ private struct QuotaSection: View {
         } else {
             VStack(spacing: 10) {
                 if let claude {
-                    QuotaRow(name: "Claude", quota: claude,
+                    QuotaRow(name: "Claude",
+                             iconAsset: MascotAsset.claude(for: nil,
+                                                           isSpark: store.claudeIconStyle == .spark),
+                             quota: claude,
                              color: Self.claudeColor, warn: Self.warnColor)
                 }
                 if let codex {
-                    QuotaRow(name: "Codex", quota: codex,
+                    QuotaRow(name: "Codex",
+                             iconAsset: MascotAsset.codex(for: nil),
+                             quota: codex,
                              color: Self.codexColor, warn: Self.warnColor)
                 }
             }
@@ -385,19 +391,26 @@ private struct QuotaSection: View {
 }
 
 private struct QuotaRow: View {
+    /// Used as the accessibility label + tooltip — the small mascot icon
+    /// alone is enough visual ID, but VoiceOver still needs the agent name.
     let name: String
+    /// Asset name for a static (animates:false) mascot GIF — same family
+    /// the sidebar cards/tab chips use, just shrunk to a 18pt slot to free
+    /// up the ~22pt the old "Claude"/"Codex" text labels were eating.
+    let iconAsset: String
     let quota: AgentQuota
     let color: Color
     let warn: Color
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(name)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.text2)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .frame(width: 40, alignment: .leading)
+        HStack(spacing: 12) {
+            AnimatedGIFView(assetName: iconAsset, animates: false)
+                // Mascot gifs have transparent margin around the figure; render
+                // oversize then clip back so the figure itself fills the slot.
+                .frame(width: 20, height: 20)
+                .frame(width: 14, height: 14)
+                .help(name)
+                .accessibilityLabel(Text(verbatim: name))
 
             // Recompute the reset countdowns every minute even between store
             // polls so "48m" visibly ticks down.
@@ -809,17 +822,25 @@ private struct WorkspaceCard: View {
     /// the surfaces are dropped).
     private func archivedMetadataRow(active: Bool) -> some View {
         HStack(spacing: 5) {
-            Text("Archived")
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(Theme.text4)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 2)
-                .background(
-                    Capsule(style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 0.5)
-                )
+            HStack(spacing: 3) {
+                Image(systemName: "archivebox.fill")
+                    .font(.system(size: 8, weight: .semibold))
+                Text("Archived")
+                    .font(.system(size: 9.5, weight: .semibold))
+            }
+            .foregroundStyle(Theme.text2)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color.white.opacity(0.14))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+            )
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
