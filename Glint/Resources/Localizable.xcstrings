@@ -1,6 +1,61 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "External control" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外部控制"
+          }
+        }
+      }
+    },
+    "Allow external control" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许外部控制"
+          }
+        }
+      }
+    },
+    "Listening for external commands." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在监听外部命令。"
+          }
+        }
+      }
+    },
+    "Off — no socket bound, no external access." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已关闭 —— 未绑定 socket,外部无法访问。"
+          }
+        }
+      }
+    },
+    "Exposes a local socket under ~/.glint/run/ so other apps on this Mac can focus panes and inject text/keys. Any process that can read the 0600 token file may drive your terminals — off by default. Toggling takes effect immediately." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 ~/.glint/run/ 下开放一个本地 socket,让本机其它程序可以聚焦 pane、注入文本/按键。任何能读取 0600 token 文件的进程都能操控你的终端 —— 默认关闭。开关即时生效。"
+          }
+        }
+      }
+    },
     "—" : {
 
     },

@@ -513,6 +513,19 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreOpenCodeSession, forKey: "glint.restoreOpenCodeSession") }
     }
 
+    /// Master switch for the external control socket (control.sock). Off by
+    /// default — the socket lets any local process holding the 0600 token
+    /// inject keystrokes into your terminals, so it's opt-in. The didSet
+    /// starts/stops the listener immediately, so toggling takes effect live
+    /// with no app restart.
+    @Published var externalControlEnabled: Bool = (UserDefaults.standard.object(forKey: "glint.externalControlEnabled") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(externalControlEnabled, forKey: "glint.externalControlEnabled")
+            if externalControlEnabled { ControlBridge.shared.start() }
+            else { ControlBridge.shared.stop() }
+        }
+    }
+
     /// Whether the sidebar's "Archived" section is currently expanded.
     /// Persists across launches so a user who keeps it open doesn't have to
     /// re-open it every cold start.
@@ -864,6 +877,11 @@ final class WorkspaceStore: ObservableObject {
 
         // Boot the CLI-agent IPC channel and route hook events into pane state.
         AgentBridge.shared.start()
+        // Boot the inbound control channel (focus / inject / list) only if the
+        // user opted in — see externalControlEnabled / ControlBridge and
+        // docs/external-pane-control.md. Toggling it later is live.
+        if externalControlEnabled { ControlBridge.shared.start() }
+        else { ControlBridge.shared.reapStale() }
         Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
@@ -1409,6 +1427,84 @@ final class WorkspaceStore: ObservableObject {
     func focus(_ id: PaneID) {
         guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
         workspaces[i].tabs[t].focusedPane = id
+    }
+
+    // MARK: - external control (control.sock)
+    //
+    // Command dispatch for ControlBridge. Each method runs on the main thread
+    // (the bridge hops here via DispatchQueue.main.sync). String returns are an
+    // error code (bad-request | unknown-pane | unknown-key); nil means success.
+    // The pane handle is the same `GLINT_PANE_ID` hooks report: "uuid:seq".
+
+    /// True iff the pane exists in the model, independent of whether its live
+    /// surface has been minted. Lets send-* tell "no such pane" apart from
+    /// "pane exists but its surface isn't ready yet".
+    private func paneExists(_ key: WorkspacePaneKey) -> Bool {
+        workspaces.first { $0.id == key.workspace }?.panes[key.pane] != nil
+    }
+
+    func controlListPanes() -> [[String: Any]] {
+        var out: [[String: Any]] = []
+        for ws in workspaces {
+            for pane in ws.panes.values {
+                let key = WorkspacePaneKey(workspace: ws.id, pane: pane.id)
+                var entry: [String: Any] = [
+                    "pane": "\(ws.id.uuidString):\(pane.id.value)",
+                    "title": pane.title,
+                ]
+                if let cwd = pane.workingDirectory { entry["cwd"] = cwd }
+                if let st = paneAgentState[key] { entry["agent"] = st.status.rawValue }
+                out.append(entry)
+            }
+        }
+        return out
+    }
+
+    func controlSendText(pane: String, text: String, enter: Bool) -> String? {
+        guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
+        guard paneExists(key) else { return "unknown-pane" }
+        // surfaceViews only holds panes that have actually rendered; a real
+        // pane in a background tab/workspace may have no live surface yet.
+        // Report that distinctly instead of dropping the inject and lying with
+        // {"ok":true}, or misreporting it as a nonexistent pane.
+        guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
+        view.injectText(text)
+        if enter { view.injectKey(.special(keycode: 36)) }
+        return nil
+    }
+
+    func controlSendKeys(pane: String, keys: [String]) -> String? {
+        guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
+        // Validate the whole sequence up front — reject the entire command if
+        // any key is off-whitelist, so we never inject a partial sequence.
+        var parsed: [GhosttySurfaceView.InjectableKey] = []
+        for k in keys {
+            guard let ik = GhosttySurfaceView.InjectableKey.parse(k) else { return "unknown-key" }
+            parsed.append(ik)
+        }
+        guard paneExists(key) else { return "unknown-pane" }
+        guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
+        for ik in parsed { view.injectKey(ik) }
+        return nil
+    }
+
+    func controlFocus(pane: String) -> String? {
+        guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
+        guard let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
+              workspaces[wsIdx].panes[key.pane] != nil,
+              // Panes are workspace-global; the pane lives in exactly one tab's tree.
+              let tab = workspaces[wsIdx].tabs.first(where: { $0.root.leaves.contains(key.pane) })
+        else { return "unknown-pane" }
+        if workspaces[wsIdx].archived { workspaces[wsIdx].archived = false }
+        selectWorkspace(key.workspace)
+        if let i = workspaces.firstIndex(where: { $0.id == key.workspace }) {
+            workspaces[i].selectedTabID = tab.id
+            if let t = workspaces[i].selectedTabIndex {
+                workspaces[i].tabs[t].focusedPane = key.pane
+            }
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        return nil
     }
 
     func selectWorkspace(_ id: UUID) {

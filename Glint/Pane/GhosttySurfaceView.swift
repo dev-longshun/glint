@@ -1552,6 +1552,83 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         }
     }
 
+    // MARK: - external control injection (control.sock)
+
+    /// A key the external control channel is allowed to inject. Either a named
+    /// special key — mapped to a macOS virtual keycode so ghostty emits the
+    /// proper escape sequence (arrows, Enter, Esc, …) — or a single printable
+    /// ASCII character. Anything outside this whitelist parses to nil; raw
+    /// keycodes are intentionally not exposed, to keep the injection surface
+    /// small. See docs/external-pane-control.md §4.2.
+    enum InjectableKey {
+        case special(keycode: UInt16)
+        case char(Character)
+
+        static func parse(_ s: String) -> InjectableKey? {
+            switch s {
+            case "enter", "return": return .special(keycode: 36)
+            case "esc", "escape":   return .special(keycode: 53)
+            case "tab":             return .special(keycode: 48)
+            case "space":           return .special(keycode: 49)
+            case "up":              return .special(keycode: 126)
+            case "down":            return .special(keycode: 125)
+            case "left":            return .special(keycode: 123)
+            case "right":           return .special(keycode: 124)
+            default:
+                if s.count == 1, let c = s.first, c.isASCII, c.isLetter || c.isNumber {
+                    return .char(c)
+                }
+                return nil
+            }
+        }
+    }
+
+    /// Whether the underlying ghostty surface has been created. A view can be
+    /// registered (minted) yet not have drawn — injection silently no-ops until
+    /// the surface exists, so callers check this to avoid reporting a dropped
+    /// inject as success.
+    var hasLiveSurface: Bool { surface != nil }
+
+    /// Inject text through the paste channel (bracketed-paste aware), the same
+    /// pipe `pasteClipboardText` uses. No unsafe-injection prompt here: the
+    /// caller is the gated control socket, not the user's clipboard. Main
+    /// thread only (ghostty surface APIs are not thread-safe).
+    func injectText(_ text: String) {
+        guard let s = surface, !text.isEmpty else { return }
+        text.withCString { ptr in
+            ghostty_surface_text(s, ptr, UInt(strlen(ptr)))
+        }
+    }
+
+    /// Inject a single whitelisted key. Special keys go through
+    /// `ghostty_surface_key` (press+release) so ghostty maps them to the right
+    /// escape sequence; printable chars go straight through the text-input pipe
+    /// to avoid the keycode→preedit "marked text" path. Main thread only.
+    func injectKey(_ key: InjectableKey) {
+        guard let s = surface else { return }
+        switch key {
+        case .special(let kc):
+            var k = ghostty_input_key_s()
+            k.mods = ghostty_input_mods_e(rawValue: 0)
+            k.consumed_mods = ghostty_input_mods_e(rawValue: 0)
+            k.keycode = UInt32(kc)
+            k.text = nil
+            k.unshifted_codepoint = 0
+            k.composing = false
+            k.action = GHOSTTY_ACTION_PRESS
+            _ = ghostty_surface_key(s, k)
+            k.action = GHOSTTY_ACTION_RELEASE
+            _ = ghostty_surface_key(s, k)
+        case .char(let c):
+            var bytes = Array(String(c).utf8)
+            bytes.withUnsafeMutableBufferPointer { bp in
+                bp.baseAddress!.withMemoryRebound(to: CChar.self, capacity: bp.count) { cptr in
+                    ghostty_surface_text_input(s, cptr, UInt(bp.count))
+                }
+            }
+        }
+    }
+
     /// True when `text` contains bytes a shell could act on immediately:
     /// newlines (\n / \r — most shells and REPLs execute on CR even inside
     /// bracketed paste when the running program doesn't support it) or C0

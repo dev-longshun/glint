@@ -622,6 +622,17 @@ private struct TerminalPane: View {
                 }
             }
         }
+
+        SettingsCard("External control",
+                     footer: "Exposes a local socket under ~/.glint/run/ so other apps on this Mac can focus panes and inject text/keys. Any process that can read the 0600 token file may drive your terminals — off by default. Toggling takes effect immediately.") {
+            SettingsRow("Allow external control",
+                        subtitle: store.externalControlEnabled
+                        ? "Listening for external commands."
+                        : "Off — no socket bound, no external access.") {
+                Toggle("", isOn: $store.externalControlEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+        }
     }
 }
 
