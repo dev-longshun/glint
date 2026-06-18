@@ -823,6 +823,11 @@ private struct WorkspaceCard: View {
                 workspaceMetadataRow(active: active)
             }
         }
+        // Pin a constant row height so the card doesn't shrink ~1.5pt when the
+        // metadata badges (idle) are replaced by the plain status line
+        // (running). 16 ≥ the taller branch (the 9.5pt capsule badges), so the
+        // idle height stays the reference and the running state grows to match.
+        .frame(minHeight: 16, alignment: .leading)
         .id(key)
         .transition(.opacity)
         .animation(.easeInOut(duration: 0.18), value: key)
