@@ -39,3 +39,7 @@ sparkle_priv.key
 design/
 _design/
 .codegraph/
+
+# Local-only docs drafts (proposals, integration notes). Already-tracked
+# docs like external-pane-control.md are unaffected — ignore never untracks.
+docs/*.md
