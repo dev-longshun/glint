@@ -509,12 +509,13 @@ private struct TabChip: View {
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(Text(verbatim: ws.tabDisplayName(tab)))
-        .onTapGesture(count: 2) {
-            if !isEditing { startEditing() }
-        }
-        .onTapGesture(count: 1) {
-            // Single-tap selects the tab. During edit the tap is the user
-            // clicking into the field — don't steal the focus to selectTab.
+        .onTapGesture {
+            // Single tap selects the tab — no double-tap gesture alongside it,
+            // since pairing count:1 with count:2 makes every single click wait
+            // out the double-click window before the (very frequent) tab switch
+            // registers. Rename lives on the context menu / double-click is
+            // covered by the Rename button below. During edit the tap is the
+            // user clicking into the field — don't steal focus back to selectTab.
             if !isEditing { store.selectTab(tab.id) }
         }
         .onHover { hovering = $0 && !isEditing }

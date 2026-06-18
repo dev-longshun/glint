@@ -955,10 +955,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         }
         // ⌘K is terminal muscle memory for clearing the screen/scrollback.
         // Keep it out of app-level shortcuts so it always targets the
-        // focused terminal surface.
+        // focused terminal surface. Skip while an IME composition is active —
+        // a CJK user mid-composition who hits ⌘K should let AppKit's text
+        // path settle the marked text, not have the buffer wiped from under it.
         if mods.contains(.command),
            !mods.contains(.shift), !mods.contains(.option), !mods.contains(.control),
-           event.keyCode == 40 {
+           event.keyCode == 40, !hasMarkedText() {
             triggerBindingAction(s, "clear_screen")
             return
         }

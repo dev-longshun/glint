@@ -1042,15 +1042,16 @@ final class WorkspaceStore: ObservableObject {
                     newProcesses[key] = name
                     // Track CURRENT claude/codex/opencode foreground so the
                     // next launch can optionally `--continue` / `resume --last`
-                    // (gated by the per-agent setting). Not sticky: a pane
-                    // that quit back to the shell clears its hint, so we don't
-                    // auto-resume on a pane the user explicitly exited from.
+                    // (gated by the per-agent setting). Cleared the moment the
+                    // foreground is a non-agent shell/tool, so we don't auto-
+                    // resume on a pane the user explicitly exited from. A *nil*
+                    // foreground (no live surface / transient empty pid) is
+                    // unknown, not an exit — leave the hint alone so a momentary
+                    // read gap doesn't drop a still-live session's resume hint.
                     let agent = Self.agentToken(forProcessName: name)
                     if workspaces[i].panes[paneID]?.lastAgent != agent {
                         workspaces[i].panes[paneID]?.lastAgent = agent
                     }
-                } else if workspaces[i].panes[paneID]?.lastAgent != nil {
-                    workspaces[i].panes[paneID]?.lastAgent = nil
                 }
             }
         }
@@ -1060,41 +1061,42 @@ final class WorkspaceStore: ObservableObject {
             }
             paneProcesses = newProcesses
         }
-        let observedPaneKeys = Set(newProcesses.keys).union(paneAgentState.keys)
-
         // Reconcile stale hook state. Hooks are the only writer of
         // paneAgentState and no hook fires when an agent quits, so after
         // e.g. claude → exit → shell the pane can keep kind == .claude and
         // iconKind (which prefers hook state over pid polling) stays stuck.
-        // The poller is authoritative for whether the pane has returned to a
-        // shell. Transfer state to a different live agent, but do not clear
-        // just because the foreground process is a tool/wrapper: Claude/Codex/
-        // OpenCode can temporarily foreground child processes while the
-        // session is still alive.
-        for key in observedPaneKeys {
+        // Reconcile ONLY panes we actually observed a foreground process for
+        // this tick (i.e. present in newProcesses). A pane with no live
+        // surface (background tab) or a transient empty foreground pid is
+        // *unknown*, not exited — its absence here leaves its state untouched
+        // rather than wiping a still-live session and flickering its icon.
+        for (key, processName) in newProcesses {
             guard var state = paneAgentState[key] else { continue }
-            let processName = newProcesses[key]
-            let runningKind = processName.flatMap(Self.agentKind(forProcessName:))
-            if runningKind == nil, Self.isBenignShellProcessName(processName) {
-                // Only clear once the pane is genuinely idle. A live agent
-                // that shells out to a tool briefly foregrounds bash/zsh/sh,
-                // and clearing then would drop the session mid-turn (the next
-                // hook would have to rebuild it, flickering the icon). An
-                // unread .justCompleted/.failed badge — e.g. Claude's sticky
-                // StopFailure after the CLI exits to a shell — must also
-                // survive until the user acknowledges it.
-                if state.status == .idle {
+            guard let runningKind = Self.agentKind(named: processName) else {
+                // Foreground is a non-agent process. Only a recognized benign
+                // shell proves the session exited; a live agent that shells out
+                // to a tool briefly foregrounds a child (vim/git/bash/…), so
+                // clearing on any non-agent name would drop the session
+                // mid-turn (the next hook would have to rebuild it, flickering
+                // the icon). Clear only when the pane is idle AND genuinely
+                // back at a shell. An unread .justCompleted/.failed badge —
+                // e.g. Claude's sticky StopFailure after the CLI exits — must
+                // also survive until the user acknowledges it.
+                if state.status == .idle, Self.isBenignShellProcessName(processName) {
                     paneAgentState.removeValue(forKey: key)
                 }
                 continue
             }
-            guard let runningKind else { continue }
-            if runningKind != state.kind {
-                // Hook state is authoritative while a turn/approval/tool is
-                // active. Some agent CLIs foreground helper processes or model
-                // wrappers whose names can look like another agent; do not let
-                // the 1s process poller flip OpenCode to Claude mid-turn.
-                guard !Self.isBusyStatus(state.status) else { continue }
+            // A known agent owns the pane. If it differs from the recorded
+            // kind, reattribute — but only while genuinely idle. Hook state is
+            // authoritative while a turn/approval/tool is active (some agent
+            // CLIs foreground helper or wrapper processes whose names look like
+            // another agent — don't flip OpenCode to Claude mid-turn), and an
+            // unread .justCompleted/.failed badge must survive until
+            // acknowledged rather than being wiped by a coincidental foreground
+            // name. A real hand-off re-establishes state from the new agent's
+            // first explicit hook, so the poller need not force it here.
+            if runningKind != state.kind, state.status == .idle {
                 state.kind = runningKind
                 state.status = .idle
                 state.detail = nil
@@ -1115,13 +1117,16 @@ final class WorkspaceStore: ObservableObject {
               let hook = info["hook"] as? String,
               let key = Self.parsePaneKey(paneStr) else { return }
 
-        let explicitKind = (info["agent"] as? String).flatMap(Self.agentKind(forAgentToken:))
+        let explicitKind = (info["agent"] as? String).flatMap(Self.agentKind(named:))
         let foregroundKind = surfaceViews[key]?.foregroundProcessName()
-            .flatMap(Self.agentKind(forProcessName:))
-        let polledKind = paneProcesses[key].flatMap(Self.agentKind(forProcessName:))
-        guard let kind = explicitKind ?? paneAgentState[key]?.kind ?? foregroundKind ?? polledKind else {
-            return
-        }
+            .flatMap(Self.agentKind(named:))
+        let polledKind = paneProcesses[key].flatMap(Self.agentKind(named:))
+        // Fall back to .claude when nothing resolves: the hook wrapper's own
+        // AGENT arg defaults to "claude" when unset (AgentBridge then omits the
+        // empty token), so an unresolvable kind means "a hook fired for a pane
+        // we can't otherwise classify" — better to show an agent than to drop
+        // the event and leave the pane looking like a bare shell.
+        let kind = explicitKind ?? paneAgentState[key]?.kind ?? foregroundKind ?? polledKind ?? .claude
 
         // Note: we deliberately do NOT force-write paneProcesses here. The
         // 1s poller owns that dictionary and replaces it wholesale, so any
@@ -1356,7 +1361,7 @@ final class WorkspaceStore: ObservableObject {
     static let benignShells: Set<String> = ["zsh", "bash", "fish", "sh", "dash", "ksh", "login", "tmux"]
 
     private static func agentToken(forProcessName name: String) -> String? {
-        switch agentKind(forProcessName: name) {
+        switch agentKind(named: name) {
         case .claude: return "claude"
         case .codex: return "codex"
         case .opencode: return "opencode"
@@ -1364,21 +1369,19 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
-    private static func agentKind(forProcessName name: String) -> PaneAgentKind? {
-        agentKind(forAgentToken: name)
-    }
-
-    private static func agentKind(forAgentToken token: String) -> PaneAgentKind? {
-        let lower = token.lowercased()
+    /// Classify a foreground-process name or a hook's agent token into an
+    /// agent kind. Both are matched identically (by substring), so there is
+    /// one resolver rather than separate process-name / token variants.
+    private static func agentKind(named name: String) -> PaneAgentKind? {
+        let lower = name.lowercased()
         if lower.contains("claude") { return .claude }
         if lower.contains("codex") { return .codex }
         if lower.contains("opencode") { return .opencode }
         return nil
     }
 
-    private static func isBenignShellProcessName(_ name: String?) -> Bool {
-        guard let name, !name.isEmpty else { return true }
-        return benignShells.contains(name.lowercased())
+    private static func isBenignShellProcessName(_ name: String) -> Bool {
+        !name.isEmpty && benignShells.contains(name.lowercased())
     }
 
     /// True when killing this pane would interrupt real work: a CLI agent
@@ -1387,7 +1390,7 @@ final class WorkspaceStore: ObservableObject {
     func paneNeedsCloseConfirmation(_ key: WorkspacePaneKey) -> Bool {
         if paneAgentState[key] != nil,
            let name = paneProcesses[key]?.lowercased(),
-           Self.agentKind(forProcessName: name) != nil {
+           Self.agentKind(named: name) != nil {
             return true
         }
         if let s = paneAgentState[key]?.status,
