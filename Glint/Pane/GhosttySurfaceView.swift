@@ -19,6 +19,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private var surface: ghostty_surface_t?
     private var trackingArea: NSTrackingArea?
     private var markedTextValue: NSAttributedString = NSAttributedString(string: "")
+    /// While non-nil, `insertText`/`doCommand(by:)` divert into this buffer
+    /// instead of touching the surface. Used to let the IME observe a chord
+    /// (e.g. Shift+Return) without emitting its text/command side-effects.
+    private var keyTextAccumulator: [String]?
     private let initialCwd: String?
     /// Identifier (`"<wsuuid>:<paneSeq>"`) passed into the pty as
     /// `$GLINT_PANE_ID` so CLI-agent hooks can address us back.
@@ -968,6 +972,22 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             NotificationCenter.default.post(
                 name: .glintPaneReturnPressed, object: nil, userInfo: ["pane": pk])
         }
+
+        if Self.isShiftReturn(event) && !hasMarkedText() {
+            // Let the input method observe the whole Shift+Return chord. Some
+            // Chinese IMEs toggle languages on a "standalone" Shift; if Return
+            // bypasses AppKit's text-input path, the IME can misclassify the
+            // chord and flip Chinese/English mode after inserting the newline.
+            // The accumulator swallows insertText/doCommand so this observation
+            // pass produces no newline or beep — ghostty still gets the press.
+            keyTextAccumulator = []
+            interpretKeyEvents([event])
+            keyTextAccumulator = nil
+            let handled = sendKey(event, action: GHOSTTY_ACTION_PRESS, surface: s)
+            if !handled { interpretKeyEvents([event]) }
+            return
+        }
+
         let hasBindingMod = mods.contains(.control) || mods.contains(.command)
             || optionActsAsMeta(mods, surface: s)
         if hasBindingMod || Self.isSpecialKey(event.keyCode) {
@@ -982,6 +1002,15 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             // a white-background "marked text" until the user moves the cursor.
             interpretKeyEvents([event])
         }
+    }
+
+    private static func isShiftReturn(_ event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return (event.keyCode == 36 || event.keyCode == 76)
+            && mods.contains(.shift)
+            && !mods.contains(.command)
+            && !mods.contains(.option)
+            && !mods.contains(.control)
     }
 
     /// Whether an Option-modified press should be routed through ghostty
@@ -1032,11 +1061,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        // Modifier-only events — forward as a key press w/ empty text so
-        // ghostty stays in sync with mods.
+        // `flagsChanged` is emitted for both modifier press and release.
+        // Sending every edge as PRESS leaves ghostty with phantom Shift
+        // events; with IMEs that use Shift to toggle languages this can feel
+        // like Shift+Enter fired Shift more than once.
         guard let s = surface else { return }
+        guard !hasMarkedText(),
+              let action = Self.modifierAction(for: event) else { return }
+
         var key = ghostty_input_key_s()
-        key.action = GHOSTTY_ACTION_PRESS
+        key.action = action
         key.mods = currentMods(event.modifierFlags)
         key.consumed_mods = ghostty_input_mods_e(rawValue: 0)
         key.keycode = UInt32(event.keyCode)
@@ -1044,6 +1078,55 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         key.unshifted_codepoint = 0
         key.composing = false
         _ = ghostty_surface_key(s, key)
+    }
+
+    /// Map a modifier-only `flagsChanged` event to a press/release action.
+    /// Returns nil for keycodes that aren't a known modifier. We use the
+    /// device-dependent side masks (left/right) so e.g. releasing the left
+    /// Shift while the right is still held still reads as a press.
+    private static func modifierAction(for event: NSEvent) -> ghostty_input_action_e? {
+        let modifierActive: Bool
+        switch event.keyCode {
+        case 0x39:
+            modifierActive = event.modifierFlags.contains(.capsLock)
+        case 0x38, 0x3C:
+            modifierActive = event.modifierFlags.contains(.shift)
+        case 0x3B, 0x3E:
+            modifierActive = event.modifierFlags.contains(.control)
+        case 0x3A, 0x3D:
+            modifierActive = event.modifierFlags.contains(.option)
+        case 0x37, 0x36:
+            modifierActive = event.modifierFlags.contains(.command)
+        default:
+            return nil
+        }
+
+        guard modifierActive else { return GHOSTTY_ACTION_RELEASE }
+
+        let flags = event.modifierFlags.rawValue
+        let sidePressed: Bool
+        switch event.keyCode {
+        case 0x38:
+            sidePressed = flags & UInt(NX_DEVICELSHIFTKEYMASK) != 0
+        case 0x3C:
+            sidePressed = flags & UInt(NX_DEVICERSHIFTKEYMASK) != 0
+        case 0x3B:
+            sidePressed = flags & UInt(NX_DEVICELCTLKEYMASK) != 0
+        case 0x3E:
+            sidePressed = flags & UInt(NX_DEVICERCTLKEYMASK) != 0
+        case 0x3A:
+            sidePressed = flags & UInt(NX_DEVICELALTKEYMASK) != 0
+        case 0x3D:
+            sidePressed = flags & UInt(NX_DEVICERALTKEYMASK) != 0
+        case 0x37:
+            sidePressed = flags & UInt(NX_DEVICELCMDKEYMASK) != 0
+        case 0x36:
+            sidePressed = flags & UInt(NX_DEVICERCMDKEYMASK) != 0
+        default:
+            sidePressed = true
+        }
+
+        return sidePressed ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE
     }
 
     @discardableResult
@@ -1675,6 +1758,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         case let s as NSAttributedString: text = s.string
         default: return
         }
+        if keyTextAccumulator != nil {
+            keyTextAccumulator?.append(text)
+            return
+        }
         guard !text.isEmpty, let s = surface else { return }
         text.withCString { ptr in
             // text_input is the IME-aware commit path. Use it for all
@@ -1686,6 +1773,14 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // it, leaving underlined ghost text trailing the real input).
         ghostty_surface_preedit(s, nil, 0)
         markedTextValue = NSAttributedString(string: "")
+    }
+
+    override func doCommand(by selector: Selector) {
+        // During a chord-observation pass (see keyDown's Shift+Return branch)
+        // swallow the command — otherwise insertNewline: etc. would beep or
+        // double-insert. Normal input falls through to the default handling.
+        guard keyTextAccumulator == nil else { return }
+        super.doCommand(by: selector)
     }
 
     func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
