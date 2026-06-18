@@ -51,7 +51,21 @@ struct WindowDragSurface: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     private final class DragView: NSView {
-        override var mouseDownCanMoveWindow: Bool { true }
+        // Drive the drag manually instead of letting AppKit auto-move the
+        // window: a view with `mouseDownCanMoveWindow = true` never receives
+        // `mouseDown`, so we couldn't see the double-click. With it false we
+        // get the event, start the drag ourselves for a single click, and
+        // zoom (maximize) on a double click (matching a real titlebar).
+        override var mouseDownCanMoveWindow: Bool { false }
+
+        override func mouseDown(with event: NSEvent) {
+            guard let window else { super.mouseDown(with: event); return }
+            if event.clickCount == 2 {
+                window.zoom(nil)
+                return
+            }
+            window.performDrag(with: event)
+        }
     }
 }
 
