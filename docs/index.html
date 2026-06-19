@@ -57,6 +57,11 @@
     color:#fff;font-weight:600;font-size:14px;border-radius:10px;padding:9px 16px;
     box-shadow:0 6px 20px rgba(124,108,240,.35);transition:transform .15s,box-shadow .15s;}
   .cta:hover{transform:translateY(-1px);box-shadow:0 10px 28px rgba(124,108,240,.5);}
+  .lang{display:inline-flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;
+    font-size:12.5px;font-family:var(--mono);}
+  .lang button{background:transparent;color:var(--ink-3);border:0;padding:7px 10px;cursor:pointer;transition:.15s;}
+  .lang button:hover{color:var(--ink-2);}
+  .lang button.on{background:rgba(124,108,240,.16);color:var(--ink);}
 
   /* ---------- hero ---------- */
   header{padding:86px 0 30px;text-align:center;}
@@ -132,6 +137,46 @@
     border-radius:5px;padding:1px 5px;margin-left:6px;vertical-align:middle;}
   .beta-break .empty{color:var(--ink-3);font-size:12.5px;font-family:var(--mono);padding:4px 0;}
 
+  /* history: stable versions — trend sparkline + leaderboard */
+  section.history{padding:96px 0 0;}
+  .trend{position:relative;max-width:760px;margin:0 auto 28px;border:1px solid var(--line);border-radius:16px;
+    background:linear-gradient(180deg,rgba(124,108,240,.05),rgba(255,255,255,.01));padding:16px 20px 12px;}
+  .trend-cap{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-bottom:6px;letter-spacing:.3px;}
+  .trend-svg{width:100%;height:74px;cursor:crosshair;}
+  .trend-svg svg{width:100%;height:100%;display:block;}
+  .trend-svg rect.sb{transition:fill .12s,opacity .12s;}
+  .trend-svg.hot rect.sb{opacity:.32;}
+  .trend-svg.hot rect.sb.on{opacity:1;fill:#fff;}
+  .trend-axis{display:flex;justify-content:space-between;margin-top:4px;
+    font-family:var(--mono);font-size:11px;color:var(--ink-3);}
+  .trend-tip{position:absolute;top:10px;transform:translateX(-50%);pointer-events:none;z-index:6;
+    display:flex;gap:9px;align-items:baseline;white-space:nowrap;
+    background:rgba(18,15,30,.94);border:1px solid var(--line);border-radius:9px;
+    padding:6px 11px;font-family:var(--mono);font-size:11.5px;
+    box-shadow:0 8px 24px rgba(0,0,0,.45);backdrop-filter:blur(10px);
+    opacity:0;transition:opacity .12s;}
+  .trend-tip.on{opacity:1;}
+  .trend-tip b{color:#fff;font-weight:600;}
+  .trend-tip .sep{color:var(--ink-3);opacity:.5;}
+  .trend-tip .dt{color:var(--ink-3);}
+  .trend-tip .dl{color:var(--accent);font-weight:600;}
+  .hist-top{max-width:760px;margin:0 auto;display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;}
+  .tcard{border:1px solid var(--line);border-radius:14px;padding:16px 18px;background:var(--panel);
+    transition:border-color .2s,transform .2s;}
+  .tcard:hover{border-color:rgba(124,108,240,.4);transform:translateY(-2px);}
+  .tcard .rk{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);}
+  .tcard .tv{font-family:var(--mono);font-size:13px;color:var(--ink-2);margin-top:3px;}
+  .tcard .tv a:hover{color:var(--ink);}
+  .tcard .tn{font-family:var(--mono);font-size:30px;font-weight:700;line-height:1;margin-top:10px;
+    font-variant-numeric:tabular-nums;letter-spacing:-.5px;
+    background:linear-gradient(120deg,#fff,var(--accent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;}
+  .tcard .tl{font-size:11px;color:var(--ink-3);margin-top:5px;}
+  .tcard .td{font-family:var(--mono);font-size:10.5px;color:var(--ink-3);opacity:.75;
+    margin-top:9px;padding-top:8px;border-top:1px solid var(--line);}
+  .tcard.first{border-color:rgba(124,108,240,.5);box-shadow:0 0 26px rgba(124,108,240,.18);}
+  .tcard.first .rk{color:var(--accent);}
+
   /* ---------- features ---------- */
   section.feat{padding:110px 0 0;}
   .sec-head{text-align:center;max-width:680px;margin:0 auto 56px;}
@@ -195,43 +240,46 @@
   <div class="wrap">
     <a class="brand" href="#top"><img src="./glint-logo.png" alt="Glint">Glint</a>
     <div class="links">
-      <a href="#features">功能</a>
-      <a href="#stats">数据</a>
-      <a href="#install">下载</a>
+      <a href="#features" data-i18n="nav_features">功能</a>
+      <a href="#stats" data-i18n="nav_stats">数据</a>
+      <a href="#install" data-i18n="nav_download">下载</a>
     </div>
     <div class="right">
+      <div class="lang" role="group" aria-label="language">
+        <button data-lang="zh">中</button><button data-lang="en">EN</button>
+      </div>
       <a class="ghbtn" href="https://github.com/chenbstack/glint" target="_blank" rel="noopener">
         <span class="star">★</span><span>Star</span><b id="nav-stars">35</b>
       </a>
-      <a class="cta" href="#install">下载</a>
+      <a class="cta" href="#install" data-i18n="cta">下载</a>
     </div>
   </div>
 </nav>
 
 <header id="top">
   <div class="wrap">
-    <span class="eyebrow">VIBE CODING · 多 AGENT 工作流</span>
-    <h1>一个人,<br><span class="grad">指挥一队 AI</span></h1>
-    <p class="sub">为 vibe coding 而生的精致 macOS 终端。底层基于 Ghostty,侧边栏一眼看清每个 AI 代理 —— 谁在跑、谁等你、谁跑完了。</p>
+    <span class="eyebrow" data-i18n="eyebrow">VIBE CODING · 多 AGENT 工作流</span>
+    <h1><span data-i18n="h1_a">一个人,</span><br><span class="grad" data-i18n="h1_b">指挥一队 AI</span></h1>
+    <p class="sub" data-i18n="sub">为 vibe coding 而生的精致 macOS 终端。底层基于 Ghostty,侧边栏一眼看清每个 AI 代理 —— 谁在跑、谁等你、谁跑完了。</p>
     <div class="actions">
-      <a class="btn-lg btn-primary" href="#install">↓ 下载 for macOS</a>
-      <a class="btn-lg btn-ghost" href="https://github.com/chenbstack/glint" target="_blank" rel="noopener">在 GitHub 上查看</a>
+      <a class="btn-lg btn-primary" href="#install" data-i18n="dl_macos">↓ 下载 for macOS</a>
+      <a class="btn-lg btn-ghost" href="https://github.com/chenbstack/glint" target="_blank" rel="noopener" data-i18n="view_gh">在 GitHub 上查看</a>
     </div>
     <div class="hero-meta">
       <span class="pill"><span class="star" style="color:var(--amber)">★</span> <b id="hero-stars">35</b> stars</span>
-      <span class="pill">↓ <b id="hero-downloads">234</b> 次下载</span>
-      <span class="pill">最新稳定版 <b id="hero-version">v0.1.21</b></span>
-      <span class="pill">MIT 开源</span>
+      <span class="pill">↓ <b id="hero-downloads">234</b> <span data-i18n="pill_dl">次下载</span></span>
+      <span class="pill"><span data-i18n="pill_latest">最新稳定版</span> <b id="hero-version">v0.1.21</b></span>
+      <span class="pill" data-i18n="pill_mit">MIT 开源</span>
     </div>
 
     <div class="shotwrap">
       <img class="shot" src="./screenshot.png" alt="Glint 主界面截图">
     </div>
     <div class="dots-legend">
-      <span><i style="color:var(--amber)"></i>运行中</span>
-      <span><i style="color:var(--red)"></i>等待批准</span>
-      <span><i style="color:var(--green)"></i>已完成</span>
-      <span><i style="color:var(--cyan)"></i>空闲</span>
+      <span><i style="color:var(--amber)"></i><span data-i18n="legend_run">运行中</span></span>
+      <span><i style="color:var(--red)"></i><span data-i18n="legend_perm">等待批准</span></span>
+      <span><i style="color:var(--green)"></i><span data-i18n="legend_done">已完成</span></span>
+      <span><i style="color:var(--cyan)"></i><span data-i18n="legend_idle">空闲</span></span>
     </div>
   </div>
 </header>
@@ -247,68 +295,85 @@
       </div>
       <div class="stat">
         <div class="num" id="s-downloads" data-target="234">—</div>
-        <div class="lbl">累计下载</div>
-        <div class="sub">手动 + 自动更新 + brew</div>
+        <div class="lbl" data-i18n="stat_total">累计下载</div>
+        <div class="sub" data-i18n="stat_total_sub">手动 + 自动更新 + brew</div>
       </div>
       <div class="stat">
         <div class="num" id="s-latest" data-target="64">—</div>
-        <div class="lbl">最新稳定版下载</div>
+        <div class="lbl" data-i18n="stat_latest">最新稳定版下载</div>
         <div class="sub" id="s-latest-ver">v0.1.21</div>
       </div>
       <div class="stat">
         <div class="num" id="s-beta" data-target="13">—</div>
-        <div class="lbl">Beta 通道(峰值)</div>
-        <div class="sub" id="s-beta-sub">最高单版 ≈ 通道人数</div>
+        <div class="lbl" data-i18n="stat_beta">Beta 通道(峰值)</div>
+        <div class="sub" id="s-beta-sub" data-i18n="stat_beta_sub">最高单版 ≈ 通道人数</div>
       </div>
     </div>
     <div class="beta-break" id="beta-break">
-      <div class="bh">测试版分布 · <b id="beta-break-ver">v0.1.21</b> 之后各 beta 下载数<span style="color:var(--ink-3)"> · 取峰值 ≈ beta 通道人数(求和会重复计同一人)</span></div>
+      <div class="bh"><span data-i18n="beta_hd_1">测试版分布 · </span><b id="beta-break-ver">v0.1.21</b><span style="color:var(--ink-3)" data-i18n="beta_hd_2"> 之后各 beta 下载数 · 取峰值 ≈ beta 通道人数(求和会重复计同一人)</span></div>
       <div id="beta-rows"></div>
     </div>
     <div class="live">
       <span class="dot"></span>
-      <span id="live-text">实时数据来自 GitHub · <a href="https://github.com/chenbstack/glint/releases" target="_blank" rel="noopener">Releases</a></span>
+      <span id="live-text"></span>
     </div>
   </div>
 </div>
+
+<!-- history: stable versions -->
+<section class="history" id="history">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2 data-i18n="hist_hd">历史稳定版下载</h2>
+      <p data-i18n="hist_sub">采用趋势 + 下载量榜单。</p>
+    </div>
+    <div class="trend">
+      <div class="trend-cap"><span data-i18n="hist_trend">采用趋势 · 旧 → 新</span></div>
+      <div id="trend-svg" class="trend-svg"></div>
+      <div class="trend-axis"><span id="trend-old"></span><span id="trend-new"></span></div>
+      <div id="trend-tip" class="trend-tip"></div>
+    </div>
+    <div class="hist-top" id="hist-top"></div>
+  </div>
+</section>
 
 <!-- features -->
 <section class="feat" id="features">
   <div class="wrap">
     <div class="sec-head">
-      <h2>为「多开党」设计的终端</h2>
-      <p>一个 workspace 里同时跑 Claude、Codex、OpenCode,分屏、多 tab,谁也不抢谁的注意力。</p>
+      <h2 data-i18n="feat_hd">为「多开党」设计的终端</h2>
+      <p data-i18n="feat_sub">一个 workspace 里同时跑 Claude、Codex、OpenCode,分屏、多 tab,谁也不抢谁的注意力。</p>
     </div>
     <div class="cards">
       <div class="card">
         <div class="ic">🎯</div>
-        <h3>per-pane 状态一览</h3>
-        <p>每个 pane 的 AI 代理在干什么,状态点 + 悬浮明细一眼看清,不用逐个切过去问。</p>
+        <h3 data-i18n="f1_h">per-pane 状态一览</h3>
+        <p data-i18n="f1_p">每个 pane 的 AI 代理在干什么,状态点 + 悬浮明细一眼看清,不用逐个切过去问。</p>
       </div>
       <div class="card">
         <div class="ic">⚡️</div>
-        <h3>多 agent 并行</h3>
-        <p>左边 Claude、右边 Codex、另一个 tab 跑 OpenCode,各自独立会话互不打扰。</p>
+        <h3 data-i18n="f2_h">多 agent 并行</h3>
+        <p data-i18n="f2_p">左边 Claude、右边 Codex、另一个 tab 跑 OpenCode,各自独立会话互不打扰。</p>
       </div>
       <div class="card">
         <div class="ic">🪟</div>
-        <h3>分屏 · 多标签</h3>
-        <p>workspace-global 的 pane 模型,⌘T 开标签、随手分屏,布局怎么切 key 都不变。</p>
+        <h3 data-i18n="f3_h">分屏 · 多标签</h3>
+        <p data-i18n="f3_p">workspace-global 的 pane 模型,⌘T 开标签、随手分屏,布局怎么切 key 都不变。</p>
       </div>
       <div class="card">
         <div class="ic">✨</div>
-        <h3>Liquid Glass 头部</h3>
-        <p>macOS 26 玻璃浮岛 header,终端内容顶到顶部,质感拉满。</p>
+        <h3 data-i18n="f4_h">Liquid Glass 头部</h3>
+        <p data-i18n="f4_p">macOS 26 玻璃浮岛 header,终端内容顶到顶部,质感拉满。</p>
       </div>
       <div class="card">
         <div class="ic">🚀</div>
-        <h3>基于 Ghostty</h3>
-        <p>底层用 Ghostty 渲染,SwiftUI + AppKit 重写交互,快且原生。</p>
+        <h3 data-i18n="f5_h">基于 Ghostty</h3>
+        <p data-i18n="f5_p">底层用 Ghostty 渲染,SwiftUI + AppKit 重写交互,快且原生。</p>
       </div>
       <div class="card">
         <div class="ic">🔄</div>
-        <h3>Sparkle 自动更新</h3>
-        <p>新版本静默推送、一键升级,brew cask 也能跟上。</p>
+        <h3 data-i18n="f6_h">Sparkle 自动更新</h3>
+        <p data-i18n="f6_p">新版本静默推送、一键升级,brew cask 也能跟上。</p>
       </div>
     </div>
 
@@ -316,15 +381,15 @@
       <div class="panel">
         <img src="./screenshot-sidebar.png" alt="侧边栏工作区状态">
         <div class="cap">
-          <h3>侧边栏:谁在跑 · 谁等你 · 谁跑完了</h3>
-          <p>每个工作区显示当前代理、状态与已用时长,红点等批准、绿勾已完成。</p>
+          <h3 data-i18n="sc1_h">侧边栏:谁在跑 · 谁等你 · 谁跑完了</h3>
+          <p data-i18n="sc1_p">每个工作区显示当前代理、状态与已用时长,红点等批准、绿勾已完成。</p>
         </div>
       </div>
       <div class="panel">
         <img src="./screenshot.png" alt="分屏多代理">
         <div class="cap">
-          <h3>分屏里跑多个代理</h3>
-          <p>同一个工作区左右分屏,两个 AI 各跑各的,状态实时汇总到 tab 与侧边栏。</p>
+          <h3 data-i18n="sc2_h">分屏里跑多个代理</h3>
+          <p data-i18n="sc2_p">同一个工作区左右分屏,两个 AI 各跑各的,状态实时汇总到 tab 与侧边栏。</p>
         </div>
       </div>
     </div>
@@ -335,8 +400,8 @@
 <section class="install" id="install">
   <div class="wrap">
     <div class="sec-head">
-      <h2>装上它</h2>
-      <p>Homebrew 一行装好,或直接下载 DMG。macOS 专属。</p>
+      <h2 data-i18n="inst_hd">装上它</h2>
+      <p data-i18n="inst_sub">Homebrew 一行装好,或直接下载 DMG。macOS 专属。</p>
     </div>
     <div class="term">
       <div class="bar">
@@ -346,22 +411,22 @@
       <div class="body">
         <div class="cmd">
           <code><span class="c">brew</span> tap chenbstack/glint</code>
-          <button class="copy" data-cmd="brew tap chenbstack/glint">复制</button>
+          <button class="copy" data-cmd="brew tap chenbstack/glint" data-i18n="copy">复制</button>
         </div>
         <div class="cmd">
           <code><span class="c">brew</span> install --cask glint</code>
-          <button class="copy" data-cmd="brew install --cask glint">复制</button>
+          <button class="copy" data-cmd="brew install --cask glint" data-i18n="copy">复制</button>
         </div>
         <div class="cmd">
-          <code class="m"># 升级</code>
+          <code class="m" data-i18n="term_upgrade"># 升级</code>
         </div>
         <div class="cmd">
           <code><span class="c">brew</span> upgrade --cask glint</code>
-          <button class="copy" data-cmd="brew update && brew upgrade --cask glint">复制</button>
+          <button class="copy" data-cmd="brew update && brew upgrade --cask glint" data-i18n="copy">复制</button>
         </div>
       </div>
     </div>
-    <p class="alt">不想用 Homebrew?<a id="dmg-link" href="https://github.com/chenbstack/glint/releases/latest" target="_blank" rel="noopener">直接下载最新 DMG →</a></p>
+    <p class="alt"><span data-i18n="alt_pre">不想用 Homebrew?</span><a id="dmg-link" href="https://github.com/chenbstack/glint/releases/latest" target="_blank" rel="noopener" data-i18n="alt_link">直接下载最新 DMG →</a></p>
   </div>
 </section>
 
@@ -370,7 +435,7 @@
     <a class="brand" href="#top" style="display:flex;align-items:center;gap:9px;">
       <img src="./glint-logo.png" alt="" style="width:22px;height:22px;border-radius:6px;">Glint
     </a>
-    <span>· MIT · 为 vibe coding 而生</span>
+    <span data-i18n="footer_tag">· MIT · 为 vibe coding 而生</span>
     <div class="right">
       <a href="https://github.com/chenbstack/glint" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/chenbstack/glint/releases" target="_blank" rel="noopener">Releases</a>
@@ -382,6 +447,135 @@
 <script>
 const REPO = 'chenbstack/glint';
 const fmt = n => n.toLocaleString('en-US');
+
+// ---- i18n ----------------------------------------------------------------
+const I18N = {
+  zh: {
+    nav_features:'功能', nav_stats:'数据', nav_download:'下载', cta:'下载',
+    eyebrow:'VIBE CODING · 多 AGENT 工作流',
+    h1_a:'一个人,', h1_b:'指挥一队 AI',
+    sub:'为 vibe coding 而生的精致 macOS 终端。底层基于 Ghostty,侧边栏一眼看清每个 AI 代理 —— 谁在跑、谁等你、谁跑完了。',
+    dl_macos:'↓ 下载 for macOS', view_gh:'在 GitHub 上查看',
+    pill_dl:'次下载', pill_latest:'最新稳定版', pill_mit:'MIT 开源',
+    legend_run:'运行中', legend_perm:'等待批准', legend_done:'已完成', legend_idle:'空闲',
+    stat_total:'累计下载', stat_total_sub:'手动 + 自动更新 + brew',
+    stat_latest:'最新稳定版下载', stat_beta:'Beta 通道(峰值)', stat_beta_sub:'最高单版 ≈ 通道人数',
+    beta_hd_1:'测试版分布 · ', beta_hd_2:' 之后各 beta 下载数 · 取峰值 ≈ beta 通道人数(求和会重复计同一人)',
+    beta_peak:'峰值', beta_none:'暂无更新的测试版',
+    beta_empty:'当前没有比稳定版更新的测试版 —— beta 通道和稳定版同步',
+    hist_hd:'历史稳定版下载', hist_sub:'采用趋势 + 下载量榜单。',
+    hist_trend:'采用趋势 · 旧 → 新',
+    feat_hd:'为「多开党」设计的终端',
+    feat_sub:'一个 workspace 里同时跑 Claude、Codex、OpenCode,分屏、多 tab,谁也不抢谁的注意力。',
+    f1_h:'per-pane 状态一览', f1_p:'每个 pane 的 AI 代理在干什么,状态点 + 悬浮明细一眼看清,不用逐个切过去问。',
+    f2_h:'多 agent 并行', f2_p:'左边 Claude、右边 Codex、另一个 tab 跑 OpenCode,各自独立会话互不打扰。',
+    f3_h:'分屏 · 多标签', f3_p:'workspace-global 的 pane 模型,⌘T 开标签、随手分屏,布局怎么切 key 都不变。',
+    f4_h:'Liquid Glass 头部', f4_p:'macOS 26 玻璃浮岛 header,终端内容顶到顶部,质感拉满。',
+    f5_h:'基于 Ghostty', f5_p:'底层用 Ghostty 渲染,SwiftUI + AppKit 重写交互,快且原生。',
+    f6_h:'Sparkle 自动更新', f6_p:'新版本静默推送、一键升级,brew cask 也能跟上。',
+    sc1_h:'侧边栏:谁在跑 · 谁等你 · 谁跑完了', sc1_p:'每个工作区显示当前代理、状态与已用时长,红点等批准、绿勾已完成。',
+    sc2_h:'分屏里跑多个代理', sc2_p:'同一个工作区左右分屏,两个 AI 各跑各的,状态实时汇总到 tab 与侧边栏。',
+    inst_hd:'装上它', inst_sub:'Homebrew 一行装好,或直接下载 DMG。macOS 专属。',
+    term_upgrade:'# 升级', copy:'复制', copied:'已复制 ✓',
+    alt_pre:'不想用 Homebrew?', alt_link:'直接下载最新 DMG →',
+    footer_tag:'· MIT · 为 vibe coding 而生',
+    releases:'Releases',
+    beta_sub_peak: t => `峰值 · ${t}`,
+    live_fresh: t => `实时数据来自 GitHub · 更新于 ${t} · `,
+    live_cache: t => `缓存数据 · ${t} 抓取 · 10 分钟内不重复请求 · `,
+    live_rate: m => `GitHub API 限流(本 IP 共享额度,约 ${m} 分钟后恢复)· 显示缓存数据`,
+    live_offline_cache:'离线 · 显示的是缓存数据',
+    live_offline_static:'离线 · 显示的是页面预置数据',
+  },
+  en: {
+    nav_features:'Features', nav_stats:'Stats', nav_download:'Download', cta:'Download',
+    eyebrow:'VIBE CODING · MULTI-AGENT WORKFLOW',
+    h1_a:'One person,', h1_b:'a whole crew of AI',
+    sub:'A refined macOS terminal built for vibe coding. Powered by Ghostty — the sidebar shows every AI agent at a glance: who’s running, who needs you, who’s done.',
+    dl_macos:'↓ Download for macOS', view_gh:'View on GitHub',
+    pill_dl:'downloads', pill_latest:'Latest stable', pill_mit:'MIT licensed',
+    legend_run:'Running', legend_perm:'Needs approval', legend_done:'Done', legend_idle:'Idle',
+    stat_total:'Total downloads', stat_total_sub:'manual + auto-update + brew',
+    stat_latest:'Latest stable downloads', stat_beta:'Beta channel (peak)', stat_beta_sub:'peak single build ≈ channel size',
+    beta_hd_1:'Beta breakdown · downloads per beta after ', beta_hd_2:' · peak ≈ beta channel size (summing double-counts the same user)',
+    beta_peak:'peak', beta_none:'no beta newer than stable',
+    beta_empty:'No beta newer than the stable release — the beta channel is in sync.',
+    hist_hd:'Stable release downloads', hist_sub:'Adoption trend + download leaderboard.',
+    hist_trend:'Adoption · old → new',
+    feat_hd:'A terminal for power multitaskers',
+    feat_sub:'Run Claude, Codex and OpenCode in one workspace — split panes, tabs, none stealing your attention.',
+    f1_h:'Per-pane status at a glance', f1_p:'See what each pane’s agent is doing — status dots plus a hover breakdown, no switching around to check.',
+    f2_h:'Multiple agents in parallel', f2_p:'Claude on the left, Codex on the right, OpenCode in another tab — independent sessions, no crosstalk.',
+    f3_h:'Splits & tabs', f3_p:'A workspace-global pane model: ⌘T for tabs, split anytime — keys stay stable however you rearrange.',
+    f4_h:'Liquid Glass header', f4_p:'A macOS 26 floating glass header; terminal content runs right to the top.',
+    f5_h:'Built on Ghostty', f5_p:'Ghostty under the hood, interaction rewritten in SwiftUI + AppKit — fast and native.',
+    f6_h:'Sparkle auto-update', f6_p:'New versions pushed silently, one-click upgrade; the brew cask keeps up too.',
+    sc1_h:'Sidebar: who’s running · who needs you · who’s done', sc1_p:'Each workspace shows its agent, status and elapsed time — red dot waiting for approval, green check done.',
+    sc2_h:'Many agents in one split', sc2_p:'Split a workspace left/right, two AIs each doing their thing, status rolled up live to the tab and sidebar.',
+    inst_hd:'Get it', inst_sub:'One line with Homebrew, or grab the DMG. macOS only.',
+    term_upgrade:'# upgrade', copy:'Copy', copied:'Copied ✓',
+    alt_pre:'Prefer not to use Homebrew? ', alt_link:'Download the latest DMG →',
+    footer_tag:'· MIT · built for vibe coding',
+    releases:'Releases',
+    beta_sub_peak: t => `peak · ${t}`,
+    live_fresh: t => `Live from GitHub · updated ${t} · `,
+    live_cache: t => `Cached · fetched ${t} · no refetch within 10 min · `,
+    live_rate: m => `GitHub API rate-limited (shared per-IP budget, ~${m} min to reset) · showing cached data`,
+    live_offline_cache:'Offline · showing cached data',
+    live_offline_static:'Offline · showing preset data',
+  },
+};
+let LANG = (()=>{
+  const saved = localStorage.getItem('glint-lang');
+  if(saved === 'zh' || saved === 'en') return saved;
+  return (navigator.language||'').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+})();
+const L = () => I18N[LANG];
+
+let LAST_D = null;                 // last rendered payload, for re-render on lang switch
+let liveState = { kind:'none' };   // current live-line state, language-agnostic
+let TREND = null;                  // {tags,dates,dls} oldest→newest, for trend hover
+
+function applyLang(){
+  document.documentElement.lang = LANG === 'zh' ? 'zh-CN' : 'en';
+  document.title = LANG === 'zh'
+    ? 'Glint · 为 vibe coding 而生的 macOS 终端'
+    : 'Glint · a macOS terminal built for vibe coding';
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const v = I18N[LANG][el.dataset.i18n];
+    if(typeof v === 'string') el.textContent = v;
+  });
+  document.querySelectorAll('.lang button').forEach(b=>b.classList.toggle('on', b.dataset.lang === LANG));
+  if(LAST_D) render(LAST_D);       // rebuild beta-sub + breakdown in new language
+  renderLive();                    // rebuild the live line in new language
+}
+
+function setLang(lang){
+  if(lang === LANG) return;
+  LANG = lang;
+  localStorage.setItem('glint-lang', lang);
+  applyLang();
+}
+
+function renderLive(){
+  const el = document.getElementById('live-text');
+  if(!el) return;
+  const d = L();
+  const rel = `<a href="https://github.com/${REPO}/releases" target="_blank" rel="noopener">${d.releases}</a>`;
+  let html = '', ok = true;
+  switch(liveState.kind){
+    case 'fresh':         html = d.live_fresh(liveState.arg) + rel; break;
+    case 'cache':         html = d.live_cache(liveState.arg) + rel; break;
+    case 'rate':          html = d.live_rate(liveState.arg); ok = false; break;
+    case 'offlineCache':  html = d.live_offline_cache; ok = false; break;
+    case 'offlineStatic': html = d.live_offline_static; ok = false; break;
+  }
+  el.innerHTML = html;
+  const dot = document.querySelector('.live .dot');
+  dot.style.background = ok ? 'var(--green)' : 'var(--amber)';
+  dot.style.boxShadow = '0 0 8px ' + (ok ? 'var(--green)' : 'var(--amber)');
+}
+function setLive(kind, arg){ liveState = { kind, arg }; renderLive(); }
 
 // count-up animation — rolls from the currently shown value to the new one,
 // and no-ops when the value hasn't changed (so 10-min polls don't re-roll).
@@ -402,26 +596,19 @@ function renderBetaBreakdown(stableVer, betas, peak){
   document.getElementById('beta-break-ver').textContent = stableVer;
   const box = document.getElementById('beta-rows');
   if(!betas.length){
-    box.innerHTML = '<div class="empty">当前没有比稳定版更新的测试版 —— beta 通道和稳定版同步</div>';
+    box.innerHTML = `<div class="empty">${L().beta_empty}</div>`;
     return;
   }
   const max = Math.max(1, ...betas.map(b=>b.dl));
   box.innerHTML = betas.map(b => {
     const top = b.dl === peak && peak > 0;
     return `<div class="beta-row${top?' peak':''}">
-       <span class="v">${b.tag.replace(/^v/,'')}${top?' <span class="tag">峰值</span>':''}</span>
+       <span class="v">${b.tag.replace(/^v/,'')}${top?` <span class="tag">${L().beta_peak}</span>`:''}</span>
        <span class="track"><span class="fill" data-w="${Math.round(b.dl/max*100)}"></span></span>
        <span class="n">${fmt(b.dl)}</span>
      </div>`;
   }).join('');
   requestAnimationFrame(()=>box.querySelectorAll('.fill').forEach(f=>f.style.width=f.dataset.w+'%'));
-}
-
-function setLive(txt, ok=true){
-  const el = document.getElementById('live-text');
-  el.innerHTML = txt;
-  document.querySelector('.live .dot').style.background = ok ? 'var(--green)' : 'var(--amber)';
-  document.querySelector('.live .dot').style.boxShadow = '0 0 8px ' + (ok?'var(--green)':'var(--amber)');
 }
 
 // ---- data layer ----------------------------------------------------------
@@ -451,6 +638,10 @@ function parse(repo, rels){
   // peak single-beta download ≈ beta channel population (summing would
   // double-count: each beta user auto-updates through every beta).
   const betaPeak = betas.reduce((m,b)=>Math.max(m,b.dl), 0);
+  // every stable (non-prerelease) release, newest first, for the history chart
+  const stables = rels
+    .filter(r => !r.prerelease && !r.draft)
+    .map(r => ({ tag: r.tag_name, dl: dmgDl(r), url: r.html_url, date: r.published_at }));
   return {
     stars: repo.stargazers_count,
     total,
@@ -458,19 +649,77 @@ function parse(repo, rels){
     ver: latestStable ? latestStable.tag_name : 'v0.1.21',
     betas, betaPeak,
     peakTag: (betas.find(b=>b.dl===betaPeak)||{}).tag || '',
+    stables,
     dmgUrl: latestStable ? latestStable.html_url : null,
   };
 }
 
+const verLabel = (s) => s.url
+  ? `<a href="${s.url}" target="_blank" rel="noopener">${s.tag.replace(/^v/,'')}</a>`
+  : s.tag.replace(/^v/,'');
+
+// adoption mini-chart across versions, oldest → newest — one column per
+// release so every version stays a visible node (a line collapses the long
+// tail of single-digit versions onto the baseline). Linear scale keeps the
+// magnitudes honest; a min height keeps non-zero versions visible.
+function sparkSVG(vals, tags, dates){
+  const W = 100, H = 30, max = Math.max(1, ...vals), n = vals.length;
+  const slot = W / n, bw = slot * 0.62, peakI = vals.indexOf(max);
+  const bars = vals.map((v,i)=>{
+    const h = v === 0 ? 0 : Math.max(1.4, (v/max)*(H-1.5));
+    const x = i*slot + (slot-bw)/2;
+    const top = i === peakI;
+    return `<rect class="sb" x="${x.toFixed(2)}" y="${(H-h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}"
+      fill="${top ? 'var(--accent)' : 'rgba(124,108,240,.5)'}"
+      ${top ? 'filter="url(#glow)"' : ''}></rect>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="0" stdDeviation="0.6" flood-color="#7C6CF0" flood-opacity="0.9"/>
+    </filter></defs>
+    ${bars}
+  </svg>`;
+}
+
+function renderStableHistory(stables){
+  const top = document.getElementById('hist-top');
+  if(!top || !stables.length) return;
+  const chrono = [...stables].reverse();            // API is newest-first → oldest-first
+  const ranked = [...stables].sort((a,b)=> b.dl - a.dl);
+
+  // trend
+  document.getElementById('trend-svg').innerHTML =
+    sparkSVG(chrono.map(s=>s.dl), chrono.map(s=>s.tag), chrono.map(s=>s.date));
+  const first = chrono[0], last = chrono[chrono.length-1];
+  document.getElementById('trend-old').textContent = `${first.tag} · ${ymd(first.date)}`;
+  document.getElementById('trend-new').textContent = `${last.tag} · ${ymd(last.date)}`;
+  TREND = { tags: chrono.map(s=>s.tag), dates: chrono.map(s=>s.date), dls: chrono.map(s=>s.dl) };
+
+  // leaderboard (top 4 — one row)
+  top.innerHTML = ranked.slice(0,4).map((s,i)=>`
+    <div class="tcard${i===0?' first':''}">
+      <div class="rk">#${i+1}</div>
+      <div class="tv">${verLabel(s)}</div>
+      <div class="tn">${fmt(s.dl)}</div>
+      <div class="tl">${L().pill_dl}</div>
+      <div class="td">${ymd(s.date)}</div>
+    </div>`).join('');
+}
+
+// ISO timestamp → YYYY-MM-DD (release date, mono-friendly, locale-agnostic)
+const ymd = iso => (iso || '').slice(0, 10);
+
 function render(d){
+  LAST_D = d;
   animate(document.getElementById('s-stars'), d.stars);
   animate(document.getElementById('s-downloads'), d.total);
   animate(document.getElementById('s-latest'), d.stableDl);
   animate(document.getElementById('s-beta'), d.betaPeak);
   document.getElementById('s-latest-ver').textContent = d.ver;
   document.getElementById('s-beta-sub').textContent =
-    d.betas.length ? `峰值 · ${d.peakTag.replace(/^v/,'')}` : '暂无更新的测试版';
+    d.betas.length ? L().beta_sub_peak(d.peakTag.replace(/^v/,'')) : L().beta_none;
   renderBetaBreakdown(d.ver, d.betas, d.betaPeak);
+  renderStableHistory(d.stables || []);
   document.getElementById('nav-stars').textContent = fmt(d.stars);
   document.getElementById('hero-stars').textContent = fmt(d.stars);
   document.getElementById('hero-downloads').textContent = fmt(d.total);
@@ -493,22 +742,23 @@ async function fetchFresh(){
   if(repoR.status === 403 || relsR.status === 403){
     const reset = relsR.headers.get('x-ratelimit-reset');
     const mins = reset ? Math.max(1, Math.ceil((reset - Date.now()/1000)/60)) : 60;
-    setLive(`GitHub API 限流(本 IP 共享额度,约 ${mins} 分钟后恢复)· 显示缓存数据`, false);
+    setLive('rate', mins);
     return null;
   }
   const d = parse(await repoR.json(), await relsR.json());
   writeCache(d);
-  const now = new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  setLive(`实时数据来自 GitHub · 更新于 ${now} · <a href="https://github.com/${REPO}/releases" target="_blank" rel="noopener">Releases</a>`);
+  setLive('fresh', clock(Date.now(), true));
   return d;
 }
+
+const clock = (ts, sec) => new Date(ts).toLocaleTimeString(LANG === 'zh' ? 'zh-CN' : 'en-US',
+  sec ? {hour:'2-digit',minute:'2-digit',second:'2-digit'} : {hour:'2-digit',minute:'2-digit'});
 
 async function refresh(force){
   const c = readCache();
   if(c) render(c.d);                                   // instant paint from cache
   if(c && !force && Date.now() - c.ts < FRESH_MS){     // still fresh → no network
-    const t = new Date(c.ts).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'});
-    setLive(`缓存数据 · ${t} 抓取 · 10 分钟内不重复请求 · <a href="https://github.com/${REPO}/releases" target="_blank" rel="noopener">Releases</a>`);
+    setLive('cache', clock(c.ts));
     return;
   }
   try{
@@ -516,8 +766,8 @@ async function refresh(force){
     if(d) render(d);
     else if(!c) fallbackStatic();                      // rate-limited & nothing cached
   }catch(e){
-    if(c){ setLive('离线 · 显示的是缓存数据', false); }
-    else { fallbackStatic(); setLive('离线 · 显示的是页面预置数据', false); }
+    if(c){ setLive('offlineCache'); }
+    else { fallbackStatic(); setLive('offlineStatic'); }
   }
 }
 
@@ -525,13 +775,57 @@ async function refresh(force){
 document.querySelectorAll('.copy').forEach(b=>{
   b.addEventListener('click', async ()=>{
     try{ await navigator.clipboard.writeText(b.dataset.cmd);
-      const t = b.textContent; b.textContent = '已复制 ✓'; b.classList.add('ok');
-      setTimeout(()=>{ b.textContent = t; b.classList.remove('ok'); }, 1400);
+      b.textContent = L().copied; b.classList.add('ok');
+      setTimeout(()=>{ b.textContent = L().copy; b.classList.remove('ok'); }, 1400);
     }catch(_){}
   });
 });
 
-refresh();
+// language toggle
+document.querySelectorAll('.lang button').forEach(b=>{
+  b.addEventListener('click', ()=> setLang(b.dataset.lang));
+});
+
+// trend hover: map cursor X to a column (bars stretch to fill, so go by
+// proportion, not by hitting the thin rect), highlight it, float a tooltip.
+(function trendHover(){
+  const box = document.getElementById('trend-svg');
+  const tip = document.getElementById('trend-tip');
+  if(!box || !tip) return;
+  let shown = -1;
+  const move = e=>{
+    if(!TREND || !TREND.tags.length){ leave(); return; }
+    const r = box.getBoundingClientRect();
+    const n = TREND.tags.length;
+    let i = Math.floor((e.clientX - r.left) / r.width * n);
+    i = Math.max(0, Math.min(n-1, i));
+    box.classList.add('hot');
+    if(i !== shown){
+      const bars = box.querySelectorAll('rect.sb');
+      bars.forEach((b,j)=> b.classList.toggle('on', j===i));
+      tip.innerHTML = `<b>${TREND.tags[i]}</b>`
+        + `<span class="dt">${ymd(TREND.dates[i])}</span>`
+        + `<span class="sep">·</span>`
+        + `<span class="dl">${fmt(TREND.dls[i])}</span>`;
+      shown = i;
+    }
+    const tr = tip.parentElement.getBoundingClientRect();   // .trend box
+    const x = Math.max(46, Math.min(tr.width - 46, e.clientX - tr.left));
+    tip.style.left = x + 'px';
+    tip.classList.add('on');
+  };
+  const leave = ()=>{
+    box.classList.remove('hot');
+    tip.classList.remove('on');
+    box.querySelectorAll('rect.sb.on').forEach(b=> b.classList.remove('on'));
+    shown = -1;
+  };
+  box.addEventListener('mousemove', move);
+  box.addEventListener('mouseleave', leave);
+})();
+
+applyLang();   // paint static text in the chosen language first
+refresh();     // then numbers + live line
 // background poll, paused while the tab is hidden; refetch on return if stale
 setInterval(()=>{ if(!document.hidden) refresh(); }, POLL_MS);
 document.addEventListener('visibilitychange', ()=>{
