@@ -284,15 +284,27 @@ final class GhosttyManager {
 
     private static let writeClipboard: ghostty_runtime_write_clipboard_cb = { _, _, contentPtr, count, _ in
         guard let contentPtr, count > 0 else { return }
-        let content = contentPtr.pointee
-        guard let cstr = content.data else { return }
-        // Honor `count`, not a NUL terminator: ghostty hands us a byte buffer
-        // + length (not guaranteed NUL-terminated). String(cString:) would
-        // truncate at an embedded NUL, and a reused buffer could leak a prior
-        // clipboard's tail. Mirrors the OPEN_URL handler below.
-        let s = cstr.withMemoryRebound(to: UInt8.self, capacity: Int(count)) { bytes in
-            String(decoding: UnsafeBufferPointer(start: bytes, count: Int(count)), as: UTF8.self)
+        // `count` is the number of clipboard CONTENT ENTRIES, not a byte length:
+        // ghostty hands us an array of `ghostty_clipboard_content_s`, each a
+        // {mime, data} pair where `data` is a NUL-terminated C string (the
+        // struct carries no length field). Earlier code mistook `count` for
+        // `data`'s byte length — unlike OPEN_URL, which really does get an
+        // explicit length — and decoded only the first `count` bytes of the
+        // first entry, truncating any copied text to a single character.
+        // Walk the entries preferring text/plain, like ghostty's own macOS app.
+        var fallback: String?
+        var plainText: String?
+        for i in 0..<Int(count) {
+            let item = contentPtr[i]
+            guard let dataPtr = item.data else { continue }
+            let data = String(cString: dataPtr)
+            if fallback == nil { fallback = data }
+            if let mimePtr = item.mime, String(cString: mimePtr) == "text/plain" {
+                plainText = data
+                break
+            }
         }
+        guard let s = plainText ?? fallback else { return }
         DispatchQueue.main.async {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(s, forType: .string)
