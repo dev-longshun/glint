@@ -130,7 +130,10 @@ enum Persistence {
             var j = 0
             while j + 1 < panes.count {
                 let value = panes[j + 1]
-                let blob = (try? JSONSerialization.data(withJSONObject: value)) ?? Data()
+                // SafeJSON, not a bare data(withJSONObject:): the latter throws
+                // an Objective-C NSException (uncatchable by try?) on a stray
+                // non-JSON leaf or non-finite number. Project-wide convention.
+                let blob = SafeJSON.data(value) ?? Data()
                 if (try? pdecoder.decode(Pane.self, from: blob)) != nil {
                     kept.append(panes[j]); kept.append(value)
                 } else {
@@ -142,6 +145,6 @@ enum Persistence {
         }
         guard changed else { return nil }
         root["workspaces"] = workspaces
-        return try? JSONSerialization.data(withJSONObject: root)
+        return SafeJSON.data(root)
     }
 }
