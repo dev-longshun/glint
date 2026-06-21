@@ -131,7 +131,7 @@ struct GitService {
     /// Run git, throwing `commandFailed` on a non-zero exit unless `allowFailure`
     /// (used for the many "exit code IS the answer" probes like branch-exists).
     @discardableResult
-    private func git(_ args: [String], cwd: String?, allowFailure: Bool = false) async throws -> GitResult {
+    func git(_ args: [String], cwd: String?, allowFailure: Bool = false) async throws -> GitResult {
         let r = try await runner.run(args, cwd: cwd)
         if !r.ok && !allowFailure {
             throw GitError.commandFailed(args: args, exitCode: r.exitCode, stderr: r.stderr)

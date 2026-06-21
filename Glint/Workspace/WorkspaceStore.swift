@@ -481,6 +481,12 @@ final class WorkspaceStore: ObservableObject {
     /// (large/network repo) letting 5s ticks stack into overlapping subprocesses
     /// whose out-of-order results overwrite a newer status.
     private var gitInFlight: Set<UUID> = []
+    /// Resolved cwds confirmed (via a `rev-parse` probe) NOT to be inside a git
+    /// repo. A plain shell sitting in such a dir is skipped on subsequent polls
+    /// instead of re-spawning a doomed `git status` every tick. Only ever holds
+    /// *guessed* paths (plain sources); bound repo/worktree paths are never
+    /// cached, and a path is evicted the moment a status there succeeds.
+    private var knownNonRepoPaths: Set<String> = []
 
     /// Out-of-band git (Plan B): runs as a subprocess, never via the terminal.
     let git = GitService()
@@ -2042,6 +2048,12 @@ final class WorkspaceStore: ObservableObject {
         }
         paneAgentState = paneAgentState.filter { $0.key.workspace != id }
         paneProcesses = paneProcesses.filter { $0.key.workspace != id }
+        // Drop the workspace-keyed git cache + any unconsumed agent launch input
+        // so closing (incl. a worktree via "Close Workspace") leaves nothing
+        // stale behind. (removeWorktreeWorkspace cleared gitStatuses itself; this
+        // covers the plain Close path too.)
+        gitStatuses[id] = nil
+        pendingInitialInput = pendingInitialInput.filter { $0.key.workspace != id }
 
         let wasSelected = selectedWorkspaceID == id
         workspaces.remove(at: idx)
@@ -2271,6 +2283,21 @@ final class WorkspaceStore: ObservableObject {
             [URL(fileURLWithPath: (path as NSString).expandingTildeInPath)])
     }
 
+    /// Open the read-only Review window for a workspace. Always offers the
+    /// working-tree scope; for a worktree with a known base branch it also offers
+    /// the whole-branch (`base...HEAD`) scope, so the segmented control appears.
+    func openReview(for ws: Workspace) {
+        guard let repo = ws.source.gitPath ?? effectiveGitPath(for: ws) else {
+            NSSound.beep()
+            return
+        }
+        var scopes: [DiffScope] = [.workingTree]
+        if let base = ws.source.baseBranch, !base.isEmpty {
+            scopes.append(.branch(base: base))
+        }
+        ReviewWindowController.shared.present(repo: repo, title: ws.displayName, scopes: scopes)
+    }
+
     // MARK: lightweight git status (non-persistent cache)
 
     /// The path git status/worktree actions run against for a workspace: the
@@ -2292,6 +2319,14 @@ final class WorkspaceStore: ObservableObject {
             if gitStatuses[id] != nil { gitStatuses[id] = nil }
             return
         }
+        // Bound sources (worktree/repo) are known repos and must never be
+        // negative-cached (a transient git error mustn't freeze their badge); a
+        // plain shell's guessed cwd that we've confirmed isn't a repo is skipped.
+        let bound = ws.source.gitPath != nil
+        if !bound, knownNonRepoPaths.contains(path) {
+            if gitStatuses[id] != nil { gitStatuses[id] = nil }
+            return
+        }
         // Coalesce: if a poll for this workspace is already running, skip — the
         // in-flight one will publish the freshest result.
         guard !gitInFlight.contains(id) else { return }
@@ -2299,9 +2334,13 @@ final class WorkspaceStore: ObservableObject {
         defer { gitInFlight.remove(id) }
         if let st = try? await git.status(at: path) {
             gitStatuses[id] = st
-        } else if gitStatuses[id] != nil {
+            knownNonRepoPaths.remove(path)
+        } else {
             // cwd left the repo (or never was one) — drop the stale badge.
-            gitStatuses[id] = nil
+            if gitStatuses[id] != nil { gitStatuses[id] = nil }
+            // Confirm it's genuinely not a repo (not a transient git error)
+            // before caching, so we stop re-polling plain shells in non-repo dirs.
+            if !bound, await git.repoRoot(at: path) == nil { knownNonRepoPaths.insert(path) }
         }
     }
 
@@ -2310,8 +2349,22 @@ final class WorkspaceStore: ObservableObject {
     /// tab's git button appears live as you `cd` around). One `git status` per
     /// workspace; non-repo cwds fail fast and clear their cache entry.
     func refreshAllGitStatuses() {
-        for ws in workspaces where effectiveGitPath(for: ws) != nil {
+        for ws in workspaces where shouldTimerPoll(ws) {
             Task { await refreshGitStatus(for: ws.id) }
+        }
+    }
+
+    /// Which workspaces the 5s timer fans out to. Bound repo/worktree sources
+    /// keep their dirty badge live; the selected workspace is what the user is
+    /// looking at. Other plain shells are NOT timer-polled — they refresh on
+    /// demand via `refreshGitStatusNow` when switched/focused, which avoids
+    /// spawning N git subprocesses every tick for background terminals.
+    private func shouldTimerPoll(_ ws: Workspace) -> Bool {
+        guard effectiveGitPath(for: ws) != nil else { return false }
+        if ws.id == selectedWorkspaceID { return true }
+        switch ws.source.kind {
+        case .localRepo, .localWorktree: return true
+        default: return false
         }
     }
 

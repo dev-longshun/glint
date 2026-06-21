@@ -63,6 +63,16 @@ struct GitStatusPopover: View {
                     .background(RoundedRectangle(cornerRadius: 7).fill(Color.black.opacity(0.28)))
             }
 
+            // Read-only review of the changes in this workspace: opens a separate
+            // window with the changed-file list + unified diff (working-tree vs
+            // HEAD, and — for worktrees — the whole branch vs its base).
+            if path != nil {
+                popButton("Review Changes…", prominent: true) {
+                    close()
+                    store.openReview(for: ws)
+                }
+            }
+
             // A plain git workspace isn't isolated — offer the one-click jump to
             // a worktree cut from this very repo (the "switch to a worktree"
             // affordance the tab branch chip implies).

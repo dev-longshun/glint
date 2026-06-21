@@ -55,7 +55,12 @@ struct NewWorkspaceSheet: View {
         .frame(width: 760, height: 540)
         .background(Theme.bgWindow)
         .preferredColorScheme(.dark)
-        .onAppear { selected = SourceTab(rawValue: store.newWorkspaceSheetTab) ?? .plain }
+        .onAppear {
+            // Clamp to an ENABLED tab: an unknown rawValue OR the disabled `.ssh`
+            // (Phase 2) would otherwise land on a blank EmptyView with no nav out.
+            let t = SourceTab(rawValue: store.newWorkspaceSheetTab) ?? .plain
+            selected = (t == .ssh) ? .plain : t
+        }
     }
 
     @ViewBuilder private var navBackground: some View {
@@ -174,30 +179,84 @@ private struct PlainPane: View {
 private struct RepoPane: View {
     @EnvironmentObject var store: WorkspaceStore
     @State private var repo = ""
+    @State private var repoRoot: String?       // confirmed top-level, or nil
+    @State private var detecting = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             SheetHeader(title: "Local Repo",
                         subtitle: "Open a workspace on an existing checkout (not isolated).")
             VStack(alignment: .leading, spacing: 14) {
-                LabeledField(label: "Repository", text: $repo, mono: true,
-                             placeholder: "/path/to/repo")
+                repoField
                 Callout(icon: "arrow.triangle.branch", tint: Theme.accentBright,
                         "Opens directly on the current checkout. For isolation across parallel agents, choose Local Worktree.")
                 Spacer()
             }
             .padding(20)
-            SheetFooter(note: "Uses the existing checkout in place.",
+            // Gate Open on a CONFIRMED repo (mirrors the Worktree pane): a non-git
+            // path would otherwise silently open as a plain shell with no feedback.
+            SheetFooter(note: repoRoot == nil ? "Pick a git repository to continue."
+                                              : "Uses the existing checkout in place.",
                         primary: "Open Workspace",
-                        primaryEnabled: !repo.trimmingCharacters(in: .whitespaces).isEmpty,
+                        primaryEnabled: repoRoot != nil,
                         busy: false) {
-                // Open the shell anchored at the typed directory (was a stub that
-                // called addWorkspace() and dropped the path → home dir). The
-                // store upgrades the source to .localRepo once git confirms it.
-                store.openDirectoryWorkspace(repo)
+                store.openDirectoryWorkspace(repoRoot ?? repo)
                 store.newWorkspaceSheetOpen = false
             }
-            .onAppear { if repo.isEmpty { repo = store.currentRepoGuess() ?? "" } }
+            .onAppear {
+                if repo.isEmpty { repo = store.currentRepoGuess() ?? "" }
+                if !repo.isEmpty { detect() }
+            }
         }
+    }
+
+    private var repoField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                FieldLabel("Repository")
+                Spacer()
+                if detecting {
+                    ProgressView().controlSize(.mini)
+                } else if repoRoot != nil {
+                    Label("repo detected", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.green)
+                } else if !repo.isEmpty {
+                    Label("not a git repo", systemImage: "xmark.circle.fill")
+                        .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.pink)
+                }
+            }
+            HStack(spacing: 8) {
+                PlainField(text: $repo, mono: true, placeholder: "/path/to/repo")
+                    .onSubmit(detect)
+                    // Editing invalidates the previous detection (no per-keystroke
+                    // subprocess); the user re-confirms with ⏎ or Browse.
+                    .onChange(of: repo) { repoRoot = nil }
+                Button("Browse…") { browse() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.text2)
+                    .padding(.horizontal, 10).padding(.vertical, 7)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Theme.overlay(0.06)))
+            }
+        }
+    }
+
+    private func detect() {
+        let target = (repo as NSString).expandingTildeInPath
+        guard !target.isEmpty else { repoRoot = nil; return }
+        detecting = true
+        Task {
+            let root = await store.git.repoRoot(at: target)
+            await MainActor.run { repoRoot = root; detecting = false }
+        }
+    }
+
+    private func browse() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        if panel.runModal() == .OK, let url = panel.url { repo = url.path; detect() }
     }
 }
 
@@ -222,6 +281,11 @@ private struct WorktreePane: View {
 
     enum AgentChoice: String, CaseIterable, Identifiable {
         case claude = "Claude Code", codex = "Codex", opencode = "OpenCode", shell = "Shell only"
+        /// Chip / preview label. Product names stay verbatim; only "Shell only"
+        /// is UI copy, so it (and only it) is routed through the string catalog.
+        /// `rawValue` is a String, so `Text(choice.rawValue)` would hit the
+        /// verbatim overload and never localize — read this instead.
+        var displayName: String { self == .shell ? String(localized: "Shell only") : rawValue }
         var id: String { rawValue }
         var command: String? {
             switch self {
@@ -344,7 +408,7 @@ private struct WorktreePane: View {
                 ForEach(AgentChoice.allCases) { choice in
                     let on = choice == agent
                     Button { agent = choice } label: {
-                        Text(choice.rawValue)
+                        Text(verbatim: choice.displayName)
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(on ? Theme.text1 : Theme.text2)
                             .padding(.horizontal, 11).padding(.vertical, 7)
@@ -389,7 +453,7 @@ private struct WorktreePane: View {
     private var cardPreview: String {
         let repoName = repoRoot.map { ($0 as NSString).lastPathComponent } ?? "repo"
         let leaf = branch.split(separator: "/").last.map(String.init) ?? "branch"
-        return "\(repoName) · \(leaf) · WT · \(agent.rawValue)"
+        return "\(repoName) · \(leaf) · WT · \(agent.displayName)"
     }
 
     // MARK: actions
