@@ -1138,13 +1138,11 @@ private struct AgentsPane: View {
             SettingsDivider()
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 8) {
-                    TextField("Label (optional)", text: $newCodexHomeLabel)
-                        .textFieldStyle(.roundedBorder)
+                    PlainField(text: $newCodexHomeLabel, placeholder: "Label (optional)")
                         .frame(width: 130)
-                    TextField("~/work/.codex", text: $newCodexHomePath)
-                        .textFieldStyle(.roundedBorder)
+                    PlainField(text: $newCodexHomePath, mono: true, placeholder: "~/work/.codex")
                     Button("Add") { addCodexHome() }
-                        .controlSize(.small)
+                        .controlSize(.large)
                         .tint(store.accent)
                         .disabled(newCodexHomePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
@@ -1410,17 +1408,20 @@ private struct CodexHomeSettingsRow: View {
                 }
                 if isDefault {
                     Text("Default")
-                        .font(.system(size: 9.5, weight: .semibold))
+                        .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(accent)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(accent.opacity(0.16)))
                 }
                 Spacer()
                 Button("Open") { onOpen() }
-                    .controlSize(.mini)
+                    .controlSize(.small)
                     .disabled(!FileManager.default.fileExists(atPath: home.resolvedURL.path))
                 if case .installed = status.hookStatus {
-                    Button("Remove Hook") { onUninstall() }.controlSize(.mini)
+                    Button("Remove Hook") { onUninstall() }.controlSize(.small)
                 } else {
-                    Button("Install Hook") { onInstall() }.controlSize(.mini).tint(accent)
+                    Button("Install Hook") { onInstall() }.controlSize(.small).tint(accent)
                 }
                 if !isDefault {
                     Button(role: .destructive) { onRemove() } label: {
@@ -1430,10 +1431,10 @@ private struct CodexHomeSettingsRow: View {
                     .help("Remove this Codex Home from Glint")
                 }
             }
-            HStack(spacing: 12) {
-                statusLabel(String(localized: "Hook"), hookText)
-                statusLabel(String(localized: "Auth"), authText)
-                statusLabel(String(localized: "Quota"), quotaText)
+            HStack(spacing: 7) {
+                statusBadge("Hook", hookText, hookTint)
+                statusBadge("Auth", authText, authTint)
+                statusBadge("Quota", quotaText, quotaTint)
             }
             if let error {
                 Text(error)
@@ -1446,10 +1447,38 @@ private struct CodexHomeSettingsRow: View {
         .opacity(home.isEnabled ? 1 : 0.62)
     }
 
-    private func statusLabel(_ name: String, _ value: String) -> some View {
-        Text("\(name): \(value)")
-            .font(.system(size: 10.5, weight: .medium))
-            .foregroundStyle(Theme.text3)
+    private func statusBadge(_ label: LocalizedStringKey, _ value: String, _ tint: Color) -> some View {
+        HStack(spacing: 5) {
+            Circle().fill(tint).frame(width: 5, height: 5)
+            Text(label).foregroundStyle(Theme.text4)
+            Text(value).foregroundStyle(Theme.text2)
+        }
+        .font(.system(size: 10.5, weight: .medium))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(Color.white.opacity(0.05)))
+    }
+
+    private var hookTint: Color {
+        switch status.hookStatus {
+        case .installed: return .green
+        case .notInstalled: return Theme.text4
+        case .error: return .orange
+        }
+    }
+
+    private var authTint: Color {
+        switch status.authStatus {
+        case .found: return .green
+        case .missing, .invalid: return .orange
+        }
+    }
+
+    private var quotaTint: Color {
+        switch status.quotaStatus {
+        case .available: return accent
+        case .unavailable, .loading: return Theme.text4
+        }
     }
 
     private var hookText: String {

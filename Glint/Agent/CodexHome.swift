@@ -46,8 +46,8 @@ enum CodexQuotaStatus: Hashable {
     case loading
 
     static func placeholder(isHomeEnabled: Bool, isUsageEnabled: Bool) -> CodexQuotaStatus {
-        if !isHomeEnabled { return .unavailable("Disabled") }
-        return isUsageEnabled ? .loading : .unavailable("Usage off")
+        if !isHomeEnabled { return .unavailable(String(localized: "Disabled")) }
+        return isUsageEnabled ? .loading : .unavailable(String(localized: "Usage off"))
     }
 }
 

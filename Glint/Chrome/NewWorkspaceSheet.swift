@@ -381,7 +381,9 @@ private struct FieldLabel: View {
     }
 }
 
-private struct PlainField: View {
+/// Flat dark text field (no system rounded-border chrome, no blue focus
+/// ring) shared by the New Workspace sheet and the Settings panes.
+struct PlainField: View {
     @Binding var text: String
     var mono = false
     var placeholder: LocalizedStringKey = ""
