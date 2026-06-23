@@ -157,6 +157,34 @@ struct ContentView: View {
         }
         .animation(.spring(response: 0.28, dampingFraction: 0.82),
                    value: store.agentChooserIntent != nil)
+        // What's New — same modal language: dim backdrop that cancels on
+        // click-out, then the centered card. Driven by `whatsNewNotes` being
+        // non-empty (set on upgrade, or manually from Settings ▸ About).
+        .overlay {
+            if !store.whatsNewNotes.isEmpty {
+                Color.black.opacity(0.32)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { store.dismissWhatsNew() }
+                    .transition(.opacity)
+            }
+        }
+        .overlay {
+            if !store.whatsNewNotes.isEmpty {
+                WhatsNewView(notes: store.whatsNewNotes)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity
+                                .combined(with: .scale(scale: 0.97))
+                                .combined(with: .offset(y: -8)),
+                            removal: .opacity
+                        )
+                    )
+            }
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.82),
+                   value: store.whatsNewNotes.isEmpty)
+        .onAppear { store.evaluateWhatsNewOnLaunch() }
         .sheet(isPresented: $store.settingsOpen) {
             GlintSettingsView()
                 .environmentObject(store)

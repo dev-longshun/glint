@@ -1954,6 +1954,14 @@ private struct AboutPane: View {
                 SettingsRow("Auto-update", subtitle: nil) {
                     StatusPill(label: "Sparkle 2.6", tone: .ok)
                 }
+                SettingsDivider()
+                SettingsRow("What's New",
+                            subtitle: "See what changed in this version.") {
+                    Button("View") {
+                        store.settingsOpen = false
+                        DispatchQueue.main.async { store.showWhatsNew() }
+                    }
+                }
             }
         }
     }

@@ -492,6 +492,15 @@ final class WorkspaceStore: ObservableObject {
     /// of-the-OS.
     @Published var settingsOpen: Bool = false
 
+    /// Hand-authored "What's New" notes to show in the centered card overlay.
+    /// Non-empty ⇒ the card is up (one entry on manual open, possibly several
+    /// when catching up across skipped versions). See `ReleaseNotes.swift`.
+    @Published var whatsNewNotes: [ReleaseNote] = []
+    /// One-shot guard so the launch evaluation (driven from `ContentView`'s
+    /// `.onAppear`, which can fire more than once) only runs the first time.
+    private var whatsNewEvaluated = false
+    private static let whatsNewVersionKey = "glint.lastWhatsNewVersion"
+
     /// Drives the New Worktree sheet (the worktree-creation window).
     @Published var newWorkspaceSheetOpen: Bool = false
     /// Optional repo path to pre-fill the sheet with (e.g. "New Worktree from
@@ -2643,6 +2652,55 @@ final class WorkspaceStore: ObservableObject {
         }
         ReviewWindowController.shared.present(repo: repo, title: ws.displayName, scopes: scopes)
     }
+
+    // MARK: - What's New (hand-authored per-version notes; see ReleaseNotes.swift)
+
+    /// Full app version, e.g. "0.1.25-beta.1" or "0.1.25". Kept verbatim (not
+    /// base-normalized) so beta builds are tracked per pre-release: each beta
+    /// pops its own note, and the seen-mark distinguishes beta.1 from beta.2.
+    private var currentAppVersion: String {
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? ""
+    }
+
+    /// Localized lines for a note, picked by the app's current language (Chinese
+    /// when the resolved locale is `zh`, English otherwise). The copy is data, so
+    /// it's chosen here rather than via the string catalog.
+    func whatsNewLines(_ note: ReleaseNote) -> [String] {
+        let code = preferredLocale.language.languageCode?.identifier
+        return code == "zh" ? note.zh : note.en
+    }
+
+    /// Run once on launch. Pops the What's New card when the app version changed
+    /// since it was last seen; on the very first launch it silently records the
+    /// current version (a brand-new user shouldn't get an "update" card). Either
+    /// way the seen-version mark is advanced so it shows at most once per upgrade.
+    func evaluateWhatsNewOnLaunch() {
+        guard !whatsNewEvaluated else { return }
+        whatsNewEvaluated = true
+
+        let current = currentAppVersion
+        // Local "dev" builds carry version "dev" (CI stamps the real one): never
+        // a real upgrade, so they never auto-pop.
+        guard !current.isEmpty else { return }
+
+        let key = Self.whatsNewVersionKey
+        let lastSeen = UserDefaults.standard.string(forKey: key)
+        guard lastSeen != current else { return }   // already shown for this build
+        defer { UserDefaults.standard.set(current, forKey: key) }   // mark seen
+        guard let lastSeen else { return }          // first ever launch → seed only
+
+        let notes = ReleaseNotes.notesToShow(lastSeen: lastSeen, current: current)
+        if !notes.isEmpty { whatsNewNotes = notes }
+    }
+
+    /// Manual entry point (Settings ▸ About): show the current version's note, or
+    /// the latest authored one when the running version has none (dev builds).
+    func showWhatsNew() {
+        let notes = ReleaseNotes.currentOrLatest(version: currentAppVersion)
+        if !notes.isEmpty { whatsNewNotes = notes }
+    }
+
+    func dismissWhatsNew() { whatsNewNotes = [] }
 
     // MARK: lightweight git status (non-persistent cache)
 

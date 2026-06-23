@@ -20,3 +20,19 @@
 1. 代码里用 `Text("…")` / `String(localized: "…")`,helper 形参用 `LocalizedStringKey`。
 2. 在 `Glint/Resources/Localizable.xcstrings` 给每个新 key 补 `zh-Hans` 翻译(保持 JSON 缩进 2 空格、`ensure_ascii=False`)。
 3. build 后切到中文环境目检,语言中性内容(符号、数字、纯数据)确认未被误翻。
+
+## 发版「更新内容」(每次推版本必做)
+
+每次推一个版本(beta 或正式)**都要**更新 `Glint/App/ReleaseNotes.swift` 的 `ReleaseNotes.all`,补这一版面向用户的「更新内容」(What's New 卡片用,升级后弹一次 + Settings ▸ About 可重看)。这份内容是**手写策划**的,刻意不依赖 commit 信息 / appcast。漏更新 = 用户升级后看不到这版的变化。
+
+### 规则
+- **每发一个 beta,在 `all` 顶部加一条**(数组「新→旧」),`version` 填**完整 beta 版本号**(连字符,如 `0.1.25-beta.1`),写**这个 beta 的增量**。
+- **正式版不单独写条目** —— 升到 `0.1.25` 时,所有 `0.1.25-beta.*` 会**自动聚合**成一条「0.1.25」展示(`aggregatedStableNote`)。只有当某版**没走过 beta**时,才直接写一条 bare base 条目(如 `0.1.26`)。
+- **中英一一对应**:`en` / `zh` 两个数组逐条对应(这是数据、不进 xcstrings,直接双语写)。
+- 内容是**面向用户的亮点**,不是 commit 罗列;只写用户能感知的功能/变化。
+- **不要回填已发布的旧版本**;只加正在推的这版。文件可只保留近期版本,过老的条目可删(没人跨几十版更新,删了不影响功能)。
+
+### 行为(改逻辑前先知道)
+- beta 用户:看当前 beta;跨 beta(beta.1→beta.3 跳过 beta.2)会 catch-up 同周期错过的 beta,分条列出。
+- 正式用户:只看正式(聚合)条目,永远看不到 per-beta 条目;跨正式版 catch-up 每版聚合一条。
+- 详见 `ReleaseNotes.notesToShow` 的文档注释。

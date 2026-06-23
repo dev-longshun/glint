@@ -67,7 +67,7 @@ struct GitStatusPopover: View {
             // window with the changed-file list + unified diff (working-tree vs
             // HEAD, and — for worktrees — the whole branch vs its base).
             if path != nil {
-                popButton("Review Changes…", prominent: true) {
+                popButton("Review Changes…", prominent: true, shortcut: "⌘⇧R") {
                     close()
                     store.openReview(for: ws)
                 }
@@ -125,12 +125,23 @@ struct GitStatusPopover: View {
     }
 
     private func popButton(_ title: LocalizedStringKey, prominent: Bool = false,
+                           shortcut: String? = nil,
                            action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 11.5, weight: prominent ? .semibold : .medium))
                 .foregroundStyle(prominent ? store.accent : Theme.text2)
                 .frame(maxWidth: .infinity).padding(.vertical, 7)
+                // Shortcut hint floats at the trailing edge via overlay so the
+                // title stays centered (it's data, not a label, so verbatim).
+                .overlay(alignment: .trailing) {
+                    if let shortcut {
+                        Text(verbatim: shortcut)
+                            .font(.system(size: 11, weight: .medium, design: .rounded))
+                            .foregroundStyle((prominent ? store.accent : Theme.text2).opacity(0.65))
+                            .padding(.trailing, 9)
+                    }
+                }
                 .background(RoundedRectangle(cornerRadius: 7)
                     .fill(prominent ? store.accent.opacity(0.14) : Theme.overlay(0.06)))
                 .overlay(RoundedRectangle(cornerRadius: 7)

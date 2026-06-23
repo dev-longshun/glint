@@ -118,6 +118,18 @@ struct GlintApp: App {
                     workspaceStore.focusSidebarSearch()
                 }
                 .keyboardShortcut("f", modifiers: [.command, .option])
+                // Read-only diff window for the selected workspace; mirrors the
+                // git button's "Review Changes…" affordance. Disabled when the
+                // selection has no reviewable git path.
+                Button("Review Changes…") {
+                    if let ws = workspaceStore.selectedWorkspace {
+                        workspaceStore.openReview(for: ws)
+                    }
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .disabled(workspaceStore.selectedWorkspace.flatMap {
+                    workspaceStore.effectiveGitPath(for: $0)
+                } == nil)
             }
             // Hijack the App menu's Settings… so ⌘, opens our in-window
             // sheet instead of trying to summon a separate scene.
