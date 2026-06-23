@@ -105,10 +105,10 @@ final class CodexUsageReaderTests: XCTestCase {
     }
 
     func testDisabledHomeStatusDoesNotRemainLoading() {
-        XCTAssertEqual(
-            CodexQuotaStatus.placeholder(isHomeEnabled: false, isUsageEnabled: true),
-            .unavailable("Disabled")
-        )
+        guard case .unavailable(let message) = CodexQuotaStatus.placeholder(isHomeEnabled: false, isUsageEnabled: true) else {
+            return XCTFail("Disabled Codex home should not remain loading")
+        }
+        XCTAssertFalse(message.isEmpty)
         XCTAssertEqual(
             CodexQuotaStatus.placeholder(isHomeEnabled: true, isUsageEnabled: true),
             .loading

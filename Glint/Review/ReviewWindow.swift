@@ -29,7 +29,8 @@ final class ReviewModel: ObservableObject {
     @Published var loadingDiff = false
 
     private let git = GitService()
-    private var loadToken = 0   // guards against out-of-order diff/file loads
+    private var fileLoadToken = 0   // guards against out-of-order file-list loads
+    private var diffLoadToken = 0   // guards against out-of-order diff loads
 
     init(repo: String, title: String, scopes: [DiffScope]) {
         self.repo = repo
@@ -40,14 +41,12 @@ final class ReviewModel: ObservableObject {
 
     func reload() async {
         // Guard against overlapping reloads (rapid scope toggles): a slower,
-        // older fetch must not clobber the newer scope's file list. select()
-        // bumps the same token, so a stale fetch returning after a new select
-        // also drops.
-        loadToken += 1
-        let token = loadToken
+        // older fetch must not clobber the newer scope's file list.
+        fileLoadToken += 1
+        let token = fileLoadToken
         loadingFiles = true
         let fs = await git.changedFiles(repo: repo, scope: scope)
-        guard token == loadToken else { return }
+        guard token == fileLoadToken else { return }
         loadingFiles = false
         files = fs
         tree = TreeNode.build(fs)
@@ -62,6 +61,7 @@ final class ReviewModel: ObservableObject {
             selected = nil
             diffText = ""
             diff = .empty
+            loadingDiff = false
         }
     }
 
@@ -82,16 +82,18 @@ final class ReviewModel: ObservableObject {
 
     func select(_ f: GitFileChange) async {
         selected = f
-        loadToken += 1
-        let token = loadToken
+        diffLoadToken += 1
+        let token = diffLoadToken
         loadingDiff = true
+        diffText = ""
+        diff = .empty
         let text = await git.fileDiff(repo: repo, scope: scope, file: f)
         // A newer selection (or scope change) superseded this load — drop it.
-        guard token == loadToken else { return }
+        guard token == diffLoadToken else { return }
         // Parse off the main actor so a multi-thousand-line diff doesn't hitch
         // the UI; the result is cached so re-renders (splitter drags) don't reparse.
         let doc = await Task.detached(priority: .userInitiated) { DiffDocument(text: text) }.value
-        guard token == loadToken else { return }
+        guard token == diffLoadToken else { return }
         diffText = text
         diff = doc
         loadingDiff = false

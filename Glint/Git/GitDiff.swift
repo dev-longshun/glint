@@ -34,13 +34,13 @@ extension GitService {
             // untracked files are appended as additions.
             async let names = git(["diff", "HEAD", "--name-status"], cwd: repo, allowFailure: true)
             async let nums  = git(["diff", "HEAD", "--numstat"], cwd: repo, allowFailure: true)
-            async let untrk = git(["ls-files", "--others", "--exclude-standard"], cwd: repo, allowFailure: true)
+            async let untrk = git(["ls-files", "--others", "--exclude-standard", "-z"], cwd: repo, allowFailure: true)
             var map = Self.mergeNameNumstat(
                 nameStatus: (try? await names)?.stdout ?? "",
                 numstat: (try? await nums)?.stdout ?? "")
             if let u = try? await untrk, u.ok {
-                for line in u.stdout.split(separator: "\n", omittingEmptySubsequences: true) {
-                    let p = String(line)
+                for path in u.stdout.split(separator: "\0", omittingEmptySubsequences: true) {
+                    let p = String(path)
                     map[p] = GitFileChange(path: p, kind: .untracked,
                                            additions: Self.lineCount(repo: repo, relPath: p),
                                            deletions: 0, isBinary: false)
