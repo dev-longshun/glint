@@ -349,11 +349,33 @@ enum AgentHookInstaller {
     # could otherwise be addressed directly still pays the session-extraction
     # roundtrip. Codex >= 0.130 (which carries session_id in the stdin
     # payload) is required.
+    #
+    # We also try to pull session_id out of the stdin payload here. Claude
+    # passes a JSON object on stdin to every hook; capturing its session_id
+    # lets restore-on-launch use `claude --resume <id>` instead of
+    # `claude --continue`, so two Claude panes in the same workspace don't
+    # both collapse onto the most-recent session (issue #45). When extraction
+    # fails (older Claude, non-JSON, agents other than Claude that share this
+    # branch like OpenCode/Devin) we just drop the field — pane id alone is
+    # enough to drive every other downstream behavior.
     if [ "$AGENT" != "codex" ] && [ -n "$PANE" ] && [ -n "$SOCK" ]; then
-      cat >/dev/null 2>&1
-      [ ! -S "$SOCK" ] && exit 0
-      printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' "$PANE" "$HOOK" "$AGENT" \\
-        | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
+      [ ! -S "$SOCK" ] && { cat >/dev/null 2>&1; exit 0; }
+      umask 077
+      TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX") || { cat >/dev/null 2>&1; exit 0; }
+      trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
+      cat >"$TMP"
+      SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
+      /bin/rm -f "$TMP"
+      trap - EXIT HUP INT TERM
+      if [ -n "$SESSION" ]; then
+        SESSION_B64=$(printf '%s' "$SESSION" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
+        printf '{"pane":"%s","hook":"%s","agent":"%s","session_b64":"%s"}\\n' \\
+          "$PANE" "$HOOK" "$AGENT" "$SESSION_B64" \\
+          | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
+      else
+        printf '{"pane":"%s","hook":"%s","agent":"%s"}\\n' "$PANE" "$HOOK" "$AGENT" \\
+          | /usr/bin/nc -U -w 1 "$SOCK" >/dev/null 2>&1 || true
+      fi
       exit 0
     fi
 
@@ -744,12 +766,42 @@ enum OpenCodeHookInstaller {
 
     const AGENT = "opencode"
 
-    const send = async (hook) => {
+    // Pluck a session id from any of the spots OpenCode events stash it at.
+    // OpenCode uses both `sessionID` and `sessionId` in different payloads
+    // (verified against the bundled CLI binary), and may nest the value under
+    // a `session` or `info` sub-object. Returning the first hit means a future
+    // event-shape tweak only loses the field, never crashes the plugin.
+    const pickSessionId = (event) => {
+      const candidates = [
+        event?.properties?.sessionID,
+        event?.properties?.sessionId,
+        event?.properties?.session?.id,
+        event?.properties?.session?.sessionID,
+        event?.properties?.info?.id,
+        event?.properties?.info?.sessionID,
+        event?.sessionID,
+        event?.sessionId,
+      ]
+      for (const c of candidates) {
+        if (typeof c === "string" && c.length > 0 && c.length <= 128) return c
+      }
+      return null
+    }
+
+    const send = async (hook, sessionId) => {
       const pane = process.env.GLINT_PANE_ID
       const sock = process.env.GLINT_AGENT_SOCK
       if (!pane || !sock || !existsSync(sock)) return
 
-      const line = JSON.stringify({ pane, hook, agent: AGENT }) + "\\n"
+      // session_b64 mirrors the protocol the shell reporter uses for Claude/
+      // Codex — AgentBridge decodes the same field regardless of agent. Send
+      // it only when we actually have an id so the receiver doesn't waste
+      // cycles decoding empty payloads.
+      const payload = { pane, hook, agent: AGENT }
+      if (sessionId) {
+        payload.session_b64 = Buffer.from(sessionId, "utf8").toString("base64")
+      }
+      const line = JSON.stringify(payload) + "\\n"
       await new Promise((resolve) => {
         let done = false
         let timer
@@ -775,38 +827,43 @@ enum OpenCodeHookInstaller {
     export const GlintPlugin = async () => {
       return {
         event: async ({ event }) => {
+          const sid = pickSessionId(event)
           switch (event.type) {
             case "session.created":
-              await send("SessionStart")
+              await send("SessionStart", sid)
               break
             case "session.status": {
               const status = event.properties?.status?.type ?? event.properties?.status
-              if (status === "busy" || status === "running") await send("UserPromptSubmit")
-              if (status === "idle") await send("Stop")
+              if (status === "busy" || status === "running") await send("UserPromptSubmit", sid)
+              if (status === "idle") await send("Stop", sid)
               break
             }
             case "session.idle":
-              await send("Stop")
+              await send("Stop", sid)
               break
             case "session.error":
-              await send("StopFailure")
+              await send("StopFailure", sid)
               break
             case "session.compacted":
-              await send("PreCompact")
+              await send("PreCompact", sid)
               break
             case "permission.asked":
-              await send("PermissionRequest")
+              await send("PermissionRequest", sid)
               break
             case "permission.replied":
-              await send("PreToolUse")
+              await send("PreToolUse", sid)
               break
           }
         },
-        "tool.execute.before": async () => {
-          await send("PreToolUse")
+        // OpenCode passes the tool-call context to these handlers; we don't
+        // know the exact shape per version, but `pickSessionId` walks the
+        // usual hiding spots defensively and returns null when it strikes
+        // out — so a stale schema just drops the id, never throws.
+        "tool.execute.before": async (ctx) => {
+          await send("PreToolUse", pickSessionId(ctx))
         },
-        "tool.execute.after": async () => {
-          await send("PostToolUse")
+        "tool.execute.after": async (ctx) => {
+          await send("PostToolUse", pickSessionId(ctx))
         },
       }
     }

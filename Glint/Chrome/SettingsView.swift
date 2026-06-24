@@ -1097,7 +1097,7 @@ private struct AgentsPane: View {
             }
             SettingsDivider()
             SettingsRow("Resume session on launch",
-                        subtitle: "When Glint reopens, run `claude --continue` in any pane that was running Claude at last quit.") {
+                        subtitle: "When Glint reopens, each pane that was running Claude at last quit is resumed via `claude --resume <session-id>` — so multiple Claude panes in one workspace land back in their own sessions, not all collapsed onto the most recent one. Falls back to `claude --continue` for panes whose session id wasn't captured.") {
                 Toggle("", isOn: $store.restoreClaudeSession)
                     .toggleStyle(.switch).labelsHidden()
             }
@@ -1167,7 +1167,7 @@ private struct AgentsPane: View {
             }
             SettingsDivider()
             SettingsRow("Resume session on launch",
-                        subtitle: "When Glint reopens, run `codex resume --last` in any pane that was running Codex at last quit.") {
+                        subtitle: "When Glint reopens, each pane that was running Codex at last quit is resumed via `codex resume <session-id>` — so multiple Codex panes in one workspace land back in their own sessions. Falls back to `codex resume --last` for panes whose session id wasn't captured.") {
                 Toggle("", isOn: $store.restoreCodexSession)
                     .toggleStyle(.switch).labelsHidden()
             }
@@ -1205,7 +1205,7 @@ private struct AgentsPane: View {
             }
             SettingsDivider()
             SettingsRow("Resume session on launch",
-                        subtitle: "When Glint reopens, run `opencode --continue` in any pane that was running OpenCode at last quit.") {
+                        subtitle: "When Glint reopens, each pane that was running OpenCode at last quit is resumed via `opencode --session <session-id>` — so multiple OpenCode panes in one workspace land back in their own sessions. Falls back to `opencode --continue` for panes whose session id wasn't captured.") {
                 Toggle("", isOn: $store.restoreOpenCodeSession)
                     .toggleStyle(.switch).labelsHidden()
             }
@@ -1252,7 +1252,7 @@ private struct AgentsPane: View {
             }
             SettingsDivider()
             SettingsRow("Resume session on launch",
-                        subtitle: "When Glint reopens, run `devin --continue` in any pane that was running Devin at last quit.") {
+                        subtitle: "When Glint reopens, each pane that was running Devin at last quit is resumed via `devin --resume <session-id>` — so multiple Devin panes in one workspace land back in their own sessions. Falls back to `devin --continue` for panes whose session id wasn't captured.") {
                 Toggle("", isOn: $store.restoreDevinSession)
                     .toggleStyle(.switch).labelsHidden()
             }

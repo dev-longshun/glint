@@ -51,10 +51,12 @@ enum ReleaseNotes {
             en: [
                 "Review Changes now has a keyboard shortcut — press ⌘⇧R from anywhere to open the diff window for the current workspace. The shortcut also shows on the git button's menu.",
                 "After each update, a What's New card summarizes what changed in the version. You can reopen it anytime from Settings ▸ About.",
+                "Resume-on-launch now restores each pane's own session instead of collapsing them onto the most recent one. Claude, Codex, OpenCode and Devin panes each remember their session id and reopen via `--resume`/`--session <id>`; if no id was captured the old `--continue`/`--last` behavior is the fallback.",
             ],
             zh: [
                 "「审阅改动」新增快捷键 —— 在任意位置按 ⌘⇧R 即可为当前工作区打开 diff 窗口,git 按钮菜单里也会标出这个快捷键。",
                 "每次更新后会弹出「更新内容」卡片,汇总这一版的变化;也可随时在 设置 ▸ 关于 中重新查看。",
+                "重启后恢复会话现在按窗格各自恢复,不再把同一工作区里的多个会话合并成最近一个。Claude、Codex、OpenCode、Devin 窗格各自记录 session id,用 `--resume`/`--session <id>` 精确接回原会话;没抓到 id 时回退到原先的 `--continue`/`--last`。",
             ]
         ),
     ]

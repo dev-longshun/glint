@@ -1832,35 +1832,35 @@
         }
       }
     },
-    "When Glint reopens, run `claude --continue` in any pane that was running Claude at last quit.": {
+    "When Glint reopens, each pane that was running Claude at last quit is resumed via `claude --resume <session-id>` — so multiple Claude panes in one workspace land back in their own sessions, not all collapsed onto the most recent one. Falls back to `claude --continue` for panes whose session id wasn't captured.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Glint 重新打开时，对上次退出前在跑 Claude 的窗格自动执行 `claude --continue`。"
+            "value": "Glint 重新打开时，上次退出前在跑 Claude 的窗格会用 `claude --resume <session-id>` 各自恢复——同一工作区里多个 Claude 窗格不会再被合并到同一个最近会话。没抓到 session id 的窗格回退到 `claude --continue`。"
           }
         }
       }
     },
-    "When Glint reopens, run `codex resume --last` in any pane that was running Codex at last quit.": {
+    "When Glint reopens, each pane that was running Codex at last quit is resumed via `codex resume <session-id>` — so multiple Codex panes in one workspace land back in their own sessions. Falls back to `codex resume --last` for panes whose session id wasn't captured.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Glint 重新打开时，对上次退出前在跑 Codex 的窗格自动执行 `codex resume --last`。"
+            "value": "Glint 重新打开时，上次退出前在跑 Codex 的窗格会用 `codex resume <session-id>` 各自恢复——同一工作区里多个 Codex 窗格不会再被合并到同一个会话。没抓到 session id 的窗格回退到 `codex resume --last`。"
           }
         }
       }
     },
-    "When Glint reopens, run `opencode --continue` in any pane that was running OpenCode at last quit.": {
+    "When Glint reopens, each pane that was running OpenCode at last quit is resumed via `opencode --session <session-id>` — so multiple OpenCode panes in one workspace land back in their own sessions. Falls back to `opencode --continue` for panes whose session id wasn't captured.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Glint 重新打开时，对上次退出前在跑 OpenCode 的窗格自动执行 `opencode --continue`。"
+            "value": "Glint 重新打开时，上次退出前在跑 OpenCode 的窗格会用 `opencode --session <session-id>` 各自恢复——同一工作区里多个 OpenCode 窗格不会再被合并到同一个会话。没抓到 session id 的窗格回退到 `opencode --continue`。"
           }
         }
       }
@@ -2205,13 +2205,13 @@
         }
       }
     },
-    "When Glint reopens, run `devin --continue` in any pane that was running Devin at last quit." : {
+    "When Glint reopens, each pane that was running Devin at last quit is resumed via `devin --resume <session-id>` — so multiple Devin panes in one workspace land back in their own sessions. Falls back to `devin --continue` for panes whose session id wasn't captured." : {
       "extractionState" : "manual",
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Glint 重新打开时，对上次退出前在跑 Devin 的窗格自动执行 `devin --continue`。"
+            "value" : "Glint 重新打开时，上次退出前在跑 Devin 的窗格会用 `devin --resume <session-id>` 各自恢复——同一工作区里多个 Devin 窗格不会再被合并到同一个会话。没抓到 session id 的窗格回退到 `devin --continue`。"
           }
         }
       }
