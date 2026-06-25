@@ -50,7 +50,21 @@ enum ReleaseNotes {
     /// went out as a bare `0.1.24` after a hotfix detour, and lines added
     /// to that placeholder later got mis-attributed). See CLAUDE.md
     /// "发版「更新内容」" for the release-time workflow.
-    static let all: [ReleaseNote] = []
+    static let all: [ReleaseNote] = [
+        ReleaseNote(
+            version: "0.1.25-beta.1",
+            en: [
+                "Hardened the dock badge code path that triggered a launch crash on macOS 15.1 (#43) — `NSApp` is now treated as optional during early init so a brief nil window can't trap.",
+                "Each agent pane now resumes its own session on restart instead of every pane in a workspace collapsing onto the most recent one (#45). Captures session ids from Claude / Codex / OpenCode / Devin hook events, falls back to the prior `--continue` form when no id has been captured yet.",
+                "Added ⌘⇧F to reveal the focused pane's working directory in Finder — works in any workspace, not just git ones."
+            ],
+            zh: [
+                "加固 macOS 15.1 启动崩溃路径 (#43)：dock 徽章里 `NSApp` 在启动早期可能仍为 nil，强解触发 trap；现改为可选解包，nil 时静默 no-op、并把首次刷新推到 launch 完成之后。",
+                "重启恢复时每个 agent 窗格各自接回自己的会话 (#45)，不再被合并到工作区里最近一次的会话。Claude / Codex / OpenCode / Devin 各自从 hook 事件里抓 session id 写入对应窗格，恢复时精确 `--resume <id>` / `--session <id>`；老数据没抓到 id 时退回原 `--continue` / `--last`。",
+                "新增 ⌘⇧F「在访达中显示」全局快捷键，定位当前窗格的工作目录，非 git 工作区也能用。"
+            ]
+        ),
+    ]
 
     /// Distinct base versions present in `all`, newest-authored first.
     /// Derived purely from the immutable `all` table, so compute it once.
