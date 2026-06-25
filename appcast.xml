@@ -6,62 +6,13 @@
     <description>Most recent Glint changes.</description>
     <language>en</language>
     <item>
-      <title>Glint 0.1.23</title>
-      <sparkle:version>202606231445</sparkle:version>
-      <sparkle:shortVersionString>0.1.23</sparkle:shortVersionString>
-      <pubDate>Tue, 23 Jun 2026 14:47:39 +0000</pubDate>
+      <title>Glint 0.1.24</title>
+      <sparkle:version>202606250234</sparkle:version>
+      <sparkle:shortVersionString>0.1.24</sparkle:shortVersionString>
+      <pubDate>Thu, 25 Jun 2026 02:35:35 +0000</pubDate>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.23</h3><ul>
-    <li><strong>feat: add What&#x27;s New release notes and ⌘⇧R review shortcut</strong><br><span style="color:#666">新增「审阅改动」⌘⇧R 快捷键(菜单 + git 按钮提示),以及每次更新后弹出的「更新内容」卡片(中英双语、可在设置▸关于重看;beta 按 beta 显示并补齐跳过的版本,正式版聚合该版所有 beta)。</span></li>
-    <li><strong>feat(codex): launch Codex under a chosen home from every new-terminal entry</strong><br><span style="color:#666">新建标签页/分屏/工作区时,可在&quot;打开方式&quot;、命令面板和新建工作树面板里按 Codex Home 启动 Codex —— 多个 Home 会分别列出并显示目录,选哪个就以哪个 CODEX_HOME 启动。同时修复了额度为空时状态文案未翻译的问题。</span></li>
-    <li><strong>feat(codex): support multiple Codex home directories (#34)</strong><br><span style="color:#666">支持配置多个 Codex home 目录,各自安装钩子并在侧栏显示额度</span></li>
-    <li><strong>feat(workspace): agent-launch chooser + worktree-only New Workspace sheet (#27)</strong><br><span style="color:#666">新增「新建时询问启动哪个 Agent」开关(默认关),⌘T/⌘D/⌘N 和 + 按钮弹出轻量选择面板,新标签页/分屏/工作区都能直接以 Claude/Codex/OpenCode/Devin 或纯终端启动;新建工作区窗口收成纯「新建工作树」,可选把 base 未提交改动带进工作树(失败弹警告)。</span></li>
-    <li><strong>feat(agent): Devin CLI support (#28)</strong><br><span style="color:#666">接入 Devin CLI:逐窗格状态、会话恢复、可从新建工作树面板直接启动;事件按 Devin 官方文档对齐,测试改为可隔离运行。</span></li>
-    <li><strong>feat(worktree): tooltip on the disabled Create button explaining what&#x27;s missing</strong><br><span style="color:#666">新建工作树时,变灰的「创建」按钮 hover 会提示还差什么(未填分支名等)</span></li>
-    <li><strong>feat(review): read-only changes review window + worktree polish &amp; git perf</strong><br><span style="color:#666">新增只读「改动审阅」窗口(文件树+统一 diff,工作树/整分支对比),修若干新建工作区与审阅窗口的问题,并优化 git 状态轮询与大 diff 渲染性能</span></li>
-    <li><strong>feat(worktree): 工作树/仓库工作区 + git 状态 + 全量本地化</strong><br><span style="color:#666">新增工作树/仓库工作区(隔离分支 + 一键 agent)、侧栏与标题栏 git 状态</span></li>
-    <li><strong>feat(theme): 502 套主题目录 + 终端/界面透明度 + 浅色模式兼容</strong><br><span style="color:#666">新增 502 套主题(可搜索浏览器+实时预览)、终端/界面透明度+背景模糊、</span></li>
-    <li><strong>feat(agent): Dock badge for background agent attention (#24)</strong><br><span style="color:#666">后台 agent 需关注时显示 Dock 角标计数(需批准/刚完成/失败),默认开、不含敏感内容</span></li>
-    <li><strong>feat(app): crash-loop guard that auto-rolls-back a launch-crashing setting</strong><br><span style="color:#666">新增设置崩溃自愈：某项设置导致启动崩溃时,下次启动自动回滚最近一次改动,无需用户手动清理(#15);通知驱动,零维护自动覆盖所有现有及新增设置。</span></li>
-    <li><strong>perf(review): O(1) child lookup in TreeNode.build (#30)</strong><br><span style="color:#666">Review 文件树构建从 O(N²) 优化到 O(N·D)(按累加路径建字典索引)。</span></li>
-    <li><strong>fix(launch): defer Sparkle updater start until after first render (#43)</strong><br><span style="color:#666">修复 macOS 15 上启动即崩(#43):Sparkle 自动更新不再在 StateObject 初始化阶段同步启动,改为窗口首帧渲染后再启动。</span></li>
-    <li><strong>fix(whatsnew): address review findings across version-matching and modal focus</strong><br><span style="color:#666">修复「更新内容」代码评审的 10 项问题:老用户升级首次也能看到卡片、无 note 的版本不再白烧 seen 标记、跨版本/被裁剪 lastSeen 的边界、手动入口不再误标版本、关闭卡片后焦点归还终端;并抽出共享 modalOverlay 与版本窗口 helper、统一 displayVersion/isBeta。</span></li>
-    <li><strong>fix(palette): release key-event monitor in PaletteModel.deinit</strong><br><span style="color:#666">给命令面板的 PaletteModel 加 deinit 兜底释放 NSEvent 键盘监视器,防止 SwiftUI 跳过 onDisappear 时监视器泄漏、静默吞掉全 App 的方向键/回车/Esc。</span></li>
-    <li><strong>fix(i18n): localize Codex hook error + auth status strings</strong><br><span style="color:#666">本地化 Codex Home 设置行的 8 条裸英文串(Hook/Auth 徽标与 hook 安装错误描述),用 String(localized:) 包裹并补 zh-Hans;插值保留 %@,文件名/路径等数据保持原文。</span></li>
-    <li>fix(review): stabilize pre-release diff loading</li>
-    <li><strong>fix(codex): harden shared Codex session routing across edge cases</strong><br><span style="color:#666">修复 Codex 共享会话路由的 10 个边角问题:cwd 解析符号链接、跨实例</span></li>
-    <li>fix(codex): route shared app-server hooks to panes</li>
-    <li>fix(palette): restore focus on close + reliable arrow-key navigation (#37)</li>
-    <li>fix(theme): English source strings + zh-Hans catalog for theme UI (#38)</li>
-    <li>fix(persistence): tolerate a single bad workspace + guard the repaired write (#39)</li>
-    <li><strong>fix(codex): localize home status placeholders + match Glint&#x27;s flat field/badge styling</strong><br><span style="color:#666">Codex Home 卡片状态徽章化 + 输入框统一深色样式 + 补 Usage off/Disabled 翻译</span></li>
-    <li><strong>fix(shortcut): ⌘W closes the focused secondary window instead of the terminal pane (#31)</strong><br><span style="color:#666">修复副窗口(审阅窗口/设置/新建工作区 sheet)前台时 ⌘W 误关终端 pane 的问题。</span></li>
-    <li><strong>fix(palette): command palette search field reliably takes focus (#32)</strong><br><span style="color:#666">修复命令面板打开时搜索框抢不到焦点、按键落到终端的问题。</span></li>
-    <li><strong>fix(review): tint diff for CRLF (Windows) files (#33)</strong><br><span style="color:#666">修复 Windows(CRLF)文件在 Review diff 面板里不着色、+/- 标记泄漏的问题。</span></li>
-    <li><strong>fix(devin): localize &quot;Hook config&quot; + correct Devin mascot status-cue comment</strong><br><span style="color:#666">修复 Devin 设置项「Hook config」漏译,并改正侧栏 Devin 图标状态提示的矛盾注释。</span></li>
-    <li><strong>fix(terminal): guard ⌘-clicked file:// URLs against launching code (#29)</strong><br><span style="color:#666">修复 ⌘-click 打开 file:// 链接可能直接启动恶意 .app/.command 的隐患</span></li>
-    <li><strong>fix(clipboard): 写系统剪贴板时不再把内容截断成 1 个字符</strong><br><span style="color:#666">修复从终端写系统剪贴板时内容被截断成单个字符的问题(OSC 52 等</span></li>
-    <li><strong>fix(persistence): route stripBadPanes serialization through SafeJSON</strong><br><span style="color:#666">stripBadPanes 的两处裸 JSON 序列化改走 SafeJSON,消除 try? 接不住 NSException 的隐患,与全仓约定一致</span></li>
-    <li><strong>fix(persistence): tolerate a single bad pane; never overwrite an unmovable file (#21)</strong><br><span style="color:#666">state.json 单个坏 pane 不再拖垮全部工作区;移不动的损坏文件拒绝覆盖</span></li>
-    <li><strong>fix(app): harden crash-loop guard against self-defeating edge cases</strong><br><span style="color:#666">加固设置崩溃自愈:拒绝非有限数值防日志失效、连续两次崩溃才回滚(避免一次性强退误撤设置)、markHealthy 只祝福冷启动条目。</span></li>
-    <li><strong>fix(usage): SIGABRT-safe JSON serialization (#15 sibling crash)</strong><br><span style="color:#666">新增 SafeJSON 安全序列化(校验后返回 nil 而非 abort),替换全部裸 JSONSerialization 调用,修复 Codex 额度读取在启动时崩溃(#15 同族)。</span></li>
-    <li><strong>fix(usage): harden quota readout against non-finite values (#15)</strong><br><span style="color:#666">加固额度条渲染，过滤 NaN/Inf 等非有限数值，修复开启额度显示后每次启动必崩(#15)。</span></li>
-    <li><strong>fix(pane): don&#x27;t flip agent state on Esc/Return consumed by an IME (#22)</strong><br><span style="color:#666">IME 组合态下 Esc/Return 不再误翻 agent 状态</span></li>
-    <li><strong>fix(pane): use UTF-8 length when injecting control-channel text (#20)</strong><br><span style="color:#666">外部控制注入按 UTF-8 字节长度,避免 NUL 截断</span></li>
-    <li><strong>fix(ghostty): honor byte length when writing clipboard (#19)</strong><br><span style="color:#666">写剪贴板按字节长度解码,避免 NUL 截断/缓冲泄漏</span></li>
-    <li><strong>release: pull 0.1.23 stable from appcast (launch crash #43)</strong><br><span style="color:#666">暂时从 appcast 撤下正式版 0.1.23(启动崩溃 #43),正式用户回落 0.1.22;beta 条目不动。</span></li>
-    <li><strong>test(review): cover DiffDocument.parse + TreeNode.build</strong><br><span style="color:#666">为 review diff 流水线的纯逻辑补单测(8 个):DiffDocument.parse 的 CRLF / 孤立 CR 归一(守护 #33 回归)、行号与种类、meta/无换行标记丢弃;TreeNode.build 的嵌套、文件夹优先排序、共享父节点去重、重复路径折叠。无生产代码改动。</span></li>
-    <li>release: appcast for v0.1.23</li>
-    <li>release: appcast for v0.1.23-beta.8</li>
-    <li>release: appcast for v0.1.23-beta.7</li>
-    <li><strong>chore(xcodegen): normalize pbxproj after CloseOnCmdW.swift add (#31)</strong><br><span style="color:#666">用 xcodegen 重新生成 pbxproj,归一化 #31 手改的条目。</span></li>
-    <li>release: appcast for v0.1.23-beta.6</li>
-    <li>release: appcast for v0.1.23-beta.5</li>
-    <li>release: appcast for v0.1.23-beta.4</li>
-    <li>release: appcast for v0.1.23-beta.3</li>
-    <li>release: appcast for v0.1.23-beta.2</li>
-    <li>release: appcast for v0.1.23-beta.1</li>
-    <li>release: appcast for v0.1.22</li>
+      <description><![CDATA[<div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.24</h3><ul>
+    <li><strong>release: 0.1.24 hotfix for #43 macOS 15 launch crash</strong><br><span style="color:#666">0.1.24 热修版,代码与 v0.1.23(已含 #43 修复)一致;仅升版本号以便 Sparkle 把修复推给那些下载了 fix 前 0.1.23 DMG、现在每次启动都崩的用户。同时把 ReleaseNotes 里 0.1.24-beta.1 占位条目转正为 bare 0.1.24,并补一行 #43 修复说明。</span></li>
   </ul></div><!--GLINT_HISTORY_BELOW--><hr style="border:none;border-top:1px solid #e5e5e5;margin:16px 0;"><div style="font-family:-apple-system,sans-serif;"><h3 style="color:#666;">历史版本 · Previous releases</h3></div><div style="font-family:-apple-system,sans-serif;"><h3>更新内容 · What's new in 0.1.22</h3><ul>
     <li><strong>feat(site): 官网中英双语 + 历史稳定版趋势/榜单 + 趋势悬浮</strong><br><span style="color:#666">官网升级:新增中英双语切换、历史稳定版下载趋势图(峰值高亮+发布日期)</span></li>
     <li><strong>feat(site): GitHub Pages 官网 · 实时 star/下载量统计</strong><br><span style="color:#666">新增 GitHub Pages 官网:实时展示 star、累计下载、最新稳定版下载与 beta</span></li>
@@ -217,7 +168,7 @@
     <li><strong>ghostty: switch submodule to chenbstack fork with occlusion memory fix</strong><br><span style="color:#666">修复隐藏工作区的显存占用——被遮挡的 pane 释放 3 张全尺寸渲染缓冲，3 个后台工作区约省 110MB 内存；子模块改指自有 fork，让登记的 SHA 与产物真实来源一致</span></li>
     <li>release: appcast for v0.1.13</li>
   </ul></div>]]></description>
-      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.23/Glint-0.1.23.dmg" length="18746014" type="application/octet-stream" sparkle:edSignature="gurapa2PAApggYzYDl48V623pOcMbvlyyjTPDO9+g++3jFKhCwGuWoDXsuOHXToDi9gIgF0e3S6D5FHz52zrAA==" />
+      <enclosure url="https://github.com/chenbstack/glint/releases/download/v0.1.24/Glint-0.1.24.dmg" length="18746172" type="application/octet-stream" sparkle:edSignature="tw6ThQxqdJOMKJt7kwolCZEtd9/sERVa/i1ogKLgJs5fQ0fAjPdZoy/FWjE4dzn1rbG6pKOY1IlRpbmcQOYFCQ==" />
     </item>
     <item>
       <title>Glint 0.1.23-beta.8</title>
