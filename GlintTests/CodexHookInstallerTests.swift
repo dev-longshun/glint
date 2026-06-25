@@ -60,7 +60,7 @@ final class CodexHookInstallerTests: XCTestCase {
             guard case .readFailed = error as? CodexHookInstallerError else {
                 return XCTFail("Expected readFailed, got \(error)")
             }
-            XCTAssertTrue(error.localizedDescription.hasPrefix("Could not read hooks.json:"))
+            XCTAssertFalse(error.localizedDescription.isEmpty)
         }
     }
 

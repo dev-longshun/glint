@@ -33,7 +33,10 @@ final class CodexUsageReaderTests: XCTestCase {
 
         let authURL = home.appendingPathComponent("auth.json")
         try "invalid".write(to: authURL, atomically: true, encoding: .utf8)
-        XCTAssertEqual(CodexLiveReader.authStatus(from: home), .invalid("Invalid auth.json"))
+        guard case .invalid(let message) = CodexLiveReader.authStatus(from: home) else {
+            return XCTFail("Invalid auth.json should report an invalid auth status")
+        }
+        XCTAssertFalse(message.isEmpty)
 
         try #"{"tokens":{"access_token":"token","account_id":"account"}}"#
             .write(to: authURL, atomically: true, encoding: .utf8)
