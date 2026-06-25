@@ -163,13 +163,16 @@ final class UsageStore: ObservableObject {
     private var anyEnabled: Bool { claudeEnabled || codexEnabled }
 
     init() {
+        LaunchDiagnostic.mark("UsageStore.init: begin")
         self.claudeEnabled = (UserDefaults.standard.object(forKey: Self.claudeKey) as? Bool) ?? false
         self.codexEnabled = (UserDefaults.standard.object(forKey: Self.codexKey) as? Bool) ?? false
         // Show the last-known numbers immediately so the bars don't pop in blank
         // on launch; the first poll refreshes them a moment later.
         if claudeEnabled { self.claude = Self.loadQuota(.claude) }
         if codexEnabled { self.codex = Self.loadQuota(.codex) }
+        LaunchDiagnostic.mark("UsageStore.init: before syncTimer")
         syncTimer()
+        LaunchDiagnostic.mark("UsageStore.init: end")
     }
 
     deinit { timer?.invalidate() }

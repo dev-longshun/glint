@@ -1136,7 +1136,10 @@ final class WorkspaceStore: ObservableObject {
     static private(set) weak var current: WorkspaceStore?
 
     init() {
+        LaunchDiagnostic.mark("WorkspaceStore.init: begin")
+        LaunchDiagnostic.mark("WorkspaceStore.init: before Persistence.load")
         let loaded = Persistence.load() ?? PersistedState.fresh
+        LaunchDiagnostic.mark("WorkspaceStore.init: after Persistence.load (workspaces=\(loaded.workspaces.count))")
         self.workspaces = loaded.workspaces
         let shouldRestore = (UserDefaults.standard.object(forKey: "glint.restoreLastWorkspace") as? Bool) ?? true
         let firstActiveID = loaded.workspaces.first(where: { !$0.archived })?.id
@@ -1154,15 +1157,18 @@ final class WorkspaceStore: ObservableObject {
         }
         self.sidebarCollapsed = loaded.sidebarCollapsed
         Self.current = self
+        LaunchDiagnostic.mark("WorkspaceStore.init: after seed published state")
 
         // Debounced autosave: any @Published change → save 0.5s later.
         saveCancellable = objectWillChange
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in self?.persist() }
+        LaunchDiagnostic.mark("WorkspaceStore.init: after autosave Combine subscription")
 
         // Sweep live surface cwds every second so a crash/quit still leaves
         // recent dirs persisted. The closure captures self weakly so the
         // repeating timer doesn't retain the store forever.
+        LaunchDiagnostic.mark("WorkspaceStore.init: before cwdTimer schedule")
         cwdTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             // scheduledTimer fires on the main run loop, so this is already the
             // main actor — assumeIsolated avoids allocating a Task every second.
@@ -1184,8 +1190,11 @@ final class WorkspaceStore: ObservableObject {
                 }
             }
         }
+        LaunchDiagnostic.mark("WorkspaceStore.init: after cwdTimer schedule")
         // Prime status for restored worktree workspaces right away.
+        LaunchDiagnostic.mark("WorkspaceStore.init: before refreshAllGitStatuses")
         refreshAllGitStatuses()
+        LaunchDiagnostic.mark("WorkspaceStore.init: after refreshAllGitStatuses")
 
         // Drop scrollback snapshots for panes that no longer exist.
         var liveScrollbackIDs = Set<String>()
@@ -1195,7 +1204,9 @@ final class WorkspaceStore: ObservableObject {
                     ScrollbackArchive.fileID(forPaneKey: "\(ws.id.uuidString):\(paneID.value)"))
             }
         }
+        LaunchDiagnostic.mark("WorkspaceStore.init: before ScrollbackArchive.prune (keep=\(liveScrollbackIDs.count))")
         ScrollbackArchive.prune(keeping: liveScrollbackIDs)
+        LaunchDiagnostic.mark("WorkspaceStore.init: after ScrollbackArchive.prune (async)")
 
         // Block-based observers hold their tokens in `observerTokens`; the
         // store currently lives as long as the app, but if it's ever torn
@@ -1205,6 +1216,7 @@ final class WorkspaceStore: ObservableObject {
         // scheduled from willTerminate may never get a tick before the process
         // exits, and the snapshot writes are async on a utility queue — drain
         // blocks until they actually hit disk.
+        LaunchDiagnostic.mark("WorkspaceStore.init: before willTerminate observer")
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
@@ -1219,9 +1231,11 @@ final class WorkspaceStore: ObservableObject {
             }
             ScrollbackArchive.drain()
         })
+        LaunchDiagnostic.mark("WorkspaceStore.init: after willTerminate observer")
 
         // Event-driven cwd updates: ghostty fires this when a shell reports
         // its working directory via OSC 7.
+        LaunchDiagnostic.mark("WorkspaceStore.init: before ghosttyCwdChanged observer")
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .ghosttyCwdChanged,
             object: nil,
@@ -1229,10 +1243,12 @@ final class WorkspaceStore: ObservableObject {
         ) { [weak self] _ in
             Task { @MainActor in self?.captureCwdsFromLiveSurfaces() }
         })
+        LaunchDiagnostic.mark("WorkspaceStore.init: after ghosttyCwdChanged observer")
 
         // "✓ done" is an unread badge cleared by *seeing* the workspace.
         // Selecting it is one way; the other is ⌘Tab-ing back to Glint while
         // already on it — without this, the badge would outlast the look.
+        LaunchDiagnostic.mark("WorkspaceStore.init: before didBecomeActive observer")
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: NSApplication.didBecomeActiveNotification,
             object: nil,
@@ -1243,21 +1259,37 @@ final class WorkspaceStore: ObservableObject {
                 self.acknowledgeCompletionIfNeeded(for: id)
             }
         })
+        LaunchDiagnostic.mark("WorkspaceStore.init: after didBecomeActive observer")
 
         // Boot the CLI-agent IPC channel and route hook events into pane state.
+        LaunchDiagnostic.mark("WorkspaceStore.init: before AgentBridge.shared.start")
         AgentBridge.shared.start()
+        LaunchDiagnostic.mark("WorkspaceStore.init: after AgentBridge.shared.start (socket=\(AgentBridge.shared.socketPath))")
         // Boot the inbound control channel (focus / inject / list) only if the
         // user opted in — see externalControlEnabled / ControlBridge and
         // docs/external-pane-control.md. Toggling it later is live.
+        LaunchDiagnostic.mark("WorkspaceStore.init: before ControlBridge (externalControlEnabled=\(externalControlEnabled))")
         if externalControlEnabled { ControlBridge.shared.start() }
         else { ControlBridge.shared.reapStale() }
+        LaunchDiagnostic.mark("WorkspaceStore.init: after ControlBridge")
+        LaunchDiagnostic.mark("WorkspaceStore.init: before autoInstallAgentHooksOnFirstLaunch")
         Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
+        LaunchDiagnostic.mark("WorkspaceStore.init: after autoInstallAgentHooksOnFirstLaunch")
+        LaunchDiagnostic.mark("WorkspaceStore.init: before AgentHookInstaller.isInstalled")
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
+        LaunchDiagnostic.mark("WorkspaceStore.init: claudeHooksInstalled=\(self.claudeHooksInstalled)")
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
+        LaunchDiagnostic.mark("WorkspaceStore.init: codexHooksInstalled=\(self.codexHooksInstalled)")
         self.opencodeHooksInstalled = OpenCodeHookInstaller.isInstalled()
+        LaunchDiagnostic.mark("WorkspaceStore.init: opencodeHooksInstalled=\(self.opencodeHooksInstalled)")
         self.devinHooksInstalled = DevinHookInstaller.isInstalled()
+        LaunchDiagnostic.mark("WorkspaceStore.init: devinHooksInstalled=\(self.devinHooksInstalled)")
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
+        LaunchDiagnostic.mark("WorkspaceStore.init: shellKeybindsInstalled=\(self.shellKeybindsInstalled)")
+        LaunchDiagnostic.mark("WorkspaceStore.init: before updateDockBadge")
         updateDockBadge()
+        LaunchDiagnostic.mark("WorkspaceStore.init: after updateDockBadge")
+        LaunchDiagnostic.mark("WorkspaceStore.init: before glintAgentEvent observer")
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintAgentEvent,
             object: nil,
@@ -1265,6 +1297,7 @@ final class WorkspaceStore: ObservableObject {
         ) { [weak self] note in
             Task { @MainActor in self?.handleAgentEvent(note.userInfo) }
         })
+        LaunchDiagnostic.mark("WorkspaceStore.init: before glintPaneEscPressed observer")
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintPaneEscPressed,
             object: nil,
@@ -1272,6 +1305,7 @@ final class WorkspaceStore: ObservableObject {
         ) { [weak self] note in
             Task { @MainActor in self?.handlePaneEsc(note.userInfo) }
         })
+        LaunchDiagnostic.mark("WorkspaceStore.init: before glintPaneReturnPressed observer")
         observerTokens.append(NotificationCenter.default.addObserver(
             forName: .glintPaneReturnPressed,
             object: nil,
@@ -1279,6 +1313,7 @@ final class WorkspaceStore: ObservableObject {
         ) { [weak self] note in
             Task { @MainActor in self?.handlePaneReturn(note.userInfo) }
         })
+        LaunchDiagnostic.mark("WorkspaceStore.init: end")
     }
 
     deinit {

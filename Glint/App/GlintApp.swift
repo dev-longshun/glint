@@ -9,6 +9,7 @@ struct GlintApp: App {
     @StateObject private var codexHomes = CodexHomeStore()
 
     init() {
+        LaunchDiagnostic.mark("App.init: begin")
         #if DEBUG
         // Dev builds run under their own defaults domain (app.glint.Glint.dev).
         // The first dev launch copies the production app's glint.* preferences
@@ -23,12 +24,14 @@ struct GlintApp: App {
         }
         #endif
 
+        LaunchDiagnostic.mark("App.init: after dev seed (Debug only)")
         // Crash-loop guard: if the previous launch died before going healthy,
         // roll back the setting change that most likely caused it BEFORE we
         // read any preference below — otherwise a bad sticky value (issue #15)
         // replays the same crash on every launch. Also starts journaling
         // subsequent setting changes so the next crash can be undone.
         SettingsSafety.shared.beginLaunch()
+        LaunchDiagnostic.mark("App.init: after SettingsSafety.beginLaunch")
 
         // Apply the stored language choice BEFORE any view materializes so
         // Bundle.main picks the right .lproj at its first lookup. "system"
@@ -41,6 +44,7 @@ struct GlintApp: App {
         } else {
             UserDefaults.standard.set([stored], forKey: "AppleLanguages")
         }
+        LaunchDiagnostic.mark("App.init: end (StateObjects materialize lazily after this)")
     }
 
     var body: some Scene {

@@ -76,14 +76,18 @@ final class CodexHomeStore: ObservableObject {
     private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
+        LaunchDiagnostic.mark("CodexHomeStore.init: begin")
         self.defaults = defaults
         if let data = defaults.data(forKey: Self.storageKey),
            let decoded = try? JSONDecoder().decode([CodexHome].self, from: data),
            !decoded.isEmpty {
+            LaunchDiagnostic.mark("CodexHomeStore.init: decoded \(decoded.count) home(s)")
             homes = Self.deduplicated(decoded)
         } else {
+            LaunchDiagnostic.mark("CodexHomeStore.init: no/empty stored homes, using default")
             homes = [.default]
         }
+        LaunchDiagnostic.mark("CodexHomeStore.init: end")
     }
 
     var enabledHomes: [CodexHome] {

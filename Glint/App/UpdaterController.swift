@@ -42,8 +42,10 @@ final class UpdaterController: NSObject, ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
 
     override init() {
+        LaunchDiagnostic.mark("UpdaterController.init: begin")
         receiveBetaUpdates = UserDefaults.standard.bool(forKey: Self.receiveBetaUpdatesKey)
         super.init()
+        LaunchDiagnostic.mark("UpdaterController.init: after super.init")
         #if DEBUG
         // Dev builds carry the placeholder 0.1.0 version (CI stamps the real
         // one at release time), so the appcast always looks newer and Sparkle
