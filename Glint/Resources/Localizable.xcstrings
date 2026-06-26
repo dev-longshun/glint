@@ -503,6 +503,17 @@
         }
       }
     },
+    "Bold": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加粗"
+          }
+        }
+      }
+    },
     "Bubble workspaces whose agent just finished a turn to the top of the sidebar. Sinks back when you open it.": {
       "extractionState": "stale",
       "localizations": {
@@ -1784,6 +1795,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "重命名"
+          }
+        }
+      }
+    },
+    "Render all terminal text in the family's bold variant.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有终端文本都用字体的 Bold 切片渲染。"
           }
         }
       }

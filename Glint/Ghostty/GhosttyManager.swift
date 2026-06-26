@@ -169,6 +169,7 @@ final class GhosttyManager {
             let v = defaults.double(forKey: "glint.terminalFontSize")
             return v == 0 ? 13 : v
         }()
+        let bold = (defaults.object(forKey: "glint.terminalFontBold") as? Bool) ?? false
         let cursorStyle = defaults.string(forKey: "glint.terminalCursorStyle") ?? "block"
         let cursorBlink = (defaults.object(forKey: "glint.terminalCursorBlink") as? Bool) ?? true
         let accentHex = Theme.accent(named: defaults.string(forKey: "glint.accentName")).rgbHex
@@ -203,12 +204,17 @@ final class GhosttyManager {
             }
             colorBlock += "\n"
         }
+        // 开关打开时让常规槽位也取 Bold 命名风格 —— `font-style` 只在对应
+        // `font-family` 已声明时生效(见 ghostty Config.zig 文档),上面那两行
+        // `font-family` 已经满足前提;家族没有 Bold 切片时 ghostty 自动回落,不
+        // 会偷偷换字体。
+        let boldStyle = bold ? "\nfont-style = Bold" : ""
         let overrides = """
         \(colorBlock)cursor-style = \(cursorStyle)
         cursor-style-blink = \(cursorBlink)
         font-family = \(family)
         font-family = Menlo
-        font-size = \(size)
+        font-size = \(size)\(boldStyle)
         scrollback-limit = \(scrollback)
         window-padding-x = 14
         window-padding-y = 12

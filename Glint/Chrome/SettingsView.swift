@@ -959,6 +959,11 @@ private struct TerminalPane: View {
                         .frame(width: 22, alignment: .trailing)
                 }
             }
+            SettingsDivider()
+            SettingsRow("Bold", subtitle: "Render all terminal text in the family's bold variant.") {
+                Toggle("", isOn: $store.terminalFontBold)
+                    .toggleStyle(.switch).labelsHidden()
+            }
         }
 
         SettingsCard("Cursor") {

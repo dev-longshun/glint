@@ -612,6 +612,15 @@ final class WorkspaceStore: ObservableObject {
             GhosttyManager.shared.reloadConfig()
         }
     }
+    /// 整个终端文本以字体的 Bold 变体渲染。开 → 注入 `font-style = Bold`(同时把
+    /// `font-style-bold` 也定到 Bold,避免 ANSI bold 退化到合成描边)。家族里没有
+    /// Bold 切片时 ghostty 会回落到 regular,不会换家族。
+    @Published var terminalFontBold: Bool = (UserDefaults.standard.object(forKey: "glint.terminalFontBold") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(terminalFontBold, forKey: "glint.terminalFontBold")
+            GhosttyManager.shared.reloadConfig()
+        }
+    }
     /// One of `block` / `bar` / `underline`, matching ghostty's `cursor-style`.
     @Published var terminalCursorStyle: String = UserDefaults.standard.string(forKey: "glint.terminalCursorStyle") ?? "block" {
         didSet {
