@@ -52,6 +52,19 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.25-beta.2",
+            en: [
+                "Light mode now applies to the whole app, not just the terminal — chrome (window, sidebar, glass capsules, dropdowns, sheets) follows your Glint theme instead of staying dark.",
+                "Reworked the light sidebar: real `.sidebar` vibrancy with an app-active-aware wash, a beveled inner-shadow + hairline + highlight divider, slimmer accent-tinted selection (with a 3pt accent indicator on the active row), and quieter metadata chips.",
+                "Scrollback is now a memory budget (5 / 10 / 25 / 50 / 100 / 250 MB) instead of a row count, matching what Ghostty actually enforces. The picker shows an estimated line range that varies with pane width; old row-count settings auto-migrate."
+            ],
+            zh: [
+                "亮色模式现在覆盖整个应用，不只是终端 —— 窗口、sidebar、玻璃浮岛、下拉菜单、Sheet 等 chrome 都跟 Glint 主题走，不再被钉死在暗色。",
+                "亮色 sidebar 整体重做：真 `.sidebar` vibrancy + 跟随应用前/后台的色温微调，立体的内阴影 + 发丝线 + 高光分隔条，更轻的 accent 染色选中态（当前行左侧加一根 3pt accent 指示条），metadata 标签也调成低噪样式。",
+                "Scrollback 改成按内存预算配置（5 / 10 / 25 / 50 / 100 / 250 MB），跟 Ghostty 实际的限制语义对齐。下拉里给出基于面板宽度的估算行数范围；老的行数设置会自动迁移到对应档位。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.25-beta.1",
             en: [
                 "Hardened the dock badge code path that triggered a launch crash on macOS 15.1 (#43) — `NSApp` is now treated as optional during early init so a brief nil window can't trap.",

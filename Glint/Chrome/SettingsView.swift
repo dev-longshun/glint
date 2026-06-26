@@ -37,7 +37,7 @@ struct GlintSettingsView: View {
         }
         .frame(width: 760, height: 540)
         .background(Theme.bgWindow)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(Theme.colorScheme)
         .closeOnCmdW()
     }
 
@@ -939,7 +939,8 @@ private struct TerminalPane: View {
         "JetBrains Mono", "Fira Code", "IBM Plex Mono",
     ]
 
-    private let scrollbackChoices: [Int] = [1_000, 5_000, 10_000, 50_000, 100_000]
+    private let scrollbackSizeChoices: [Int] = [5, 10, 25, 50, 100, 250]
+        .map { $0 * 1_000_000 }
 
     var body: some View {
         SettingsCard("Font") {
@@ -981,11 +982,13 @@ private struct TerminalPane: View {
             }
         }
 
-        SettingsCard("Buffer", footer: "Scrollback is kept per-pane. Increasing this raises memory usage.") {
-            SettingsRow("Scrollback", subtitle: "Lines retained per pane.") {
-                GlintDropdown(selection: $store.terminalScrollback,
-                              items: scrollbackChoices.map { (value: $0, label: $0.formatted()) },
-                              listWidth: 150)
+        SettingsCard("Buffer", footer: "Ghostty limits scrollback by memory size. Line counts are estimates and vary with pane width and content.") {
+            SettingsRow("Scrollback size", subtitle: "Memory budget per pane.") {
+                GlintDropdown(selection: $store.terminalScrollbackLimitBytes,
+                              items: scrollbackSizeChoices.map {
+                                  (value: $0, label: scrollbackSizeLabel(for: $0))
+                              },
+                              listWidth: 250)
             }
         }
 
@@ -1038,6 +1041,40 @@ private struct TerminalPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
         }
+    }
+
+    private func scrollbackSizeLabel(for bytes: Int) -> String {
+        let mb = bytes / 1_000_000
+        return String(format: String(localized: "%d MB (~%@ lines)"),
+                      mb,
+                      scrollbackLineRangeLabel(for: bytes))
+    }
+
+    private func scrollbackLineRangeLabel(for bytes: Int) -> String {
+        // Based on Ghostty's page/cell storage and local Glint tests: 10 MB
+        // retained roughly 5.6k short `seq` rows. Use a conservative lower
+        // bound plus a typical upper bound so the label sets expectations.
+        let lower = max(1, bytes / 2_500)
+        let upper = max(lower, bytes / 1_600)
+        return "\(compactLineCount(lower))-\(compactLineCount(upper))"
+    }
+
+    private func compactLineCount(_ value: Int) -> String {
+        if Locale.current.identifier.hasPrefix("zh"), value >= 10_000 {
+            let wan = Double(value) / 10_000.0
+            if wan.rounded() == wan {
+                return "\(Int(wan))万"
+            }
+            return String(format: "%.1f万", wan)
+        }
+        if value >= 1_000 {
+            let k = Double(value) / 1_000.0
+            if k.rounded() == k {
+                return "\(Int(k))k"
+            }
+            return String(format: "%.1fk", k)
+        }
+        return value.formatted()
     }
 }
 
@@ -1532,10 +1569,14 @@ private struct GlintDropdown<Value: Hashable>: View {
         items.first(where: { $0.value == selection })?.label ?? ""
     }
 
+    private var localizedSelectedLabel: String {
+        NSLocalizedString(selectedLabel, comment: "")
+    }
+
     var body: some View {
         Button { isOpen.toggle() } label: {
             HStack(spacing: 6) {
-                Text(LocalizedStringKey(selectedLabel))
+                Text(verbatim: localizedSelectedLabel)
                     .font(.system(size: 11.5))
                     .foregroundStyle(Theme.text1)
                 Image(systemName: "chevron.down")
@@ -1596,6 +1637,10 @@ private struct GlintDropdownRow: View {
     let select: () -> Void
     @State private var hover = false
 
+    private var localizedLabel: String {
+        NSLocalizedString(label, comment: "")
+    }
+
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: "checkmark")
@@ -1603,7 +1648,7 @@ private struct GlintDropdownRow: View {
                 .foregroundStyle(store.accent)
                 .opacity(isSelected ? 1 : 0)
                 .frame(width: 12)
-            Text(LocalizedStringKey(label))
+            Text(verbatim: localizedLabel)
                 .font(.system(size: 12.5, weight: isSelected ? .medium : .regular))
                 .foregroundStyle(isSelected ? Theme.text1 : Theme.text2)
             Spacer(minLength: 12)

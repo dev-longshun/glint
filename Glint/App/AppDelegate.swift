@@ -93,6 +93,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = true
+        // NSWindow + isOpaque=false 会在圆角内侧画一条 1pt 系统 frame line
+        // (用来给"裸"圆角描个边)。原本 sidebar 不透明把它挡住,现在亮色主题
+        // 走 vibrancy 半透,这条线全圈透出来,看着像窗口有一圈黑描边。让
+        // contentView 自己 mask 圆角,那条线就贴到 mask 外的透明区里,进不来。
+        if let cv = window.contentView {
+            cv.wantsLayer = true
+            cv.layer?.cornerRadius = 10        // macOS 26 默认窗口圆角 ~10pt
+            cv.layer?.cornerCurve = .continuous
+            cv.layer?.masksToBounds = true
+        }
         GhosttyManager.shared.syncWindowAppearance()
         window.titlebarSeparatorStyle = .none
         // Sidebar inset to nothing — we draw chrome ourselves

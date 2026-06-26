@@ -7,10 +7,14 @@ enum Theme {
     // 原始色值,故接入后视觉零变化。注:computed 不被 SwiftUI 自动 observe,主题切换
     // 时由 WorkspaceStore.themeRevision 触发整树重建来刷新(第 3 步接)。
     static var current: GlintTheme { ThemeProvider.shared.current }
+    static var colorScheme: ColorScheme { current.isDark ? .dark : .light }
 
     // backgrounds
     static var bgWindow: Color { current.bgWindow }   // 原 #0A0B10
     static var bgPane:   Color { current.bgPane }     // 原 #0B0A14 (slight indigo)
+    /// Sidebar surface. 暗色 = bgPane(老行为,sidebar 与终端同色靠 divider 切分);
+    /// 亮色 = Codex-style 中性白 chrome,避免透明/vibrancy 把桌面暖色带进来。
+    static var bgSidebar: Color { current.bgSidebar }
 
     // vibrancy tint overlays — black-first with the faintest indigo cast
     static var sidebarTintTop:    Color { current.sidebarTintTop }     // 原 (.075,.065,.110)@.86

@@ -2133,6 +2133,50 @@
         }
       }
     },
+    "Scrollback size": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "滚动记录大小"
+          }
+        }
+      }
+    },
+    "Memory budget per pane.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每个面板的内存预算。"
+          }
+        }
+      }
+    },
+    "Ghostty limits scrollback by memory size. Line counts are estimates and vary with pane width and content.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ghostty 按内存大小限制滚动记录。行数只是估算,会随面板宽度和内容变化。"
+          }
+        }
+      }
+    },
+    "%d MB (~%@ lines)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d MB(约 %@ 行)"
+          }
+        }
+      }
+    },
     "Search": {
       "extractionState": "stale",
       "localizations": {

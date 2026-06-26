@@ -959,16 +959,21 @@ private struct WorkspaceCard: View {
     }
 
     private func metadataBadge(_ text: String, active: Bool) -> some View {
+        // 选中:accent tinted,与卡片背景同语言 —— chip 跟着染色,但描边降到 0
+        // 让它"融"在 card 里,不抢戏。
+        // 未选:Codex 风的低噪 chip —— 极淡中性底 + 无描边,只读文字本身。
+        // 之前 0.07 + stroke 在亮色下显得"工业塑料感",收掉就干净。
         Text(text)
             .font(.system(size: 9.5, weight: .semibold))
-            .foregroundStyle(active ? Theme.text2 : Theme.text3)
+            .foregroundStyle(active ? AnyShapeStyle(store.accent) : AnyShapeStyle(Theme.text3))
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 5)
             .padding(.vertical, 2)
             .background(
                 Capsule(style: .continuous)
-                    .fill(Theme.overlay(active ? 0.10 : 0.06))
+                    .fill(active ? AnyShapeStyle(store.accent.opacity(0.14))
+                                 : AnyShapeStyle(Theme.overlay(0.05)))
             )
     }
 
@@ -1016,18 +1021,30 @@ private struct WorkspaceCard: View {
     /// the parent VStack.
     private func cardBackground(active: Bool) -> some View {
         let fill: Color = {
-            // Selection speaks through hue — same language as the header's
-            // accent tab pill. Idle rows are bare (no fill, no border) so
-            // the list reads as rows on one shared surface, not a stack of
-            // boxes.
-            if active { return store.accent.opacity(0.16) }
+            // 选中态走 accent wash + 左侧 indicator 双语言 —— wash 16% 改 10%,
+            // Codex 风的"轻选中":重在 indicator 条说话,wash 只是淡淡的色温
+            // 信号,不抢戏。idle 行裸,hover 行极淡黑/白 wash。
+            if active { return store.accent.opacity(0.10) }
             if isHovered { return Theme.overlay(0.04) }
             return .clear
         }()
-        return RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(fill)
-            .animation(.spring(response: 0.28, dampingFraction: 0.85), value: active)
-            .animation(.easeOut(duration: 0.16), value: isHovered)
+        return ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(fill)
+            // 选中态加一根 3pt 宽 accent 左竖条,挤进 2pt 让它"嵌"在 card 内边而
+            // 不是贴外缘 —— 亮色下仅靠 16% accent 底色对比太弱,加这条左指示条
+            // 后扫一眼就分得清当前选的是谁(暗色下也只是更明确,不冲突)。
+            if active {
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .fill(store.accent)
+                    .frame(width: 3)
+                    .padding(.vertical, 6)
+                    .padding(.leading, 2)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.85), value: active)
+        .animation(.easeOut(duration: 0.16), value: isHovered)
     }
 
     /// One-shot green celebration driven by `justCompletedFlash`: a faint

@@ -14,7 +14,7 @@ struct NewWorkspaceSheet: View {
         WorktreePane()
             .frame(width: 520, height: 540)
             .background(Theme.bgPane)
-            .preferredColorScheme(.dark)
+            .preferredColorScheme(Theme.colorScheme)
             .closeOnCmdW()
     }
 }

@@ -14,21 +14,21 @@ struct ContentView: View {
     /// handed back on close — terminal surface *or* a text field (sidebar
     /// search). Captured in the false→true transition below.
     @State private var prePaletteResponder: NSResponder?
+    @State private var appActive = NSApp.isActive
 
     var body: some View {
         HStack(spacing: 0) {
             if !store.sidebarCollapsed {
-                // Exactly the pane area's color: ghostty paints an opaque
-                // `background = 0B0A14` (= Theme.bgPane), so a flat fill
-                // makes the two surfaces read as one, split only by the
-                // hairline. (A Tahoe floating glass sidebar was tried and
-                // rejected: with nothing but flat near-black behind it,
-                // glass has nothing to refract and reads as a gray slab.)
+                // 亮 / 暗两套 sidebar 表面:
+                // - 暗色:平铺 bgSidebar(= bgPane)。Tahoe 玻璃 sidebar 在暗底背后
+                //   没东西可折射,会糊成灰板,这里继续走平铺 + 右侧 hairline 切分。
+                // - 亮色:Codex-style frosted sidebar。真实 `.sidebar` vibrancy
+                //   做磨砂;聚焦时薄 lavender-white wash,失焦时更白更平。
                 SidebarView()
                     .frame(width: 244)
-                    .background(Theme.bgPane.opacity(store.chromeOpacity))
+                    .background(sidebarBackground)
                     .overlay(alignment: .trailing) {
-                        Rectangle().fill(Theme.divider).frame(width: 1)
+                        SidebarEdgeDivider(active: appActive)
                     }
                     .transition(.move(edge: .leading).combined(with: .opacity))
             }
@@ -79,6 +79,17 @@ struct ContentView: View {
         // (a single opaque root fill would block the terminal from showing the
         // desktop). bgWindow's faint darkening is folded into each child now.
         .background(Color.clear)
+        // 亮色 + 玻璃 sidebar:透明 NSWindow 的系统暗边会从窗口边缘漏出,
+        // 看着像全圈 1px 黑描边。用当前主题的浅色内描边盖住它;2pt 覆盖
+        // 圆角抗锯齿外溢,仍是 inside-stroke,不会改变窗口尺寸。
+        .overlay {
+            if !Theme.current.isDark {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Theme.bgWindow.opacity(0.98), lineWidth: 2)
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
+            }
+        }
         .animation(.easeOut(duration: 0.18), value: store.sidebarCollapsed)
         // Backdrop is its OWN layer with a plain fade — kept out of the panel's
         // scale/offset transition so the full-screen dim doesn't slide up and
@@ -130,6 +141,13 @@ struct ContentView: View {
                     window.makeFirstResponder(target)
                 }
             }
+        }
+        .onAppear { appActive = NSApp.isActive }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            appActive = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            appActive = false
         }
         // Agent chooser — same modal language as the command palette: a dim
         // backdrop that cancels on click-out, then the centered panel.
@@ -236,6 +254,70 @@ struct ContentView: View {
             return owner
         }
         return responder
+    }
+
+    /// Sidebar 表面:暗色沿用主题平铺,亮色用 Codex 的中性白磨砂玻璃。
+    @ViewBuilder
+    private var sidebarBackground: some View {
+        if Theme.current.isDark {
+            Theme.bgSidebar.opacity(store.chromeOpacity)
+        } else {
+            ZStack {
+                VisualEffectBackground(material: .sidebar,
+                                       state: .followsWindowActiveState,
+                                       appearance: NSAppearance(named: .aqua))
+                    .saturation(appActive ? 0.9 : 0.45)
+                    .brightness(appActive ? 0.065 : 0.03)
+                // Codex's light sidebar reads as cool neutral glass, not
+                // lavender. Keep the blue channel only slightly ahead and let
+                // the system material/background supply the rest of the tint.
+                Color(red: 0.955, green: 0.965, blue: 0.985)
+                    .opacity((appActive ? 0.22 : 0.46) * store.chromeOpacity)
+            }
+        }
+    }
+}
+
+private struct SidebarEdgeDivider: View {
+    let active: Bool
+
+    var body: some View {
+        if Theme.current.isDark {
+            Rectangle()
+                .fill(Theme.divider)
+                .frame(width: 1)
+        } else {
+            ZStack(alignment: .trailing) {
+                // Inner shadow on the sidebar face. The shadow ramps into the
+                // edge instead of drawing a flat gray stripe, which gives the
+                // Codex-style recessed/beveled separation.
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: Color.black.opacity(active ? 0.006 : 0.004),
+                              location: 0.45),
+                        .init(color: Color.black.opacity(active ? 0.028 : 0.018),
+                              location: 1.0),
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+                .frame(width: 10)
+
+                // A hairline plus a tiny right-side highlight creates the
+                // subtle 3D edge visible in Codex's focused sidebar.
+                Rectangle()
+                    .fill(Color.black.opacity(active ? 0.055 : 0.035))
+                    .frame(width: 1)
+
+                Rectangle()
+                    .fill(Color.white.opacity(active ? 0.40 : 0.52))
+                    .frame(width: 1)
+                    .offset(x: 1)
+            }
+            .frame(width: 10)
+            .allowsHitTesting(false)
+        }
     }
 }
 

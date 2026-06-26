@@ -32,6 +32,7 @@ struct ChromeOverrides: Equatable {
     var accent: Color? = nil
     var bgWindow: Color? = nil
     var bgPane: Color? = nil
+    var bgSidebar: Color? = nil
     var text1: Color? = nil
     var text2: Color? = nil
     var text3: Color? = nil
@@ -50,26 +51,51 @@ struct ChromeOverrides: Equatable {
 // 不受这里影响 —— 派生只服务于第 4 步接入的全量 502 套。
 
 extension GlintTheme {
+    private static let codexLightChrome = Color(.sRGB,
+                                                red: 251.0 / 255.0,
+                                                green: 251.0 / 255.0,
+                                                blue: 251.0 / 255.0,
+                                                opacity: 1)
+    private static let codexLightGlassTint = Color(.sRGB,
+                                                   red: 247.0 / 255.0,
+                                                   green: 247.0 / 255.0,
+                                                   blue: 248.0 / 255.0,
+                                                   opacity: 0.34)
+
     var accent: Color {
         accentOverride ?? chrome?.accent
             ?? (palette.indices.contains(4) ? palette[4] : foreground)
     }
 
-    // 背景:pane = 终端背景本身;window 比 pane 再暗一档
-    var bgWindow: Color { chrome?.bgWindow ?? background.darkened(0.30) }
-    var bgPane:   Color { chrome?.bgPane   ?? background }
+    // 背景:pane = 终端背景本身。window/sidebar 在亮/暗两侧策略不同 ——
+    // 暗色:window 比 pane 再压暗一档(老行为),sidebar = pane(同色,靠 divider 切分);
+    // 亮色:Codex-style 中性白 chrome。不要从终端背景派生暖灰,否则白色主题
+    //       下窗口会偏米色;终端 pane 仍保留主题自己的 background。
+    var bgWindow: Color {
+        chrome?.bgWindow ?? (isDark ? background.darkened(0.30) : Self.codexLightChrome)
+    }
+    var bgPane: Color { chrome?.bgPane ?? background }
+    var bgSidebar: Color {
+        chrome?.bgSidebar ?? (isDark ? bgPane : Self.codexLightChrome)
+    }
 
-    // 文本层级:前景色朝背景做明度阶梯
+    // 文本层级:前景色朝背景做明度阶梯。亮色阶梯压扁 5–10pp,因为亮底上中性灰文字
+    // 一旦淡过 50% 就读不出来(暗底上反而更耐稀释)—— 同一系数在两侧不能等价。
     var text1: Color { chrome?.text1 ?? foreground }
-    var text2: Color { chrome?.text2 ?? foreground.mixed(into: background, 0.22) }
-    var text3: Color { chrome?.text3 ?? foreground.mixed(into: background, 0.45) }
-    var text4: Color { chrome?.text4 ?? foreground.mixed(into: background, 0.58) }
+    var text2: Color { chrome?.text2 ?? foreground.mixed(into: background, isDark ? 0.22 : 0.18) }
+    var text3: Color { chrome?.text3 ?? foreground.mixed(into: background, isDark ? 0.45 : 0.38) }
+    var text4: Color { chrome?.text4 ?? foreground.mixed(into: background, isDark ? 0.58 : 0.50) }
 
     // vibrancy tint:背景 + 一点 accent 微染
     var sidebarTintTop:    Color { chrome?.sidebarTintTop    ?? background.mixed(into: accent, 0.06).opacity(0.86) }
     var sidebarTintBottom: Color { chrome?.sidebarTintBottom ?? background.mixed(into: accent, 0.03).opacity(0.90) }
     var toolbarTint:       Color { chrome?.toolbarTint       ?? background.mixed(into: accent, 0.05).opacity(0.86) }
-    var glassTint:         Color { chrome?.glassTint         ?? background.mixed(into: accent, 0.06).opacity(0.50) }
+    var glassTint: Color {
+        chrome?.glassTint
+            ?? (isDark
+                ? background.mixed(into: accent, 0.06).opacity(0.50)
+                : Self.codexLightGlassTint)
+    }
 
     var divider: Color { chrome?.divider ?? foreground.opacity(isDark ? 0.045 : 0.08) }
     var border:  Color { chrome?.border  ?? foreground.opacity(isDark ? 0.07  : 0.12) }

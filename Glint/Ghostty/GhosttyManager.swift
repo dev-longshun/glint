@@ -173,9 +173,24 @@ final class GhosttyManager {
         let cursorStyle = defaults.string(forKey: "glint.terminalCursorStyle") ?? "block"
         let cursorBlink = (defaults.object(forKey: "glint.terminalCursorBlink") as? Bool) ?? true
         let accentHex = Theme.accent(named: defaults.string(forKey: "glint.accentName")).rgbHex
-        let scrollback: Int = {
-            let v = defaults.integer(forKey: "glint.terminalScrollback")
-            return v == 0 ? 10_000 : v
+        let scrollbackLimitBytes: Int = {
+            let choices = [5, 10, 25, 50, 100, 250].map { $0 * 1_000_000 }
+            if let bytes = defaults.object(forKey: "glint.terminalScrollbackLimitBytes") as? Int,
+               bytes > 0 {
+                let normalized = choices.first { $0 >= bytes } ?? bytes
+                if normalized != bytes {
+                    defaults.set(normalized, forKey: "glint.terminalScrollbackLimitBytes")
+                }
+                return normalized
+            }
+
+            // Migration from the old Glint setting, which stored a row count.
+            let oldRows = defaults.integer(forKey: "glint.terminalScrollback")
+            let rows = oldRows == 0 ? 10_000 : oldRows
+            let bytes = rows * 2_500
+            let normalized = choices.first { $0 >= bytes } ?? bytes
+            defaults.set(normalized, forKey: "glint.terminalScrollbackLimitBytes")
+            return normalized
         }()
         // 透明度 / 模糊(与配色正交,follow 模式也注入)。默认 1.0 / 0 = 不透明无模糊。
         let termOpacity = (defaults.object(forKey: "glint.terminalOpacity") as? Double) ?? 1.0
@@ -215,7 +230,7 @@ final class GhosttyManager {
         font-family = \(family)
         font-family = Menlo
         font-size = \(size)\(boldStyle)
-        scrollback-limit = \(scrollback)
+        scrollback-limit = \(scrollbackLimitBytes)
         window-padding-x = 14
         window-padding-y = 12
         window-padding-balance = true

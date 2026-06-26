@@ -9,15 +9,22 @@ struct VisualEffectBackground: NSViewRepresentable {
     /// Default is false so sidebars / panes don't grab the window by accident;
     /// the toolbar opts in explicitly.
     let allowsWindowDrag: Bool
+    /// 显式钉住的外观。`nil` = 跟随系统(暗 / 亮);非空 = 强制按指定外观渲染
+    /// (NSVisualEffectView 的 material 是「外观感知」的,系统外观和 Glint 主题
+    /// 不一致时,不钉就会出现 sidebar 暗、终端亮这种反向 —— 比如 macOS 暗色 +
+    /// Glint 亮主题。Glint chrome 的语义是「跟主题不跟系统」,所以这里需要钉。)
+    let appearance: NSAppearance?
 
     init(material: NSVisualEffectView.Material = .sidebar,
          blendingMode: NSVisualEffectView.BlendingMode = .behindWindow,
          state: NSVisualEffectView.State = .followsWindowActiveState,
-         allowsWindowDrag: Bool = false) {
+         allowsWindowDrag: Bool = false,
+         appearance: NSAppearance? = nil) {
         self.material = material
         self.blendingMode = blendingMode
         self.state = state
         self.allowsWindowDrag = allowsWindowDrag
+        self.appearance = appearance
     }
 
     func makeNSView(context: Context) -> NSVisualEffectView {
@@ -28,6 +35,7 @@ struct VisualEffectBackground: NSViewRepresentable {
         v.blendingMode = blendingMode
         v.state = state
         v.isEmphasized = true
+        v.appearance = appearance
         return v
     }
 
@@ -35,6 +43,7 @@ struct VisualEffectBackground: NSViewRepresentable {
         nsView.material = material
         nsView.blendingMode = blendingMode
         nsView.state = state
+        nsView.appearance = appearance
     }
 }
 
@@ -118,8 +127,12 @@ struct GlassCapsuleFallback: View {
             // lighter `.inactive` palette during the first frames while
             // the window is still picking up key state.
             VisualEffectBackground(
-                material: isDarkTheme ? .underPageBackground : .hudWindow,
-                state: .active
+                material: isDarkTheme ? .underPageBackground : .popover,
+                state: .active,
+                // 钉外观让 vibrancy 跟 Glint 主题走,而不是跟系统。否则系统暗 +
+                // Glint 亮(或反之)时,材质会渲染成反方向,浮岛 capsule 跟终端
+                // 色调撞车。
+                appearance: NSAppearance(named: isDarkTheme ? .darkAqua : .aqua)
             )
             if isDarkTheme {
                 // Light black wash — underPageBackground is already the
@@ -128,33 +141,49 @@ struct GlassCapsuleFallback: View {
                 // into an opaque slab.
                 Color.black.opacity(0.3)
             } else {
-                // Pre-26 vibrancy follows the system appearance, not Glint's
-                // theme. Pull light themes back toward the selected terminal
-                // background so a light Glint theme doesn't get a dark capsule
-                // on older macOS releases.
-                Theme.bgPane.opacity(0.78)
-                Color.white.opacity(0.12)
+                // 亮色:Codex-style neutral glass. Keep this wash thin and
+                // nearly equal-channel so it does not drift blue.
+                Color(red: 0.970, green: 0.970, blue: 0.976).opacity(0.32)
             }
             if let tint {
-                tint.opacity(isDarkTheme ? 0.18 : 0.10)
+                tint.opacity(isDarkTheme ? 0.18 : 0.05)
             }
             // Faint top-down sheen so the upper edge catches "light" — the
             // single cheapest cue that says "glass surface" rather than
-            // "translucent slab."
+            // "translucent slab." 亮色用 0.14 而不是更高,光泽要轻 —— 36% 的
+            // 白会读成"顶部一条高光带",失了玻璃的微妙感。
             LinearGradient(
                 colors: isDarkTheme
                     ? [Color.white.opacity(0.06), Color.white.opacity(0)]
-                    : [Color.white.opacity(0.36), Color.white.opacity(0.04)],
+                    : [Color.white.opacity(0.18), Color.white.opacity(0.03)],
                 startPoint: .top, endPoint: .center
             )
         }
         .clipShape(shape)
         .overlay(
             shape.strokeBorder(
-                isDarkTheme ? Color.white.opacity(0.10) : Color.black.opacity(0.10),
+                isDarkTheme ? Color.white.opacity(0.10) : Color.black.opacity(0.045),
                 lineWidth: 0.5
             )
         )
+        .background(LightGlassCapsuleDepth(cornerRadius: cornerRadius))
+    }
+}
+
+private struct LightGlassCapsuleDepth: View {
+    let cornerRadius: CGFloat
+
+    var body: some View {
+        if !Theme.current.isDark {
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            shape
+                // Almost invisible fill gives SwiftUI a shape to cast shadows
+                // from without changing the capsule's glass color.
+                .fill(Color.white.opacity(0.001))
+                .shadow(color: Color.black.opacity(0.105), radius: 1.2, y: 0.7)
+                .shadow(color: Color.black.opacity(0.085), radius: 7, y: 2.5)
+                .shadow(color: Color.black.opacity(0.045), radius: 18, y: 8)
+        }
     }
 }
 
@@ -179,6 +208,7 @@ struct LiquidGlassSurface<Fallback: View>: ViewModifier {
                 glass,
                 in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             )
+            .background(LightGlassCapsuleDepth(cornerRadius: cornerRadius))
         } else if enabled && autoCapsule {
             content.background(GlassCapsuleFallback(cornerRadius: cornerRadius, tint: tint))
         } else {

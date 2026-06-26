@@ -634,12 +634,29 @@ final class WorkspaceStore: ObservableObject {
             GhosttyManager.shared.reloadConfig()
         }
     }
-    @Published var terminalScrollback: Int = {
-        let v = UserDefaults.standard.integer(forKey: "glint.terminalScrollback")
-        return v == 0 ? 10_000 : v
+    @Published var terminalScrollbackLimitBytes: Int = {
+        let defaults = UserDefaults.standard
+        let choices = [5, 10, 25, 50, 100, 250].map { $0 * 1_000_000 }
+        if let bytes = defaults.object(forKey: "glint.terminalScrollbackLimitBytes") as? Int,
+           bytes > 0 {
+            let normalized = choices.first { $0 >= bytes } ?? bytes
+            if normalized != bytes {
+                defaults.set(normalized, forKey: "glint.terminalScrollbackLimitBytes")
+            }
+            return normalized
+        }
+
+        // Migration from the old UI, where this setting was presented as a
+        // row count even though Ghostty accepts a byte budget.
+        let oldRows = defaults.integer(forKey: "glint.terminalScrollback")
+        let rows = oldRows == 0 ? 10_000 : oldRows
+        let bytes = rows * 2_500
+        let normalized = choices.first { $0 >= bytes } ?? bytes
+        defaults.set(normalized, forKey: "glint.terminalScrollbackLimitBytes")
+        return normalized
     }() {
         didSet {
-            UserDefaults.standard.set(terminalScrollback, forKey: "glint.terminalScrollback")
+            UserDefaults.standard.set(terminalScrollbackLimitBytes, forKey: "glint.terminalScrollbackLimitBytes")
             GhosttyManager.shared.reloadConfig()
         }
     }

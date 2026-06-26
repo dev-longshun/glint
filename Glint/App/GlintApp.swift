@@ -51,7 +51,7 @@ struct GlintApp: App {
                 .environmentObject(usage)
                 .environmentObject(codexHomes)
                 .frame(minWidth: 980, minHeight: 600)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(Theme.colorScheme)
                 .onAppear { updater.startDeferred() }
                 // Live language switching: AppleLanguages (set in init) only
                 // applies on the next launch; this env value re-resolves
