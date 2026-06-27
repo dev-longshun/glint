@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import UserNotifications
 
 @MainActor
@@ -28,6 +29,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // stays armed (see SettingsSafety).
         DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
             SettingsSafety.shared.markHealthy()
+        }
+        // 后台预热字体 cache:Settings ▸ Terminal 第一次打开会同步枚举所有
+        // 已安装家族(可能 300+,每个再 availableMembers)。装得多的机器上
+        // 主线程同步跑会卡住一帧;这里挪到 userInitiated queue 后台做掉,
+        // 等用户走到 Settings 时 cache 已 ready。
+        DispatchQueue.global(qos: .userInitiated).async {
+            FontCatalog.warmCache()
+        }
+        // 用户中途装/删字体时让 cache 失效,下次访问按需重建。这是 Cocoa
+        // 桥过来的 CFString 常量,用 raw value 包成 Notification.Name。
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name(kCTFontManagerRegisteredFontsChangedNotification as String),
+            object: nil, queue: nil
+        ) { _ in
+            FontCatalog.invalidateCache()
+            DispatchQueue.global(qos: .utility).async {
+                FontCatalog.warmCache()
+            }
         }
     }
 

@@ -607,9 +607,23 @@ final class WorkspaceStore: ObservableObject {
     /// Terminal appearance settings. Each is persisted to UserDefaults and
     /// fed into ghostty via `GhosttyManager.reloadConfig()` whenever it
     /// changes. The `didSet` hooks both persist and trigger live reload.
-    @Published var terminalFontFamily: String = UserDefaults.standard.string(forKey: "glint.terminalFontFamily") ?? "SF Mono" {
+    ///
+    /// 读写都规范化为「去首尾空白」的形式 —— 下游 FontCatalog 的 Current 行用
+    /// trimmed 值匹配,如果绑定值不 trim,选中态会对不上(老 UserDefaults 里
+    /// 留下 " SF Mono " 会让下拉同时出 Recommended 与 Current 两条)。CJK 路径
+    /// 已经这么做,这里保持对称。
+    @Published var terminalFontFamily: String = {
+        let raw = (UserDefaults.standard.string(forKey: "glint.terminalFontFamily") ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return raw.isEmpty ? "SF Mono" : raw
+    }() {
         didSet {
-            UserDefaults.standard.set(terminalFontFamily, forKey: "glint.terminalFontFamily")
+            let canonical = terminalFontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
+            if canonical != terminalFontFamily {
+                terminalFontFamily = canonical
+                return
+            }
+            UserDefaults.standard.set(canonical, forKey: "glint.terminalFontFamily")
             GhosttyManager.shared.reloadConfig()
         }
     }
@@ -628,6 +642,26 @@ final class WorkspaceStore: ObservableObject {
     @Published var terminalFontBold: Bool = (UserDefaults.standard.object(forKey: "glint.terminalFontBold") as? Bool) ?? false {
         didSet {
             UserDefaults.standard.set(terminalFontBold, forKey: "glint.terminalFontBold")
+            GhosttyManager.shared.reloadConfig()
+        }
+    }
+    /// CJK fallback 字体家族。空 = 不注入，CJK 字形交给系统/ghostty 默认 fallback
+    /// 链(macOS 上通常就是苹方)。非空 = 在主字体与 Menlo 之间插一行
+    /// `font-family = <family>`,主字体缺 CJK 字形时优先回落到这里。
+    ///
+    /// 读写都规范化为「去首尾空白」的形式 —— 下游 FontCatalog 的 Current 行
+    /// 用 trimmed 值匹配,如果绑定值不 trim,选中态会对不上。
+    @Published var terminalCJKFontFamily: String = (UserDefaults.standard.string(forKey: "glint.terminalCJKFontFamily") ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    {
+        didSet {
+            let canonical = terminalCJKFontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
+            if canonical != terminalCJKFontFamily {
+                // 反向写回:避免 didSet 递归调用,只在确实需要时改 @Published 值。
+                terminalCJKFontFamily = canonical
+                return
+            }
+            UserDefaults.standard.set(canonical, forKey: "glint.terminalCJKFontFamily")
             GhosttyManager.shared.reloadConfig()
         }
     }
