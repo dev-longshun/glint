@@ -138,9 +138,15 @@ struct Pane: Identifiable, Codable {
     /// agent stops matching the entry's key, so a stale id can't leak
     /// across an exit/relaunch.
     var sessionIds: [String: String]
+    /// Resolved `CODEX_HOME` path a non-default-home Codex pane was launched
+    /// under, so restart can re-prefix `codex resume …` with it (#45 for the
+    /// multi-home feature). nil for default-home / non-codex panes. Cleared in
+    /// `captureCwdsFromLiveSurfaces` once the foreground stops being Codex, so
+    /// a later default-Codex launch on the same pane can't inherit a stale home.
+    var codexHome: String?
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, workingDirectory, lastAgent, sessionIds
+        case id, title, workingDirectory, lastAgent, sessionIds, codexHome
     }
 
     /// Field shape from the first cut of #45 (one Optional per agent). Read
@@ -159,6 +165,7 @@ struct Pane: Identifiable, Codable {
         self.workingDirectory = workingDirectory
         self.lastAgent = lastAgent
         self.sessionIds = [:]
+        self.codexHome = nil
     }
 
     init(from decoder: Decoder) throws {
@@ -167,6 +174,7 @@ struct Pane: Identifiable, Codable {
         self.title = try c.decode(String.self, forKey: .title)
         self.workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory)
         self.lastAgent = try c.decodeIfPresent(String.self, forKey: .lastAgent)
+        self.codexHome = try c.decodeIfPresent(String.self, forKey: .codexHome)
         if let map = try c.decodeIfPresent([String: String].self, forKey: .sessionIds) {
             self.sessionIds = map
         } else {
@@ -194,6 +202,7 @@ struct Pane: Identifiable, Codable {
         try c.encode(title, forKey: .title)
         try c.encodeIfPresent(workingDirectory, forKey: .workingDirectory)
         try c.encodeIfPresent(lastAgent, forKey: .lastAgent)
+        try c.encodeIfPresent(codexHome, forKey: .codexHome)
         // Skip the key entirely when there's nothing to remember — most
         // panes never see an agent, and an empty `{}` on every pane would
         // be persistent noise in the autosave file.
@@ -1405,7 +1414,7 @@ final class WorkspaceStore: ObservableObject {
                   restoreEnabled(for: kind) else { return nil }
             let sid = pane.sessionIds[kind.rawValue]
                 .flatMap { Self.isValidSessionId($0) ? $0 : nil }
-            return kind.restoreCommand(sessionId: sid)
+            return kind.restoreCommand(sessionId: sid, codexHome: pane.codexHome)
         }()
         let v = GhosttySurfaceView(
             frame: .zero,
@@ -1495,6 +1504,21 @@ final class WorkspaceStore: ObservableObject {
                         if kept.count != existing.count {
                             workspaces[i].panes[paneID]?.sessionIds = kept
                         }
+                    }
+                    // codexHome is only meaningful while Codex is the
+                    // foreground. Clear it ONLY when the pane is back at a
+                    // benign shell — i.e. the user actually exited Codex — not
+                    // when a Codex tool subprocess (git/npm/vim/…) briefly takes
+                    // the foreground pid. Unlike sessionIds (re-stashed by every
+                    // UserPromptSubmit hook above), codexHome has no writer but
+                    // launch, so a premature clear permanently breaks the
+                    // non-default-home resume (#45 multi-home regression) until
+                    // the pane is relaunched. A stale home can't leak anyway:
+                    // the next launch always rewrites codexHome via
+                    // queueInitialInput.
+                    if workspaces[i].panes[paneID]?.codexHome != nil,
+                       Self.isBenignShellProcessName(name) {
+                        workspaces[i].panes[paneID]?.codexHome = nil
                     }
                 }
             }
@@ -1902,10 +1926,19 @@ final class WorkspaceStore: ObservableObject {
     /// (`pendingInitialInput` → `GhosttySurfaceView.initialInput`); a nil/empty
     /// command leaves the pane a bare shell. Call right after creating the pane,
     /// before its surface is built, so the lookup finds the entry.
-    private func queueInitialInput(_ command: String?, workspace: UUID, pane: PaneID) {
+    private func queueInitialInput(_ command: String?, codexHome: String? = nil,
+                                   workspace: UUID, pane: PaneID) {
         guard let cmd = command, !cmd.isEmpty else { return }
         let key = WorkspacePaneKey(workspace: workspace, pane: pane)
         pendingInitialInput[key] = cmd.hasSuffix("\n") ? cmd : cmd + "\n"
+        // Persist a non-default Codex home on the pane so a restart can
+        // re-prefix `codex resume …` with the same CODEX_HOME (see
+        // `Pane.codexHome`). The pane was just created above us, so the
+        // subscript hits.
+        if let home = codexHome,
+           let wi = workspaces.firstIndex(where: { $0.id == workspace }) {
+            workspaces[wi].panes[pane]?.codexHome = home
+        }
     }
 
     // MARK: new-terminal entry points (honor the "ask which agent" setting)
@@ -1935,15 +1968,16 @@ final class WorkspaceStore: ObservableObject {
         agentChooserIntent = nil
         guard let item else { return }
         let cmd = item.command
+        let home = item.codexHome
         switch intent {
-        case .tab:        newTab(agentCommand: cmd)
-        case .splitRight: splitFocused(.horizontal, agentCommand: cmd)
-        case .splitDown:  splitFocused(.vertical, agentCommand: cmd)
-        case .workspace:  addWorkspace(agentCommand: cmd)
+        case .tab:        newTab(agentCommand: cmd, codexHome: home)
+        case .splitRight: splitFocused(.horizontal, agentCommand: cmd, codexHome: home)
+        case .splitDown:  splitFocused(.vertical, agentCommand: cmd, codexHome: home)
+        case .workspace:  addWorkspace(agentCommand: cmd, codexHome: home)
         }
     }
 
-    func splitFocused(_ direction: SplitDirection, agentCommand: String? = nil) {
+    func splitFocused(_ direction: SplitDirection, agentCommand: String? = nil, codexHome: String? = nil) {
         guard let i = currentIndex, let t = workspaces[i].selectedTabIndex else { return }
         let new = PaneID(value: workspaces[i].nextPaneSeq)
         workspaces[i].nextPaneSeq += 1
@@ -1955,7 +1989,7 @@ final class WorkspaceStore: ObservableObject {
             newID: new
         ) ?? workspaces[i].tabs[t].root
         workspaces[i].tabs[t].focusedPane = new
-        queueInitialInput(agentCommand, workspace: workspaces[i].id, pane: new)
+        queueInitialInput(agentCommand, codexHome: codexHome, workspace: workspaces[i].id, pane: new)
     }
 
     /// Shells whose presence as the foreground process means "nothing of
@@ -2235,7 +2269,7 @@ final class WorkspaceStore: ObservableObject {
     /// Open a new tab in the current workspace, inheriting the focused pane's
     /// cwd (terminal convention: a new tab opens "here"). Inserts it right
     /// after the current tab and selects it.
-    func newTab(agentCommand: String? = nil) {
+    func newTab(agentCommand: String? = nil, codexHome: String? = nil) {
         guard let i = currentIndex else { return }
         let inheritedCwd = (workspaces[i].selectedTab?.focusedPane)
             .flatMap { workspaces[i].panes[$0]?.workingDirectory }
@@ -2251,7 +2285,7 @@ final class WorkspaceStore: ObservableObject {
             workspaces[i].tabs.append(tab)
         }
         workspaces[i].selectedTabID = tab.id
-        queueInitialInput(agentCommand, workspace: workspaces[i].id, pane: pane)
+        queueInitialInput(agentCommand, codexHome: codexHome, workspace: workspaces[i].id, pane: pane)
     }
 
     /// Close a tab and every pane it holds, cleaning up each pane's surface,
@@ -2489,7 +2523,7 @@ final class WorkspaceStore: ObservableObject {
         workspaces.move(fromOffsets: IndexSet(integer: source), toOffset: offset)
     }
 
-    func addWorkspace(agentCommand: String? = nil) {
+    func addWorkspace(agentCommand: String? = nil, codexHome: String? = nil) {
         let palette = [
             ("5E5CE6", "•"), ("FF6582", "•"), ("30D158", "•"),
             ("FF9F0A", "•"), ("64D2FF", "•"), ("BF5AF2", "•"),
@@ -2500,7 +2534,7 @@ final class WorkspaceStore: ObservableObject {
         workspaces.append(ws)
         selectedWorkspaceID = ws.id
         // Workspace.fresh seeds a single pane at PaneID 0.
-        queueInitialInput(agentCommand, workspace: ws.id, pane: PaneID(value: 0))
+        queueInitialInput(agentCommand, codexHome: codexHome, workspace: ws.id, pane: PaneID(value: 0))
     }
 
     /// Open a workspace anchored at `directory` (the "Local Repo" source). The
@@ -2543,7 +2577,7 @@ final class WorkspaceStore: ObservableObject {
     func createWorktreeWorkspace(repoRoot: String, baseBranch: String, branch: String,
                                  worktreePath: String, createBranch: Bool = true,
                                  carryUncommitted: Bool = false,
-                                 agentCommand: String?) async throws -> UUID {
+                                 agentCommand: String?, codexHome: String? = nil) async throws -> UUID {
         let expanded = (worktreePath as NSString).expandingTildeInPath
         try await git.addWorktree(repo: repoRoot, path: expanded,
                                   newBranch: createBranch ? branch : nil,
@@ -2560,7 +2594,8 @@ final class WorkspaceStore: ObservableObject {
         }
 
         let first = PaneID(value: 0)
-        let pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
+        var pane = Pane(id: first, title: "zsh", workingDirectory: expanded)
+        pane.codexHome = codexHome
         let tab = WorkspaceTab(id: TabID(value: 0), name: nil, root: .leaf(first), focusedPane: first)
         let ws = Workspace(
             id: UUID(), name: "New workspace", userNamed: false,
