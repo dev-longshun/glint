@@ -1037,38 +1037,16 @@ enum ShellKeybindInstaller {
         }
     }
 
+    // Block-management math lives in `ShellRcBlock` so InlineSuggestionInstaller
+    // and this installer share one set of edge-case handling. The two
+    // installers' fenced blocks coexist in the same .zshrc with different
+    // sentinels.
     private static func upsertBlock(in text: String, block: String) -> String {
-        if let range = markerRange(in: text) {
-            var out = text
-            out.replaceSubrange(range, with: block)
-            return out
-        }
-        var out = text
-        if !out.isEmpty && !out.hasSuffix("\n") { out += "\n" }
-        if !out.isEmpty { out += "\n" }
-        return out + block + "\n"
+        ShellRcBlock.upsert(in: text, begin: beginMarker, end: endMarker, block: block)
     }
 
     private static func removeBlock(from text: String) -> String {
-        guard let range = markerRange(in: text) else { return text }
-        var out = text
-        out.removeSubrange(range)
-        // Trim a leading blank line we may have left where the block sat.
-        if out.hasPrefix("\n") { out.removeFirst() }
-        return out
-    }
-
-    /// Span covering the marker block plus its trailing newline, so removing
-    /// it doesn't leave a dangling blank line.
-    private static func markerRange(in text: String) -> Range<String.Index>? {
-        guard let begin = text.range(of: beginMarker),
-              let end = text.range(of: endMarker),
-              begin.lowerBound < end.upperBound else { return nil }
-        var upper = end.upperBound
-        if upper < text.endIndex, text[upper] == "\n" {
-            upper = text.index(after: upper)
-        }
-        return begin.lowerBound..<upper
+        ShellRcBlock.remove(from: text, begin: beginMarker, end: endMarker)
     }
 }
 

@@ -1043,6 +1043,15 @@ private struct TerminalPane: View {
             }
         }
 
+        SettingsCard("Command suggestions",
+                     footer: "Adds a fenced block to ~/.zshrc that loads zsh-autosuggestions from ~/.config/glint. Only affects newly spawned zsh panes; bash / fish are untouched.") {
+            SettingsRow("History-driven autosuggestions (zsh)",
+                        subtitle: "Show your most recent matching command in faint text after the cursor as you type. Press → or End to accept.") {
+                Toggle("", isOn: $store.inlineSuggestionEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+        }
+
         SettingsCard("External control",
                      footer: "Exposes a local socket under ~/.glint/run/ so other apps on this Mac can focus panes and inject text/keys. Any process that can read the 0600 token file may drive your terminals — off by default. Toggling takes effect immediately.") {
             SettingsRow("Allow external control",

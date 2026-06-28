@@ -1016,6 +1016,22 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(archiveExpanded, forKey: "glint.archiveExpanded") }
     }
 
+    /// Inline command suggestion (zsh ghost text). Toggling this writes /
+    /// strips a fenced block in `~/.zshrc` that sources Glint's bundled
+    /// zsh-autosuggestions copy. We use the shell-side rendering rather than
+    /// a macOS-side overlay because the overlay never matches ghostty's
+    /// rasterization exactly (font fallback + cell-height adjustment +
+    /// baseline metrics misalign on every pane). Already-running zsh
+    /// sessions only pick up the change after they restart; newly opened
+    /// panes get it immediately. Bash / fish panes are unaffected — the
+    /// block lives in `.zshrc` only. Defaults to on.
+    @Published var inlineSuggestionEnabled: Bool = (UserDefaults.standard.object(forKey: "glint.inlineSuggestion.enabled") as? Bool) ?? true {
+        didSet {
+            UserDefaults.standard.set(inlineSuggestionEnabled, forKey: "glint.inlineSuggestion.enabled")
+            InlineSuggestionInstaller.apply(enabled: inlineSuggestionEnabled)
+        }
+    }
+
     /// Restore each pane's previous scrollback (colors intact) on launch via a
     /// render-grid snapshot taken off the hot path; off = nothing written or
     /// read. Defaults to off — opt-in, since it persists terminal contents to
@@ -1341,6 +1357,14 @@ final class WorkspaceStore: ObservableObject {
         }
         self.sidebarCollapsed = loaded.sidebarCollapsed
         Self.current = self
+
+        // Reconcile the zsh-side inline-suggestion install on every launch:
+        // first-ever launch installs from the current default; subsequent
+        // launches no-op (the snippet + zshrc block are already in place);
+        // an app upgrade with a newer bundled zsh-autosuggestions copy gets
+        // a fresh ~/.config/glint copy via content-diff. The didSet on the
+        // toggle doesn't run during init, so we have to call this here.
+        InlineSuggestionInstaller.apply(enabled: self.inlineSuggestionEnabled)
 
         // Debounced autosave: only persistable @Published fields trigger a save.
         // Wiring this to bare `objectWillChange` re-encodes on every transient

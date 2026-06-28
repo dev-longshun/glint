@@ -4722,6 +4722,50 @@
           }
         }
       }
+    },
+    "Command suggestions": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "命令提示"
+          }
+        }
+      }
+    },
+    "Adds a fenced block to ~/.zshrc that loads zsh-autosuggestions from ~/.config/glint. Only affects newly spawned zsh panes; bash / fish are untouched.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向 ~/.zshrc 追加一小段受 Glint 管理的代码块，从 ~/.config/glint 加载 zsh-autosuggestions。仅对新开的 zsh 面板生效，不影响 bash / fish。"
+          }
+        }
+      }
+    },
+    "History-driven autosuggestions (zsh)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "历史命令自动补全（zsh）"
+          }
+        }
+      }
+    },
+    "Show your most recent matching command in faint text after the cursor as you type. Press → or End to accept.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入时在光标后用浅色显示最近一条匹配的历史命令。按 → 或 End 接受。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

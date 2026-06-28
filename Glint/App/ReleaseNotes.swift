@@ -52,6 +52,15 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.25-beta.5",
+            en: [
+                "zsh panes now show your most recent matching history command as faint inline text right after the cursor — press → or End to accept. Toggle in Settings ▸ Terminal ▸ Command suggestions (defaults on). Glint installs a small fenced block in ~/.zshrc that sources the vendored zsh-autosuggestions script; flipping the toggle off strips that block cleanly. If you already load zsh-autosuggestions through oh-my-zsh / prezto / your own config, Glint detects it and stays out of the way. Bash / fish panes are unaffected. The ghost text is rendered by zsh as real terminal cells, so font, spacing, and alignment always match the surrounding line — no SwiftUI overlay drift."
+            ],
+            zh: [
+                "zsh 窗格在你输入时,光标后会用浅色显示最近一条匹配的历史命令 —— 按 → 或 End 接受。在 设置 ▸ 终端 ▸ 命令提示 控制开关(默认开)。Glint 会在 ~/.zshrc 末尾维护一小段带围栏的代码块,引入随包发行的 zsh-autosuggestions 脚本;关掉开关会把这段干净地删除。如果你已经通过 oh-my-zsh / prezto / 自己的配置 加载了 zsh-autosuggestions,Glint 会让路、不重复加载、不打扰你既有设置。bash / fish 窗格不受影响。提示文本由 zsh 直接渲染成真实终端字符,字体、间距与上下文完全对齐,不会再有任何浮层错位。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.25-beta.4",
             en: [
                 "Review goes remote — start an SSH session in a pane, run Review, and Glint follows the remote shell's cwd to diff changes there just like a local repo. Hardened single-quoting on the SSH layer so funky path characters can't break the wire command, and remote-title parsing now handles IPv6 bracketed hosts.",
