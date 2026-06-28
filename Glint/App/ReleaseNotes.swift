@@ -52,6 +52,23 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.25-beta.4",
+            en: [
+                "Review goes remote — start an SSH session in a pane, run Review, and Glint follows the remote shell's cwd to diff changes there just like a local repo. Hardened single-quoting on the SSH layer so funky path characters can't break the wire command, and remote-title parsing now handles IPv6 bracketed hosts.",
+                "Diff view now does syntax highlighting (Swift, TS/JS, Python, Go, Rust, JSON, YAML, and more), walked independently for old/new sides so a `/*` you removed doesn't bleed comment color onto the lines after it.",
+                "Changes Only mode now takes an adjustable context-line count — grow the surrounding lines when the default isn't enough to make a hunk read.",
+                "Launch focuses the terminal instead of the sidebar search field — no more ⌘1 / Esc to snap focus back.",
+                "Small polish: selected workspace no longer shows the extra left accent bar (just the wash); the macOS notification toggle description now states clearly that it only fires while Glint is in the background."
+            ],
+            zh: [
+                "Review 跨 SSH 了 —— 在窗格里开远程 shell,直接 Review,Glint 跟着远程当前目录抓 diff,跟本地仓库体验一致。SSH 那一层做了严格的单引号转义,路径里的特殊字符不会破坏远端命令;远程标题解析也兼容 IPv6 方括号格式。",
+                "Diff 视图加入语法高亮(Swift、TS/JS、Python、Go、Rust、JSON、YAML 等),新旧两侧各自独立走状态机,删掉的 `/*` 不会把后面的行误染成注释。",
+                "「仅显示改动」模式可调上下文行数 —— 默认行数看着不够时随手往上加。",
+                "启动后焦点直接落到终端,不再先停在左侧搜索框 —— 不用再 ⌘1 / Esc 把焦点抢回来。",
+                "细节:选中的工作区不再多一根左侧 accent 竖条,只留底色;通用设置里的 macOS 通知说明改成「仅 Glint 后台时触发」,避免误以为前台也会弹。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.25-beta.3",
             en: [
                 "Review window got a big upgrade: side-by-side (split) and unified diff modes, a Changes Only toggle, ignore-whitespace, and Opt+↑/↓ to jump between changes — all switchable from the file header. Plus a root-vs-current-directory toggle so Review (and Reveal in Finder) reads diffs from the side you actually meant when you're in a subdirectory.",
