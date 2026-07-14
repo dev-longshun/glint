@@ -850,7 +850,7 @@ private struct TabChip: View {
         .paneSummaryPopover(paneInfos.count >= 2 ? paneInfos : [], store: store,
                             suppressed: isDragging || reordering)
         .contextMenu {
-            Button("New Tab") { store.newTab() }
+            Button("New Tab") { store.requestNewTab() }
             Divider()
             Button("Close Tab") { store.closeTab(tab.id) }
                 .disabled(ws.tabs.count <= 1)

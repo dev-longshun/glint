@@ -583,10 +583,11 @@ final class WorkspaceStore: ObservableObject {
     /// filesystem/command events plus a slow fallback. NON-persistent — it's live
     /// state, recomputed each launch, never written to state.json.
     @Published var gitStatuses: [UUID: GitStatus] = [:]
-    /// Workspaces with a `git status` poll in flight — guards against a slow git
-    /// (large/network repo) letting repeated events stack overlapping subprocesses
-    /// whose out-of-order results overwrite a newer status.
-    private var gitInFlight: Set<UUID> = []
+    /// Serializes `git status` per workspace while retaining one coalesced
+    /// follow-up request. A bare in-flight Set dropped an invalidation when a
+    /// trailing event landed while the previous async status/log pair was still
+    /// suspended, leaving a stale badge until the slow fallback poll.
+    private var gitRefreshGate = GitRefreshInFlightGate()
     /// Resolved cwds confirmed (via a `rev-parse` probe) NOT to be inside a git
     /// repo. A plain shell sitting in such a dir is skipped on subsequent polls
     /// instead of re-spawning a doomed `git status` every tick. Only ever holds
@@ -1341,7 +1342,7 @@ final class WorkspaceStore: ObservableObject {
     private var gitWatchers: [UUID: GitWatchRegistration] = [:]
     /// Coalesces the command-finished and FSEvents channels so one logical
     /// change spawns at most one `git status` (see its own doc comment for the
-    /// gap it closes vs `gitInFlight`).
+    /// timing gap it closes before the in-flight gate is involved).
     private let gitRefreshCoordinator = GitRefreshCoordinator()
 
     /// The app's single live store. AppDelegate consults it for the quit
@@ -1498,8 +1499,8 @@ final class WorkspaceStore: ObservableObject {
                 let wsID = key.workspace
                 // Route through the refresh coordinator so the FSEvents
                 // callback that follows this same change ~0.5s later doesn't
-                // spawn a second `git status` (gitInFlight only merges runs
-                // that overlap in time; a fast git finishes first).
+                // spawn a second `git status` (the in-flight gate only merges
+                // runs that overlap in time; a fast git finishes first).
                 self.gitRefreshCoordinator.request(wsID) { [weak self] in
                     self?.refreshGitStatusNow(for: wsID)
                 }
@@ -2260,8 +2261,16 @@ final class WorkspaceStore: ObservableObject {
     /// with a live session (even an idle one — closing kills the session),
     /// or any non-shell foreground process (vim, ssh, a build, …).
     func paneNeedsCloseConfirmation(_ key: WorkspacePaneKey) -> Bool {
+        // Destructive actions are rare, so consult the live surface first
+        // instead of trusting the event-driven cache. In particular, an agent
+        // launched through Ghostty's `initial_input` does not pass through our
+        // Return-key observer; before the fallback capture ran, paneProcesses
+        // still said "zsh" and close/quit silently killed the live session.
+        let processName = surfaceViews[key]?.foregroundProcessName()
+            ?? paneProcesses[key]
+        let name = processName?.lowercased()
         if paneAgentState[key] != nil,
-           let name = paneProcesses[key]?.lowercased(),
+           let name,
            Self.agentKind(named: name) != nil {
             return true
         }
@@ -2269,7 +2278,7 @@ final class WorkspaceStore: ObservableObject {
            s == .thinking || s == .tool || s == .compacting || s == .needsPermission {
             return true
         }
-        if let name = paneProcesses[key]?.lowercased(), !name.isEmpty,
+        if let name, !name.isEmpty,
            !Self.benignShells.contains(name) {
             return true
         }
@@ -3353,14 +3362,17 @@ final class WorkspaceStore: ObservableObject {
         return (ctx.target, ctx.port, ctx.remotePath, view.remoteHost)
     }
 
-    /// True iff this pane's live surface is a capturable SSH session with a
-    /// known remote path — i.e. there's no LOCAL directory to reveal or copy
-    /// (the pane's `workingDirectory` snapshot is just the ssh client's stale
-    /// local launch dir). Per-pane, unlike `remoteContext(for:)` which reads
-    /// the SELECTED tab; tab-scoped actions (right-click a background tab's
-    /// Copy/Reveal) pass that tab's focused pane so they guard the right tab.
+    /// True iff this pane's live foreground process is SSH. Do not require a
+    /// parsed remote title/path: shells that disable title updates are still
+    /// remote, and their `workingDirectory` snapshot is the ssh client's stale
+    /// LOCAL launch directory. Per-pane, unlike `remoteContext(for:)` which
+    /// reads the selected tab and additionally requires a reviewable path.
     private func isRemotePane(wsID: UUID, pane: PaneID) -> Bool {
-        surfaceViews[WorkspacePaneKey(workspace: wsID, pane: pane)]?.remoteReviewContext != nil
+        guard let view = surfaceViews[WorkspacePaneKey(workspace: wsID, pane: pane)] else {
+            return false
+        }
+        return view.foregroundProcessName()?.lowercased() == "ssh"
+            || view.remoteReviewContext != nil
     }
 
     func effectiveGitPath(for ws: Workspace) -> String? {
@@ -3470,11 +3482,16 @@ final class WorkspaceStore: ObservableObject {
             if gitStatuses[id] != nil { gitStatuses[id] = nil }
             return
         }
-        // Coalesce: if a poll for this workspace is already running, skip — the
-        // in-flight one will publish the freshest result.
-        guard !gitInFlight.contains(id) else { return }
-        gitInFlight.insert(id)
-        defer { gitInFlight.remove(id) }
+        // Serialize per workspace, but never drop an invalidation. The current
+        // status subprocess may already have snapshotted the tree while the
+        // concurrent `git log` is still suspended; a request in that window
+        // must trigger a fresh pass after this one completes.
+        guard gitRefreshGate.begin(id) else { return }
+        defer {
+            if gitRefreshGate.finish(id) {
+                refreshGitStatusNow(for: id)
+            }
+        }
         if let st = try? await git.status(at: path) {
             gitStatuses[id] = st
             knownNonRepoPaths.remove(path)
@@ -3668,6 +3685,20 @@ enum AppIconPreset: String, CaseIterable, Identifiable {
 }
 
 extension WorkspaceStore {
+    /// Best attention rank across the panes that are actually present in this
+    /// workspace's tab layout. This deliberately does not reuse `agentSummary`:
+    /// that method chooses the status-dot winner, where an active `.thinking`
+    /// pane outranks `.justCompleted`; for sidebar attention, any completed
+    /// sibling must still float the workspace.
+    func attentionRank(for workspace: Workspace) -> Int {
+        let statuses = workspace.tabs.flatMap { tab in
+            tab.root.leaves.compactMap { paneID in
+                paneAgentState[WorkspacePaneKey(workspace: workspace.id, pane: paneID)]?.status
+            }
+        }
+        return PaneAgentStatus.bestAttentionRank(in: statuses)
+    }
+
     /// Most attention-worthy agent status across this workspace's panes.
     /// Returns nil if no pane is running an agent in a non-idle state.
     func agentStatusSummary(for workspace: Workspace) -> PaneAgentStatus? {

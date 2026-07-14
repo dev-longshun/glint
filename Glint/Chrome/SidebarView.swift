@@ -205,7 +205,7 @@ struct SidebarView: View {
         // ranking itself is shared with ⌘⇧A via `PaneAgentStatus.attentionRank`,
         // so the sidebar sort and the jump-to-attention target always agree.
         func rank(_ ws: Workspace) -> Int {
-            store.agentSummary(for: ws)?.status.attentionRank ?? PaneAgentStatus.sinkAttentionRank
+            store.attentionRank(for: ws)
         }
         return base.enumerated().sorted { lhs, rhs in
             let lr = rank(lhs.element), rr = rank(rhs.element)

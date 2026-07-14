@@ -109,6 +109,14 @@ enum PaneAgentStatus: String, Codable {
     /// The rank at which a status stops floating / no longer counts as "needs
     /// you". `jumpToAttention` ignores panes at this rank or higher.
     static let sinkAttentionRank = 2
+
+    /// Lowest (most urgent) attention rank in a collection. Keeping this on the
+    /// attention axis prevents callers from first collapsing multiple panes
+    /// through the unrelated status-dot ordering.
+    static func bestAttentionRank<S: Sequence>(in statuses: S) -> Int
+    where S.Element == PaneAgentStatus {
+        statuses.reduce(sinkAttentionRank) { min($0, $1.attentionRank) }
+    }
 }
 
 struct PaneAgentState: Codable, Equatable {

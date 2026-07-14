@@ -2,6 +2,13 @@ import XCTest
 @testable import Glint
 
 final class AgentHookRoutingTests: XCTestCase {
+    func testAttentionRankDoesNotLetThinkingHideCompletedSibling() {
+        XCTAssertEqual(
+            PaneAgentStatus.bestAttentionRank(in: [.thinking, .justCompleted]),
+            PaneAgentStatus.justCompleted.attentionRank
+        )
+    }
+
     func testDirectPaneEnvelopeDecodes() throws {
         let line = try XCTUnwrap(
             #"{"pane":"12345678-1234-1234-1234-123456789ABC:7","hook":"Stop","agent":"claude"}"#

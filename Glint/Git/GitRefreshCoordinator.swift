@@ -5,8 +5,8 @@ import Foundation
 ///
 /// Two independent push channels both fire for one change: the shell's
 /// command-finished signal lands first, and the filesystem watcher's callback
-/// follows ~0.5s later (its debounce latency). `WorkspaceStore.gitInFlight`
-/// only de-dupes refreshes that overlap in time — and a fast local `git status`
+/// follows ~0.5s later (its debounce latency). The store's in-flight gate only
+/// de-dupes refreshes that overlap in time — and a fast local `git status`
 /// (~100ms) finishes well before the trailing FSEvents callback arrives, so
 /// one `git commit` spawned two subprocesses. This coordinator closes that gap:
 /// once a refresh has been dispatched for a workspace, further refreshes
@@ -68,5 +68,33 @@ final class GitRefreshCoordinator {
             pending[id]?.cancel()
             pending[id] = nil
         }
+    }
+}
+
+/// Serializes the actual async git-status work for each workspace without
+/// dropping invalidations that arrive while a refresh is suspended. The first
+/// request starts work; later requests set one coalesced rerun bit. Finishing
+/// the active refresh consumes that bit so the caller can immediately start a
+/// fresh snapshot.
+struct GitRefreshInFlightGate {
+    private var running: Set<UUID> = []
+    private var rerunRequested: Set<UUID> = []
+
+    /// True when the caller should start work now. False means a refresh is
+    /// already running and exactly one follow-up has been remembered.
+    mutating func begin(_ id: UUID) -> Bool {
+        guard !running.contains(id) else {
+            rerunRequested.insert(id)
+            return false
+        }
+        running.insert(id)
+        return true
+    }
+
+    /// Finish the active refresh. Returns true when at least one request
+    /// arrived while it was running and the caller must launch a fresh pass.
+    mutating func finish(_ id: UUID) -> Bool {
+        running.remove(id)
+        return rerunRequested.remove(id) != nil
     }
 }

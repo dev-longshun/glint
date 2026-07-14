@@ -2,6 +2,19 @@ import XCTest
 @testable import Glint
 
 final class GitRefreshCoordinatorTests: XCTestCase {
+    func testInFlightGateCoalescesRequestsIntoOneRequiredRerun() {
+        var gate = GitRefreshInFlightGate()
+        let id = UUID()
+
+        XCTAssertTrue(gate.begin(id))
+        XCTAssertFalse(gate.begin(id))
+        XCTAssertFalse(gate.begin(id))
+        XCTAssertTrue(gate.finish(id))
+
+        XCTAssertTrue(gate.begin(id))
+        XCTAssertFalse(gate.finish(id))
+    }
+
     /// First request for a workspace dispatches immediately (no trailing delay).
     func testFirstRequestRunsImmediately() {
         let coordinator = GitRefreshCoordinator(minInterval: 0.3)

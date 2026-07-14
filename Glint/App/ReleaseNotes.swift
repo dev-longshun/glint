@@ -52,6 +52,21 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.26-beta.2",
+            en: [
+                "Jump straight to the pane that needs you with ⌘⇧A. Permission prompts and completed turns now float consistently in the sidebar, and folders can be dragged from Finder onto the sidebar to open them as workspaces.",
+                "Tabs have a fuller context menu for creating and closing tabs, copying paths, and revealing folders. Copy Path, Reveal, Review, and Settings are easier to reach from the keyboard, while Review files now offer their own Copy, Reveal, and Open actions.",
+                "Codex status tracking is more accurate: automatic approval review no longer looks like a blocked permission request, quota windows stay stable, and a newly launched agent is protected by the close confirmation immediately.",
+                "Terminal and git state now refresh from events with coalesced follow-up work, cutting background polling while keeping badges current. SSH panes are also detected without relying on terminal titles, so local path actions can no longer target a stale directory."
+            ],
+            zh: [
+                "按 ⌘⇧A 可以直接跳到需要你处理的窗格。权限请求和刚完成的任务现在会在侧边栏里稳定置顶；也可以把 Finder 里的文件夹拖到侧边栏，直接打开成工作区。",
+                "标签页右键菜单补全了新建、关闭、复制路径和在 Finder 中显示等操作；复制路径、显示、Review 和设置也更容易从键盘访问。Review 文件列表现在同样支持复制路径、显示和打开。",
+                "Codex 状态识别更准确：自动审批不再被误报为等待权限，额度窗口显示更稳定，刚启动的 Agent 也会立刻受到关闭确认保护。",
+                "终端和 Git 状态改为事件驱动并合并后续刷新，减少后台轮询的同时保持徽标及时更新。SSH 窗格也不再依赖终端标题识别，路径操作不会误用过期的本地目录。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.26-beta.1",
             en: [
                 "Glint now accepts folders from Finder Open With, dock drops, external launchers, and `open -a Glint <path>`. Folders open directly as workspaces, git folders light up Review / worktree actions, and reopening the same path switches back to the existing workspace instead of duplicating it.",
