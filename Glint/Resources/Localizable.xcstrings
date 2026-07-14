@@ -859,7 +859,40 @@
         }
       }
     },
+    "Close Other Tabs": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭其他标签页"
+          }
+        }
+      }
+    },
+    "Close other tabs?": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭其他标签页?"
+          }
+        }
+      }
+    },
     "Close Tab": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭标签页"
+          }
+        }
+      }
+    },
+    "Close Tabs": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
@@ -1095,6 +1128,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "拷贝路径"
+          }
+        }
+      }
+    },
+    "Copy the focused pane's directory": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拷贝当前面板所在目录"
           }
         }
       }
@@ -2987,6 +3031,28 @@
         }
       }
     },
+    "Open Glint settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 Glint 设置"
+          }
+        }
+      }
+    },
+    "Open the focused pane's directory in Finder": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中打开当前面板所在目录"
+          }
+        }
+      }
+    },
     "Open with": {
       "extractionState": "manual",
       "localizations": {
@@ -3577,6 +3643,17 @@
         }
       }
     },
+    "Review this workspace's changes": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "审阅此工作区的改动"
+          }
+        }
+      }
+    },
     "Roomy": {
       "extractionState": "stale",
       "localizations": {
@@ -3940,6 +4017,17 @@
     },
     "Something is still running in it and will be terminated.": {
       "extractionState": "stale",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其中仍有任务在运行,关闭后会被终止。"
+          }
+        }
+      }
+    },
+    "Something is still running in them and will be terminated.": {
+      "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
