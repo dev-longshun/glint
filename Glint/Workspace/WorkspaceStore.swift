@@ -2375,6 +2375,40 @@ final class WorkspaceStore: ObservableObject {
         refreshGitStatusNow(for: workspace)
     }
 
+    /// ⌘⇧A: jump to the next pane that needs you. `PaneAgentStatus.attentionRank`
+    /// is the shared ordering, so ⌘⇧A lands on the same pane that floats to the
+    /// top of the sidebar. The current workspace is walked first (so a local
+    /// attention pane wins ties against a remote one), then panes in display
+    /// order (tab → leaves) — never `panes.keys`, whose order is unspecified and
+    /// would make the target non-deterministic. Reuses `revealPane` (the
+    /// notification-click path): it switches workspace, selects the pane's tab,
+    /// focuses it, and clears the unread / dock-badge state. Nothing needs
+    /// attention ⇒ beep.
+    func jumpToAttention() {
+        let current = selectedWorkspaceID
+        let ordered = workspaces.filter { !$0.archived && $0.id == current }
+            + workspaces.filter { !$0.archived && $0.id != current }
+        // Walk panes in display order and keep the FIRST pane at the best
+        // (lowest) attentionRank. `< bestRank` (not `<=`) preserves the
+        // current-workspace-first / tab-order winner among equal ranks.
+        var bestRank = Int.max
+        var best: (ws: UUID, pane: PaneID)?
+        for ws in ordered {
+            for tab in ws.tabs {
+                for paneID in tab.root.leaves {
+                    let key = WorkspacePaneKey(workspace: ws.id, pane: paneID)
+                    guard let rank = paneAgentState[key]?.status.attentionRank,
+                          rank < PaneAgentStatus.sinkAttentionRank,   // ignore sinks (idle/thinking/…)
+                          rank < bestRank else { continue }
+                    bestRank = rank
+                    best = (ws.id, paneID)
+                }
+            }
+        }
+        guard let target = best else { NSSound.beep(); return }
+        revealPane(workspace: target.ws, pane: target.pane)
+    }
+
     // MARK: - external control (control.sock)
     //
     // Command dispatch for ControlBridge. Each method runs on the main thread
@@ -3690,6 +3724,13 @@ extension WorkspaceStore {
         }
     }
 
+    /// Attention ranking shared by the status merge and the icon pick.
+    /// Which status to SHOW (the tab chip's dot) when a tab has panes at
+    /// different statuses — NOT the "float to top" ordering. A different axis
+    /// from `PaneAgentStatus.attentionRank` (which ranks what the sidebar
+    /// floats and ⌘⇧A jumps to, and treats `.failed`/`.justCompleted` as
+    /// peers); here `.failed` outranks `.justCompleted` because an error dot
+    /// should win the chip. Don't "fix" one to match the other.
     private func statusRank(_ s: PaneAgentStatus) -> Int {
         switch s {
         case .needsPermission: return 5

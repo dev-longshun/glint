@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import ImageIO
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
@@ -108,6 +109,26 @@ struct SidebarView: View {
             // gap between cards).
             .background(NoDragSurface())
         }
+        // Drag a folder from Finder onto the sidebar → open it as a workspace,
+        // the same path as dropping it on the dock icon (WorkspaceStore.openURL
+        // → openFolder). Files are ignored: drop a file on the terminal pane to
+        // paste its path instead. The sidebar's internal reorder is a SwiftUI
+        // DragGesture, not system drag-and-drop, so this doesn't clash with it.
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            for provider in providers {
+                provider.loadObject(ofClass: NSURL.self) { obj, _ in
+                    guard let url = obj as? URL, Self.isDirectory(url) else { return }
+                    DispatchQueue.main.async { store.openURL(url) }
+                }
+            }
+            // Accept iff at least one provider can yield a file URL, so a
+            // non-file drag (text, the sidebar's own cards) isn't swallowed.
+            return providers.contains { $0.canLoadObject(ofClass: NSURL.self) }
+        }
+    }
+
+    private static func isDirectory(_ url: URL) -> Bool {
+        (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
     }
 
     // MARK: drag-to-reorder (manual gesture, deterministic pointer hit-test)
@@ -178,18 +199,17 @@ struct SidebarView: View {
             }
         }
         guard applySort, store.sortCompletedFirst else { return base }
-        // Stable partition: `.justCompleted` first, preserving the user's
-        // drag-assigned order within each group. Using enumerated() +
-        // offset as the tiebreaker keeps the sort deterministic regardless
-        // of `sorted(by:)` stability guarantees.
-        func attention(_ e: Workspace) -> Bool {
-            let s = store.agentSummary(for: e)?.status
-            return s == .justCompleted || s == .failed   // both float: finished or errored
+        // Stable 3-tier partition, preserving the user's drag-assigned order
+        // within each tier. enumerated() + offset tiebreaker keeps the sort
+        // deterministic regardless of `sorted(by:)` stability guarantees. The
+        // ranking itself is shared with ⌘⇧A via `PaneAgentStatus.attentionRank`,
+        // so the sidebar sort and the jump-to-attention target always agree.
+        func rank(_ ws: Workspace) -> Int {
+            store.agentSummary(for: ws)?.status.attentionRank ?? PaneAgentStatus.sinkAttentionRank
         }
         return base.enumerated().sorted { lhs, rhs in
-            let lhsDone = attention(lhs.element)
-            let rhsDone = attention(rhs.element)
-            if lhsDone != rhsDone { return lhsDone }
+            let lr = rank(lhs.element), rr = rank(rhs.element)
+            if lr != rr { return lr < rr }
             return lhs.offset < rhs.offset
         }.map(\.element)
     }
