@@ -1909,12 +1909,13 @@ final class WorkspaceStore: ObservableObject {
             // beat of red rather than silently snapping to idle.
             state.status = .failed
         case "NeedsReply":
-            // OMP fires NeedsReply when the agent finishes its turn and is
-            // idle waiting for the user's next prompt — a richer signal than
-            // Claude's Stop (which just means "turn ended"). Always set the
-            // sticky badge, even when the user is watching: unlike Stop's
-            // justCompleted, NeedsReply means "your move", so it should never
-            // silently snap to idle. Cleared on view like justCompleted/failed.
+            // OMP's bridge sends NeedsReply when the agent invokes its `ask`
+            // tool mid-turn — it's blocked on a question, not done (a normal
+            // turn end still arrives as Stop). Always set the sticky badge,
+            // even when the user is watching: unlike Stop's justCompleted,
+            // NeedsReply means "your move", so it should never silently snap
+            // to idle. Cleared on view like justCompleted/failed, or by the
+            // answer's own tool_result → PostToolUse flipping back to busy.
             state.status = .needsReply
         default: break
         }
