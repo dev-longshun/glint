@@ -847,6 +847,10 @@ private struct WorkspaceCard: View {
             if case .devin = kind { return true }
             return false
         }()
+        let isOmp: Bool = {
+            if case .omp = kind { return true }
+            return false
+        }()
         return Group {
             if isClaude {
                 ClaudeMascotIcon(status: status)
@@ -856,6 +860,8 @@ private struct WorkspaceCard: View {
                 OpenCodeMascotIcon(status: status)
             } else if isDevin {
                 DevinMascotIcon(status: status)
+            } else if isOmp {
+                OmpMascotIcon(status: status)
             } else if let sf = kind.sfSymbol {
                 // No squircle container — a bit larger so the bare glyph
                 // holds the same visual weight as the mascots.
@@ -870,7 +876,7 @@ private struct WorkspaceCard: View {
         }
         .frame(width: 28, height: 28)
         .overlay(alignment: .bottomTrailing) {
-            if !isOpenCode && !isDevin {
+            if !isOpenCode && !isDevin && !isOmp {
                 AgentStatusDot(status: status)
                     .offset(x: 3, y: 3)
             }
@@ -885,7 +891,9 @@ private struct WorkspaceCard: View {
                             ? Color(red: 0.95, green: 0.94, blue: 0.90).opacity(0.32)
                             : isDevin
                                 ? Color(red: 0.16, green: 0.43, blue: 0.81).opacity(0.5)
-                                : store.accent.opacity(0.5))
+                                : isOmp
+                                    ? Color(red: 0.72, green: 0.55, blue: 0.95).opacity(0.5)
+                                    : store.accent.opacity(0.5))
                 : .clear,
             radius: 8
         )
@@ -1014,12 +1022,12 @@ private struct WorkspaceCard: View {
     private func secondaryRowKey(_ s: PaneAgentStatus?) -> String {
         switch s {
         case .none, .some(.idle):       return "cwd"
-        // Same key for thinking/tool → no pointless crossfade between two
-        // identical "running…" labels when the agent flips between them.
-        case .some(.thinking), .some(.tool): return "running"
+        case .some(.thinking):          return "thinking"
+        case .some(.tool):              return "running"
         case .some(.needsPermission):   return "permission"
         case .some(.compacting):        return "compacting"
         case .some(.justCompleted):     return "done"
+        case .some(.needsReply):        return "reply"
         case .some(.failed):            return "failed"
         }
     }
@@ -1027,7 +1035,7 @@ private struct WorkspaceCard: View {
     private func showsTimer(_ s: PaneAgentStatus) -> Bool {
         switch s {
         case .thinking, .tool, .compacting, .needsPermission: return true
-        case .justCompleted, .failed, .idle:                  return false
+        case .justCompleted, .failed, .needsReply, .idle:   return false
         }
     }
 
@@ -1169,10 +1177,12 @@ private struct WorkspaceCard: View {
     /// String, not a LocalizedStringKey.
     private func plainStatusText(_ s: PaneAgentStatus) -> String {
         switch s {
-        case .thinking, .tool: return String(localized: "running…")
+        case .thinking:         return String(localized: "thinking…")
+        case .tool:             return String(localized: "running…")
         case .needsPermission: return String(localized: "needs approval")
         case .compacting:      return String(localized: "compacting…")
         case .justCompleted:   return String(localized: "done")
+        case .needsReply:     return String(localized: "reply")
         case .failed:          return String(localized: "error")
         case .idle:            return ""
         }
@@ -1187,13 +1197,12 @@ private struct WorkspaceCard: View {
 
     private func statusText(_ s: PaneAgentStatus) -> LocalizedStringKey {
         switch s {
-        // thinking, tool and the post-tool output phase all read as one state —
-        // the agent is busy. Showing distinct "thinking"/"running tool" labels
-        // mislabeled output generation as "thinking", so they share one text.
-        case .thinking, .tool: return LocalizedStringKey("running…")
+        case .thinking:         return LocalizedStringKey("thinking…")
+        case .tool:             return LocalizedStringKey("running…")
         case .needsPermission: return LocalizedStringKey("needs approval")
         case .compacting:      return LocalizedStringKey("compacting…")
         case .justCompleted:   return LocalizedStringKey("✓ done")
+        case .needsReply:     return LocalizedStringKey("awaiting reply")
         case .failed:          return LocalizedStringKey("error")
         case .idle:            return LocalizedStringKey("")
         }
@@ -1205,6 +1214,7 @@ private struct WorkspaceCard: View {
         case .needsPermission:  return Color(red: 1.0, green: 0.45, blue: 0.42)
         case .compacting:       return Color(red: 0.43, green: 0.72, blue: 0.86)
         case .justCompleted:    return Color(red: 0.40, green: 0.86, blue: 0.55)
+        case .needsReply:      return Color(red: 0.35, green: 0.60, blue: 0.95)
         case .failed:           return Color(red: 0.96, green: 0.36, blue: 0.34)
         case .idle:             return Theme.text4
         }
@@ -1226,7 +1236,7 @@ enum MascotAsset {
     static func claude(for s: PaneAgentStatus?, isSpark: Bool) -> String {
         let prefix = isSpark ? "ClaudeSpark" : "Claude"
         switch s {
-        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed), .some(.needsReply):
             return prefix + "Idle"
         case .some(.thinking):   return prefix + "Thinking"
         case .some(.tool):       return prefix + "ToolCall"
@@ -1236,7 +1246,7 @@ enum MascotAsset {
 
     static func codex(for s: PaneAgentStatus?) -> String {
         switch s {
-        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed):
+        case .none, .some(.idle), .some(.needsPermission), .some(.justCompleted), .some(.failed), .some(.needsReply):
             return "CodexIdle"
         case .some(.thinking), .some(.compacting): return "CodexThinking"
         case .some(.tool):       return "CodexWorking"
@@ -1251,6 +1261,7 @@ enum MascotAsset {
         case .some(.compacting): return "OpenCodeCompressing"
         case .some(.needsPermission): return "OpenCodeNeedsPermission"
         case .some(.justCompleted): return "OpenCodeDone"
+        case .some(.needsReply): return "OpenCodeIdle"
         case .some(.failed): return "OpenCodeFailed"
         }
     }
@@ -1263,7 +1274,21 @@ enum MascotAsset {
         case .some(.compacting): return "DevinCompressing"
         case .some(.needsPermission): return "DevinNeedsPermission"
         case .some(.justCompleted): return "DevinDone"
+        case .some(.needsReply): return "DevinIdle"
         case .some(.failed): return "DevinFailed"
+        }
+    }
+
+    static func omp(for s: PaneAgentStatus?) -> String {
+        switch s {
+        case .none, .some(.idle): return "OmpIdle"
+        case .some(.thinking): return "OmpThinking"
+        case .some(.tool): return "OmpToolCall"
+        case .some(.compacting): return "OmpCompressing"
+        case .some(.needsPermission): return "OmpNeedsPermission"
+        case .some(.justCompleted): return "OmpDone"
+        case .some(.needsReply): return "OmpIdle"
+        case .some(.failed): return "OmpFailed"
         }
     }
 }
@@ -1395,6 +1420,36 @@ private struct DevinMascotIcon: View {
 
     var body: some View {
         AnimatedGIFView(assetName: MascotAsset.devin(for: status), animates: !reduceMotion)
+            .frame(width: 34, height: 34)
+            .frame(width: 28, height: 28)
+            .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
+            .onChange(of: status) { oldStatus, newStatus in
+                if newStatus == .justCompleted && oldStatus != .justCompleted {
+                    celebrateScale = 1.22
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) {
+                        celebrateScale = 1.0
+                    }
+                }
+            }
+            .onTapGesture {
+                tapScale = 0.85
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.5)) {
+                    tapScale = 1.0
+                }
+            }
+    }
+}
+
+/// Oh My Pi (omp) π mark, tinted per-status like OpenCode/Devin so the corner
+/// status dot is suppressed for OMP panes rather than double-encoding state.
+private struct OmpMascotIcon: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let status: PaneAgentStatus?
+    @State private var celebrateScale: CGFloat = 1.0
+    @State private var tapScale: CGFloat = 1.0
+
+    var body: some View {
+        AnimatedGIFView(assetName: MascotAsset.omp(for: status), animates: !reduceMotion)
             .frame(width: 34, height: 34)
             .frame(width: 28, height: 28)
             .scaleEffect(celebrateScale * tapScale, anchor: .bottom)
