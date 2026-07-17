@@ -3,6 +3,7 @@ import AppKit
 
 struct ContentView: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject var shortcuts: ShortcutStore
 
     /// Photos-style chrome (glass on): no header band — the terminal runs to
     /// the top of the window and the toolbar floats over it as glass islands.
@@ -205,6 +206,9 @@ struct ContentView: View {
         .sheet(isPresented: $store.settingsOpen) {
             GlintSettingsView()
                 .environmentObject(store)
+                // ShortcutStore is also injected at the app root; pass explicitly
+                // so the settings sheet always sees the same instance for live edits.
+                .environmentObject(shortcuts)
         }
         .sheet(isPresented: $store.newWorkspaceSheetOpen) {
             NewWorkspaceSheet()
@@ -400,7 +404,8 @@ struct ToolbarHeader: View {
                 ) {
                     store.sidebarCollapsed.toggle()
                 }
-                .keyboardShortcut("/", modifiers: .command)
+                // Bound via menu (ShortcutStore.toggleSidebar); no hard-coded
+                // shortcut here so user overrides stay consistent.
 
                 GlintBrandMark()
                     .padding(.trailing, 10)

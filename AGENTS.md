@@ -9,7 +9,7 @@
 > - 上游官方：`chenbstack/glint`（`upstream`）  
 > 日常开发、发版、DMG 下载都以本 fork 为准。上游有更新时可以同步，但**绝不能整仓照搬上游**把我们已改的点冲掉。规则见下文「二开与上游同步」。
 
-Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https://ghostty.org)（经 `GhosttyKit.xcframework`），界面用 SwiftUI + AppKit。核心能力：多工作区 / 多分屏终端、Agent 生命周期钩子与状态展示（Claude / Codex / Devin / OpenCode / Omp / **Grok** 等）、Git 状态与 diff 审阅、Sparkle 自动更新。
+Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https://ghostty.org)（经 `GhosttyKit.xcframework`），界面用 SwiftUI + AppKit。核心能力：多工作区 / 多分屏终端、Agent 生命周期钩子与状态展示（Claude / Codex / Devin / OpenCode / Omp / **Grok** 等）、Git 状态与 diff 审阅、**应用内 GitHub Release 一键更新**（下载 DMG → 去隔离 → 覆盖安装 → 重启；本 fork 不用 Sparkle）。
 
 技术架构：
 
@@ -17,7 +17,7 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
 - **终端层（GhosttyKit C API + AppKit 嵌入）**：`GhosttyManager` 管理 ghostty app/config/surface；`Pane` 系负责分屏树与 surface 承载
 - **Agent 层**：hook 安装、状态桥接、用量与 Codex home、外部控制 socket
 - **Git 层**：仓库监视、状态刷新、diff 解析
-- **依赖**：`Vendor/GhosttyKit.xcframework`（由 `scripts/setup-ghosttykit.sh` 按 submodule SHA 下载，不入库）、Sparkle 2.x（SPM）
+- **依赖**：`Vendor/GhosttyKit.xcframework`（由 `scripts/setup-ghosttykit.sh` 按 submodule SHA 下载，不入库）。本 fork 更新走 GitHub Releases API + 本地安装脚本，无 Sparkle / 无 Apple Developer 签名要求
 
 改层边界：
 
@@ -32,7 +32,7 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
 
 - **最低支持版本**：macOS 14.0（`project.yml` / `Glint.xcodeproj` 的 `MACOSX_DEPLOYMENT_TARGET`）
 - **工程文件**：`Glint.xcodeproj`（主工程，已入库）；`project.yml`（XcodeGen 描述，改 target/源路径后需 `xcodegen generate` 再核 diff）
-- **语言 / 技术栈**：Swift 5.10 · SwiftUI · AppKit · 少量 ObjC（`AEBridge.m` + bridging header）· GhosttyKit · Sparkle
+- **语言 / 技术栈**：Swift 5.10 · SwiftUI · AppKit · 少量 ObjC（`AEBridge.m` + bridging header）· GhosttyKit
 - **Bundle ID**：正式 `app.glint.Glint`；Debug 为 `app.glint.Glint.dev`（独立 UserDefaults / 持久化目录，避免污染生产偏好）
 - **其他关键配置**：`ghostty` git submodule；`Vendor/GhosttyKit.xcframework` 需 `bash scripts/setup-ghosttykit.sh`；正式发版可走 tag `v*` + 上游式 `release.yml`；**本 fork 日常 DMG 走 push `main` 触发的 `build-dmg.yml`**（ad-hoc 签名，产物在本仓 Releases）
 - **Git 远程**：`origin` = 本 fork；`upstream` = 官方。禁止把 `origin` 指回官方后直接 push（无写权限，且会绕开二开发版流）
@@ -96,7 +96,7 @@ git merge upstream/main --no-commit --no-ff
 
 ## 项目结构
 
-- `Glint/App/` — 入口（`GlintApp`）、`AppDelegate`、Sparkle 更新、`ReleaseNotes`、`SettingsSafety` 崩溃回滚
+- `Glint/App/` — 入口（`GlintApp`）、`AppDelegate`、GitHub DMG 更新（`UpdaterController`）、`ReleaseNotes`、`SettingsSafety` 崩溃回滚
 - `Glint/Chrome/` — 主壳 UI：侧边栏、设置、命令面板、主题、新建工作区等
 - `Glint/Pane/` — 分屏树、Ghostty surface 嵌入、`PaneView`
 - `Glint/Ghostty/` — `GhosttyManager`（ghostty 生命周期与配置）

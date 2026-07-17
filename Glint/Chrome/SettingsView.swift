@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Settings window. Split into a left category sidebar and a right
@@ -128,6 +129,7 @@ struct GlintSettingsView: View {
                     case .terminal:   TerminalPane()
                     case .agents:     AgentsPane()
                     case .shortcuts:  ShortcutsPane()
+                    case .archived:   ArchivedPane()
                     case .about:      AboutPane()
                     }
                 }
@@ -149,7 +151,7 @@ struct GlintSettingsView: View {
 // MARK: - Category model
 
 enum SettingsCategory: String, CaseIterable, Identifiable {
-    case general, appearance, terminal, agents, shortcuts, about
+    case general, appearance, terminal, agents, shortcuts, archived, about
     var id: String { rawValue }
 
     var title: String {
@@ -159,6 +161,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .terminal:   return "Terminal"
         case .agents:     return "Agents"
         case .shortcuts:  return "Shortcuts"
+        case .archived:   return "Archived"
         case .about:      return "About"
         }
     }
@@ -168,7 +171,8 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .appearance: return "Theme, accent, glass"
         case .terminal:   return "Font, cursor, scrollback"
         case .agents:     return "Claude Code, Codex, OMP, hook routing"
-        case .shortcuts:  return "Keyboard reference"
+        case .shortcuts:  return "Customize and save shortcuts"
+        case .archived:   return "Parked workspaces"
         case .about:      return nil
         }
     }
@@ -179,6 +183,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .terminal:   return "terminal"
         case .agents:     return "sparkle"
         case .shortcuts:  return "command"
+        case .archived:   return "archivebox"
         case .about:      return "info.circle"
         }
     }
@@ -449,35 +454,101 @@ private struct UpdatesCard: View {
 
     var body: some View {
         SettingsCard("Updates",
-                     footer: "Glint uses Sparkle to check the GitHub Releases feed and install updates in place.") {
+                     footer: "Downloads the latest DMG from this fork's GitHub Releases, removes quarantine, replaces the app, and restarts. No Apple Developer certificate required.") {
             SettingsRow("Check for updates automatically",
                         subtitle: "Glint will look for new releases in the background.") {
                 Toggle("", isOn: $updater.automaticallyChecksForUpdates)
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
-            SettingsRow("Receive beta updates",
-                        subtitle: "Get pre-release builds early. Beta builds ship new work before it has fully settled.") {
+            SettingsRow("Include pre-release builds",
+                        subtitle: "Our CI currently ships every DMG as a pre-release (0.1.27-dev.N). Keep this on to receive them.") {
                 Toggle("", isOn: $updater.receiveBetaUpdates)
                     .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Status", subtitle: nil) {
+                updateStatusLabel
+            }
+            if updater.phase == .downloading {
+                SettingsDivider()
+                SettingsRow("Progress", subtitle: nil) {
+                    ProgressView(value: updater.downloadProgress)
+                        .progressViewStyle(.linear)
+                        .frame(width: 160)
+                }
             }
             SettingsDivider()
             SettingsRow("Check now",
                         subtitle: "Manually look for a new release right now.") {
                 Button("Check") {
-                    // Sparkle attaches its update dialog to the key window.
-                    // The Settings sheet keeps the main window non-key, so
-                    // the dialog gets stuck behind it — dismiss the sheet
-                    // first, then kick off the check on the next runloop
-                    // tick so AppKit has unwound the sheet.
+                    updater.checkForUpdates()
+                }
+                .disabled(!updater.canCheckForUpdates
+                          || updater.phase == .downloading
+                          || updater.phase == .installing)
+            }
+            SettingsDivider()
+            SettingsRow("Install update",
+                        subtitle: oneClickSubtitle) {
+                Button("Download & Install") {
+                    // Install may quit the app; close Settings first so the
+                    // sheet does not race termination.
                     store.settingsOpen = false
                     DispatchQueue.main.async {
-                        updater.checkForUpdates()
+                        updater.installAndRelaunch()
                     }
                 }
-                .disabled(!updater.canCheckForUpdates)
+                .disabled(!canInstall)
             }
         }
+    }
+
+    @ViewBuilder
+    private var updateStatusLabel: some View {
+        let text: String = {
+            if !updater.statusMessage.isEmpty { return updater.statusMessage }
+            switch updater.phase {
+            case .idle: return String(localized: "Not checked yet")
+            case .checking: return String(localized: "Checking for updates…")
+            case .upToDate: return String(localized: "You're up to date.")
+            case .available:
+                if let v = updater.availableVersion {
+                    return String(format: String(localized: "Update available: %@"), v)
+                }
+                return String(localized: "Update available")
+            case .downloading: return String(localized: "Downloading update…")
+            case .installing: return String(localized: "Installing update…")
+            case .failed: return String(localized: "Update failed")
+            }
+        }()
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(updater.phase == .failed ? Color.red.opacity(0.85) : Theme.text2)
+            .lineLimit(3)
+            .multilineTextAlignment(.trailing)
+            .frame(maxWidth: 260, alignment: .trailing)
+    }
+
+    private var canInstall: Bool {
+        switch updater.phase {
+        case .available, .failed, .upToDate, .idle:
+            return updater.canCheckForUpdates
+        case .checking, .downloading, .installing:
+            return false
+        }
+    }
+
+    private var oneClickSubtitle: String {
+        // SettingsRow wraps subtitle in LocalizedStringKey — pass English keys
+        // for static copy; pre-format only the versioned line (verbatim after).
+        if let v = updater.availableVersion, updater.phase == .available {
+            return String(
+                format: String(localized: "Install %@, remove quarantine, replace this app, and restart."),
+                v
+            )
+        }
+        return "Check GitHub Releases, then download, unquarantine, replace, and restart in one step."
     }
 }
 
@@ -2207,62 +2278,126 @@ private struct ClaudeIconStyleSwatch: View {
 }
 
 private struct ShortcutsPane: View {
+    @EnvironmentObject var shortcuts: ShortcutStore
+    @State private var recording: ShortcutID?
+    @State private var conflictMessage: String?
+
     var body: some View {
         SettingsCard("Workspace",
-                     footer: "⌘↑ / ⌘↓ and ⌘F are intentionally unbound — they pass through to the terminal.") {
-            shortcutRow("New Workspace", keys: ["⌘", "N"])
-            SettingsDivider()
-            shortcutRow("Next Workspace", keys: ["⌘", "⇧", "]"])
-            SettingsDivider()
-            shortcutRow("Previous Workspace", keys: ["⌘", "⇧", "["])
-            SettingsDivider()
-            shortcutRow("Workspace 1…9", keys: ["⌘", "1…9"])
+                     footer: "Click a shortcut, then press the new keys. ⌘↑ / ⌘↓ and bare ⌘F stay unbound so they reach the terminal.") {
+            editableGroup(.workspace)
         }
         SettingsCard("Panes") {
-            shortcutRow("Split Right", keys: ["⌘", "D"])
-            SettingsDivider()
-            shortcutRow("Split Down", keys: ["⌘", "⇧", "D"])
-            SettingsDivider()
-            shortcutRow("Close Pane", keys: ["⌘", "W"])
-            SettingsDivider()
-            shortcutRow("Focus Next Pane", keys: ["⌘", "]"])
-            SettingsDivider()
-            shortcutRow("Focus Previous Pane", keys: ["⌘", "["])
+            editableGroup(.panes)
+        }
+        SettingsCard("Tabs") {
+            editableGroup(.tabs)
         }
         SettingsCard("Window") {
-            shortcutRow("Toggle Sidebar", keys: ["⌘", "/"])
+            editableGroup(.window)
+        }
+        SettingsCard("System",
+                     footer: "Managed by macOS — not customizable here.") {
+            readOnlyRow("Minimize", keys: ["⌘", "M"])
             SettingsDivider()
-            shortcutRow("Command Palette", keys: ["⌘", "⇧", "P"])
+            readOnlyRow("Hide Glint", keys: ["⌘", "H"])
             SettingsDivider()
-            shortcutRow("Find in Sidebar", keys: ["⌥", "⌘", "F"])
-            SettingsDivider()
-            shortcutRow("Reveal in Finder", keys: ["⌘", "⇧", "F"])
-            SettingsDivider()
-            shortcutRow("Copy Path", keys: ["⌘", "⇧", "C"])
-            SettingsDivider()
-            shortcutRow("Jump to Attention", keys: ["⌘", "⇧", "A"])
-            SettingsDivider()
-            shortcutRow("Settings", keys: ["⌘", ","])
-            SettingsDivider()
-            shortcutRow("Minimize", keys: ["⌘", "M"])
-            SettingsDivider()
-            shortcutRow("Hide Glint", keys: ["⌘", "H"])
-            SettingsDivider()
-            shortcutRow("Quit Glint", keys: ["⌘", "Q"])
+            readOnlyRow("Quit Glint", keys: ["⌘", "Q"])
         }
         SettingsCard("In Command Palette",
                      footer: "Visible only when the palette is open.") {
-            shortcutRow("Move Selection Up", keys: ["↑"])
+            readOnlyRow("Move Selection Up", keys: ["↑"])
             SettingsDivider()
-            shortcutRow("Move Selection Down", keys: ["↓"])
+            readOnlyRow("Move Selection Down", keys: ["↓"])
             SettingsDivider()
-            shortcutRow("Run Selection", keys: ["⏎"])
+            readOnlyRow("Run Selection", keys: ["⏎"])
             SettingsDivider()
-            shortcutRow("Close Palette", keys: ["⎋"])
+            readOnlyRow("Close Palette", keys: ["⎋"])
+        }
+
+        HStack {
+            Spacer()
+            Button("Reset All Shortcuts") {
+                shortcuts.resetAll()
+                recording = nil
+            }
+            .disabled(shortcuts.overrides.isEmpty)
+        }
+        .padding(.top, 4)
+
+        if let conflictMessage {
+            Text(conflictMessage)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.red.opacity(0.85))
+                .padding(.top, 2)
         }
     }
 
-    private func shortcutRow(_ name: LocalizedStringKey, keys: [String]) -> some View {
+    @ViewBuilder
+    private func editableGroup(_ group: ShortcutID.Group) -> some View {
+        let ids = ShortcutID.inGroup(group)
+        ForEach(Array(ids.enumerated()), id: \.element.id) { index, id in
+            if index > 0 { SettingsDivider() }
+            editableRow(id)
+        }
+    }
+
+    private func editableRow(_ id: ShortcutID) -> some View {
+        let chord = shortcuts.chord(for: id)
+        let isRecording = recording == id
+        return SettingsRow(LocalizedStringKey(id.title), subtitle: nil) {
+            HStack(spacing: 8) {
+                Button {
+                    conflictMessage = nil
+                    recording = isRecording ? nil : id
+                } label: {
+                    HStack(spacing: 4) {
+                        if isRecording {
+                            Text("Press keys…")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Theme.text2)
+                        } else {
+                            ForEach(Array(chord.displayCaps.enumerated()), id: \.offset) { _, k in
+                                KeyCap(label: k)
+                            }
+                        }
+                    }
+                    .padding(.horizontal, isRecording ? 8 : 0)
+                    .padding(.vertical, isRecording ? 3 : 0)
+                    .background(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .fill(isRecording ? Theme.overlay(0.10) : Color.clear)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                            .strokeBorder(isRecording ? Theme.overlay(0.18) : Color.clear, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .help("Click, then press a new shortcut")
+
+                if shortcuts.isCustomized(id) {
+                    Button {
+                        shortcuts.reset(id)
+                        if recording == id { recording = nil }
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.text4)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Reset to default")
+                }
+            }
+            .background(
+                ShortcutRecorderRepresentable(isActive: isRecording) { event in
+                    handleRecorded(id: id, event: event)
+                }
+            )
+        }
+    }
+
+    private func readOnlyRow(_ name: LocalizedStringKey, keys: [String]) -> some View {
         SettingsRow(name, subtitle: nil) {
             HStack(spacing: 4) {
                 ForEach(Array(keys.enumerated()), id: \.offset) { _, k in
@@ -2270,6 +2405,117 @@ private struct ShortcutsPane: View {
                 }
             }
         }
+    }
+
+    private func handleRecorded(id: ShortcutID, event: NSEvent) {
+        // Esc cancels recording without changing the binding.
+        if event.keyCode == 53 {
+            recording = nil
+            return
+        }
+        guard let chord = KeyChord.from(event: event) else {
+            NSSound.beep()
+            return
+        }
+        if let other = shortcuts.set(id, chord: chord) {
+            conflictMessage = String(
+                format: String(localized: "Already used by “%@”."),
+                other.title
+            )
+            NSSound.beep()
+            return
+        }
+        conflictMessage = nil
+        recording = nil
+    }
+}
+
+/// Invisible AppKit key monitor active only while `isActive` is true.
+private struct ShortcutRecorderRepresentable: NSViewRepresentable {
+    let isActive: Bool
+    let onKey: (NSEvent) -> Void
+
+    func makeNSView(context: Context) -> RecorderView {
+        let v = RecorderView()
+        v.onKey = onKey
+        return v
+    }
+
+    func updateNSView(_ nsView: RecorderView, context: Context) {
+        nsView.onKey = onKey
+        nsView.setActive(isActive)
+    }
+
+    final class RecorderView: NSView {
+        var onKey: ((NSEvent) -> Void)?
+        private var monitor: Any?
+
+        func setActive(_ active: Bool) {
+            if active {
+                guard monitor == nil else { return }
+                monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                    self?.onKey?(event)
+                    // Swallow so the key doesn't also fire the old menu binding.
+                    return nil
+                }
+            } else if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+        }
+
+        deinit {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+        }
+    }
+}
+
+// MARK: - Archived workspaces
+
+private struct ArchivedPane: View {
+    @EnvironmentObject var store: WorkspaceStore
+
+    var body: some View {
+        if store.archivedWorkspaces.isEmpty {
+            SettingsCard("Archived",
+                         footer: "Archived workspaces leave the sidebar but keep their panes and scrollback. Use Archive from a workspace’s context menu, or the Archive Workspace shortcut (default ⌘0).") {
+                SettingsRow("No archived workspaces",
+                            subtitle: "Nothing parked yet.") {
+                    EmptyView()
+                }
+            }
+        } else {
+            SettingsCard("Archived",
+                         footer: "Unarchive returns a workspace to the sidebar and selects it. Delete is permanent.") {
+                ForEach(Array(store.archivedWorkspaces.enumerated()), id: \.element.id) { index, ws in
+                    if index > 0 { SettingsDivider() }
+                    archivedRow(ws)
+                }
+            }
+        }
+    }
+
+    private func archivedRow(_ ws: Workspace) -> some View {
+        // Display name / path are data — SettingsRow title is LocalizedStringKey,
+        // so pass the string through as a key (verbatim when not in catalog).
+        SettingsRow(LocalizedStringKey(ws.displayName), subtitle: archivedSubtitle(ws)) {
+            HStack(spacing: 8) {
+                Button("Unarchive") {
+                    store.unarchiveWorkspace(ws.id)
+                }
+                Button("Delete", role: .destructive) {
+                    store.deleteWorkspace(ws.id)
+                }
+            }
+        }
+    }
+
+    private func archivedSubtitle(_ ws: Workspace) -> String {
+        let cwd = (ws.selectedTab?.focusedPane).flatMap { ws.panes[$0]?.workingDirectory }
+            ?? ws.panes.values.compactMap(\.workingDirectory).first
+            ?? ws.source.repoRoot
+        if let cwd, !cwd.isEmpty { return cwd }
+        return String(localized: "No working directory")
     }
 }
 
@@ -2333,7 +2579,7 @@ private struct AboutPane: View {
                 }
                 SettingsDivider()
                 SettingsRow("Auto-update", subtitle: nil) {
-                    StatusPill(label: "Sparkle 2.6", tone: .ok)
+                    StatusPill(label: "GitHub DMG", tone: .ok)
                 }
                 SettingsDivider()
                 SettingsRow("What's New",

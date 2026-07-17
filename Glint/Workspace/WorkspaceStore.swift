@@ -2891,8 +2891,7 @@ final class WorkspaceStore: ObservableObject {
 
     /// Lift a workspace back to the main sidebar list and select it. Surfaces
     /// will lazily re-mint as the user navigates into panes (same path as a
-    /// cold launch). Also forces the archive section to expand so the user
-    /// sees what they just unarchived land back in the main list.
+    /// cold launch). Archived items are managed in Settings → Archived.
     func unarchiveWorkspace(_ id: UUID) {
         guard let idx = workspaces.firstIndex(where: { $0.id == id }),
               workspaces[idx].archived else { return }

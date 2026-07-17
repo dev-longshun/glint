@@ -18,10 +18,8 @@ settings:
     DEAD_CODE_STRIPPING: YES
     SWIFT_TREAT_WARNINGS_AS_ERRORS: NO
 
-packages:
-  Sparkle:
-    url: https://github.com/sparkle-project/Sparkle.git
-    from: "2.6.4"
+# Fork uses in-app GitHub Release DMG updater (UpdaterController) instead of Sparkle.
+packages: {}
 
 targets:
   Glint:
@@ -83,7 +81,6 @@ targets:
     dependencies:
       - framework: Vendor/GhosttyKit.xcframework
         embed: false
-      - package: Sparkle
 
   GlintTests:
     type: bundle.unit-test

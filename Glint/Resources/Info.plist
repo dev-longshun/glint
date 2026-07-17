@@ -33,14 +33,8 @@
 	<string>© 2026 Glint</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
-	<key>SUEnableAutomaticChecks</key>
-	<true/>
-	<key>SUScheduledCheckInterval</key>
-	<integer>3600</integer>
-	<key>SUFeedURL</key>
-	<string>https://raw.githubusercontent.com/chenbstack/glint/main/appcast.xml</string>
-	<key>SUPublicEDKey</key>
-	<string>H8aS+y7VAi2SyldeYcNAHur5C4JqM4eLetjOXKYOaQc=</string>
+	<!-- Sparkle keys removed: fork uses in-app GitHub Release DMG updater
+	     (UpdaterController) instead of the official chenbstack appcast. -->
 	<!-- Receiving paths: folders open as a workspace, plain files execute after
 	     a confirm, and glint:// URLs carry a path query param. Alternate rank so
 	     Glint never steals Finder's default — it only appears in "Open With". -->

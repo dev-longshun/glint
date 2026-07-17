@@ -6,6 +6,7 @@ import UniformTypeIdentifiers
 struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
     @EnvironmentObject var usage: UsageStore
+    @EnvironmentObject var shortcuts: ShortcutStore
     @State private var searchText: String = ""
     @FocusState private var searchFocused: Bool
     /// UUID of the workspace card currently mid-drag. Set by the dragged
@@ -24,8 +25,8 @@ struct SidebarView: View {
     /// 78pt gutter).
     @State private var isFullscreen = false
     @State private var newWorkspaceHovered = false
-    /// Tracks whether ⌘ is held so the cards can reveal their ⌘1…⌘9
-    /// switch shortcuts (Spotlight-style modifier HUD).
+    /// Tracks whether the workspace-jump modifiers are held so cards can
+    /// reveal their 1…9 switch shortcuts (Spotlight-style modifier HUD).
     @StateObject private var cmdKey = CommandKeyObserver()
 
     var body: some View {
@@ -53,8 +54,7 @@ struct SidebarView: View {
 
                 ScrollView {
                     VStack(spacing: 0) {
-                        workspacesSectionHeader(activeCount: filteredActiveWorkspaces.count,
-                                                archivedCount: filteredArchivedWorkspaces.count)
+                        workspacesSectionHeader(activeCount: filteredActiveWorkspaces.count)
                         VStack(spacing: 6) {
                             ForEach(filteredActiveWorkspaces) { ws in
                                 WorkspaceCard(ws: ws,
@@ -71,15 +71,6 @@ struct SidebarView: View {
                                     )
                                     .zIndex(draggingWorkspaceID == ws.id ? 1 : 0)
                             }
-                            // Archived list: same card style (variant B), no
-                            // separator — just continues the scroll flow, so
-                            // unarchiving feels like lifting an item back into
-                            // the same list it already belongs to.
-                            if store.archiveExpanded {
-                                ForEach(filteredArchivedWorkspaces) { ws in
-                                    WorkspaceCard(ws: ws, archived: true)
-                                }
-                            }
                         }
                         .coordinateSpace(name: kSidebarReorderSpace)
                         .onPreferenceChange(CardFrameKey.self) { cardFrames = $0 }
@@ -87,11 +78,15 @@ struct SidebarView: View {
                         .padding(.top, 2)
                         .animation(.spring(response: 0.32, dampingFraction: 0.85),
                                    value: filteredActiveWorkspaces.map(\.id))
-                        .animation(.easeInOut(duration: 0.18), value: store.archiveExpanded)
                     }
                     .padding(.bottom, 12)
                 }
                 .scrollContentBackground(.hidden)
+                .onAppear { syncWorkspaceJumpModifiers() }
+                .onReceive(shortcuts.objectWillChange) { _ in
+                    // Defer so chord map has finished mutating.
+                    DispatchQueue.main.async { syncWorkspaceJumpModifiers() }
+                }
 
                 VStack(spacing: 0) {
                     QuotaSection(claude: usage.claude, codexHomes: usage.codexSidebarQuotas)
@@ -165,11 +160,11 @@ struct SidebarView: View {
         return ordered.min(by: { abs($0.value.midY - y) < abs($1.value.midY - y) })?.key
     }
 
-    /// The ⌘n shortcut that would select this workspace, or nil past ⌘9.
-    /// Indexed against `store.activeWorkspaces` (the order ⌘1…⌘9 actually
+    /// The ⌥n shortcut that would select this workspace, or nil past ⌥9.
+    /// Indexed against `store.activeWorkspaces` (the order ⌥1…⌥9 actually
     /// use — archived workspaces are skipped), NOT the filtered/sorted
     /// display order. Returns nil for archived workspaces so their cards
-    /// never show a ⌘ badge while held.
+    /// never show a ⌥ badge while held.
     private func shortcutNumber(for ws: Workspace) -> Int? {
         guard let idx = store.activeWorkspaces.firstIndex(where: { $0.id == ws.id }),
               idx < 9 else { return nil }
@@ -180,11 +175,8 @@ struct SidebarView: View {
         filteredWorkspaces(from: store.activeWorkspaces, applySort: true)
     }
 
-    private var filteredArchivedWorkspaces: [Workspace] {
-        // Archived list: same search filter applies (so a query hides both
-        // active and archived non-matches), but the "completed first" sort
-        // doesn't — parked workspaces aren't running anything.
-        filteredWorkspaces(from: store.archivedWorkspaces, applySort: false)
+    private func syncWorkspaceJumpModifiers() {
+        cmdKey.watchedModifiers = shortcuts.chord(for: .workspace1).nsModifiers
     }
 
     private func filteredWorkspaces(from source: [Workspace], applySort: Bool) -> [Workspace] {
@@ -319,14 +311,9 @@ struct SidebarView: View {
         .padding(.bottom, 4)
     }
 
-    /// Workspaces header with an inline "已归档" text toggle on the right
-    /// when there's at least one archived workspace (variant B from the
-    /// archive prototypes). Active count sits in the usual mono slot, the
-    /// toggle replaces what would normally be that count when archived
-    /// exists — keeps the row a single line of chrome instead of stacking
-    /// a second "ARCHIVED" header below.
+    /// Active workspaces only — archived items live in Settings → Archived.
     @ViewBuilder
-    private func workspacesSectionHeader(activeCount: Int, archivedCount: Int) -> some View {
+    private func workspacesSectionHeader(activeCount: Int) -> some View {
         HStack(spacing: 8) {
             Text(LocalizedStringKey("Workspaces"))
                 .textCase(.uppercase)
@@ -337,45 +324,10 @@ struct SidebarView: View {
             Text("\(activeCount)")
                 .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                 .foregroundStyle(Theme.text4)
-            if archivedCount > 0 {
-                archiveToggleButton(count: archivedCount)
-            }
         }
-        // Symmetric breathing room: search has 4pt below, so 6pt above the
-        // label = 10pt search→label gap. 8pt below + the cards container's
-        // 2pt top pad = 10pt label→cards gap, centering the label between
-        // the two. Both archived states resolve to the same natural text
-        // height so toggling Archived doesn't reflow anything.
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 8)
-    }
-
-    private func archiveToggleButton(count: Int) -> some View {
-        Button {
-            store.archiveExpanded.toggle()
-        } label: {
-            HStack(spacing: 4) {
-                Text("Archived")
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(store.archiveExpanded ? Theme.text2 : Theme.text4)
-                Text("\(count)")
-                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                    .foregroundStyle(store.archiveExpanded ? Theme.text2 : Theme.text4)
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(store.archiveExpanded ? Theme.text2 : Theme.text4)
-                    .rotationEffect(.degrees(store.archiveExpanded ? 0 : -90))
-            }
-            // Horizontal-only padding for click slack — vertical padding
-            // would stretch the header row taller than the no-archive case
-            // and reflow the list below it.
-            .padding(.horizontal, 6)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text("Archived workspaces"))
-        .accessibilityValue(Text("\(count)"))
     }
 
 }
@@ -545,17 +497,20 @@ private struct QuotaColumn: View {
     }
 }
 
-/// Publishes whether the Command key is currently held. Local monitor only —
-/// fires while the app is active; deactivation force-clears the flag so a
-/// ⌘Tab away never strands the badges on screen.
+/// Publishes whether the modifiers used for workspace 1…9 jumps are held.
+/// Local monitor only; deactivation force-clears so badges never stick.
 private final class CommandKeyObserver: ObservableObject {
     @Published var commandHeld = false
+    /// Defaults match ShortcutStore's workspace1…9 defaults (Option).
+    var watchedModifiers: NSEvent.ModifierFlags = .option {
+        didSet { reevaluate(flags: NSEvent.modifierFlags) }
+    }
     private var monitor: Any?
     private var deactivationObserver: NSObjectProtocol?
 
     init() {
         monitor = NSEvent.addLocalMonitorForEvents(matching: .flagsChanged) { [weak self] event in
-            self?.commandHeld = event.modifierFlags.contains(.command)
+            self?.reevaluate(flags: event.modifierFlags)
             return event
         }
         deactivationObserver = NotificationCenter.default.addObserver(
@@ -566,19 +521,25 @@ private final class CommandKeyObserver: ObservableObject {
         }
     }
 
+    private func reevaluate(flags: NSEvent.ModifierFlags) {
+        let relevant: NSEvent.ModifierFlags = [.command, .shift, .option, .control]
+        let held = flags.intersection(relevant)
+        let want = watchedModifiers.intersection(relevant)
+        // Show badges when every watched modifier is down (extra mods OK).
+        commandHeld = !want.isEmpty && want.isSubset(of: held)
+    }
+
     deinit {
         if let monitor { NSEvent.removeMonitor(monitor) }
         if let deactivationObserver { NotificationCenter.default.removeObserver(deactivationObserver) }
     }
 }
 
-/// "⌘n" pill shown in a card's top-right corner while ⌘ is held.
+/// Number pill shown while workspace-jump modifiers are held.
 private struct ShortcutBadge: View {
     let number: Int
     var body: some View {
         HStack(spacing: 1) {
-            Image(systemName: "command")
-                .font(.system(size: 8.5, weight: .semibold))
             Text("\(number)")
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
         }
@@ -613,15 +574,15 @@ private struct WorkspaceCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ws: Workspace
     /// When true the card renders the archived variant: same chrome, "已归档"
-    /// badge in the secondary row instead of tab/pane counts, no ⌘ shortcut
+    /// badge in the secondary row instead of tab/pane counts, no ⌥ shortcut
     /// badge, no reorder gesture, and the context menu offers Unarchive
     /// instead of Archive. Defaults to false so the active-list call sites
     /// don't need to change.
     var archived: Bool = false
     /// True while this card is the one being dragged (drives the lift).
     var isDragging: Bool = false
-    /// When non-nil, the card shows its ⌘n switch shortcut in the top-right
-    /// corner (driven by the sidebar's ⌘-held observer).
+    /// When non-nil, the card shows its ⌥n switch shortcut in the top-right
+    /// corner (driven by the sidebar's Option-held observer).
     var shortcutBadge: Int? = nil
     /// Reorder gesture callbacks (owned by `SidebarView`): the pointer's
     /// y in `kSidebarReorderSpace` on every change, and a drag-ended signal.
@@ -950,7 +911,7 @@ private struct WorkspaceCard: View {
 
     /// Top-right corner marker for archived cards — icon only, sits in the
     /// same slot as `ShortcutBadge` (archived workspaces are skipped by
-    /// ⌘1…⌘9 so the two never collide). Replaces the old "Archived" capsule
+    /// ⌥1…⌥9 so the two never collide). Replaces the old "Archived" capsule
     /// in the secondary row; the row itself is omitted for archived cards
     /// so they read as visually parked.
     private var archivedCornerMarker: some View {

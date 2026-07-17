@@ -295,7 +295,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已归档"
+            "value": "归档"
           }
         }
       }
@@ -2359,7 +2359,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "键盘参考"
+            "value": "快捷键一览"
           }
         }
       }
@@ -5181,6 +5181,589 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agent 等待你的回复"
+          }
+        }
+      }
+    },
+    "Downloads the latest DMG from this fork's GitHub Releases, removes quarantine, replaces the app, and restarts. No Apple Developer certificate required.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从本 fork 的 GitHub Releases 下载最新 DMG，自动去隔离、覆盖安装并重启。无需 Apple 开发者证书。"
+          }
+        }
+      }
+    },
+    "Include pre-release builds": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "包含预发布构建"
+          }
+        }
+      }
+    },
+    "Our CI currently ships every DMG as a pre-release (0.1.27-dev.N). Keep this on to receive them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前 CI 会把每个 DMG 标为预发布（0.1.27-dev.N）。保持开启才能收到这些构建。"
+          }
+        }
+      }
+    },
+    "Progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "进度"
+          }
+        }
+      }
+    },
+    "Install update": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装更新"
+          }
+        }
+      }
+    },
+    "Download & Install": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并安装"
+          }
+        }
+      }
+    },
+    "Not checked yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚未检查"
+          }
+        }
+      }
+    },
+    "Checking for updates…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检查更新…"
+          }
+        }
+      }
+    },
+    "You're up to date.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已是最新版本。"
+          }
+        }
+      }
+    },
+    "Update available: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有可用更新：%@"
+          }
+        }
+      }
+    },
+    "Update available": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有可用更新"
+          }
+        }
+      }
+    },
+    "Downloading update…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载更新…"
+          }
+        }
+      }
+    },
+    "Installing update…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在安装更新…"
+          }
+        }
+      }
+    },
+    "Update failed": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新失败"
+          }
+        }
+      }
+    },
+    "Verifying download…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在校验下载…"
+          }
+        }
+      }
+    },
+    "Restarting…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在重启…"
+          }
+        }
+      }
+    },
+    "No update packages found on GitHub Releases.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub Releases 上未找到更新包。"
+          }
+        }
+      }
+    },
+    "Install %@, remove quarantine, replace this app, and restart.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装 %@，去除隔离、覆盖本应用并重启。"
+          }
+        }
+      }
+    },
+    "Check GitHub Releases, then download, unquarantine, replace, and restart in one step.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检查 GitHub Releases，然后一键完成下载、去隔离、覆盖安装并重启。"
+          }
+        }
+      }
+    },
+    "GitHub returned HTTP %lld.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub 返回 HTTP %lld。"
+          }
+        }
+      }
+    },
+    "Download checksum mismatch. Please try again.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载校验和不匹配，请重试。"
+          }
+        }
+      }
+    },
+    "Couldn't find Glint.app inside the downloaded DMG.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载的 DMG 中找不到 Glint.app。"
+          }
+        }
+      }
+    },
+    "%@ failed (exit %lld).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 失败（退出码 %lld）。"
+          }
+        }
+      }
+    },
+    "%@ failed (exit %lld): %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 失败（退出码 %lld）：%@"
+          }
+        }
+      }
+    },
+    "GitHub DMG": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub DMG"
+          }
+        }
+      }
+    },
+    "Parked workspaces": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已停放的工作区"
+          }
+        }
+      }
+    },
+    "Customize and save shortcuts": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义并保存快捷键"
+          }
+        }
+      }
+    },
+    "Archive Workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档工作区"
+          }
+        }
+      }
+    },
+    "Workspace 1": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 1"
+          }
+        }
+      }
+    },
+    "Workspace 2": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 2"
+          }
+        }
+      }
+    },
+    "Workspace 3": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 3"
+          }
+        }
+      }
+    },
+    "Workspace 4": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 4"
+          }
+        }
+      }
+    },
+    "Workspace 5": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 5"
+          }
+        }
+      }
+    },
+    "Workspace 6": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 6"
+          }
+        }
+      }
+    },
+    "Workspace 7": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 7"
+          }
+        }
+      }
+    },
+    "Workspace 8": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 8"
+          }
+        }
+      }
+    },
+    "Workspace 9": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作区 9"
+          }
+        }
+      }
+    },
+    "Next Tab": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下一个标签页"
+          }
+        }
+      }
+    },
+    "Previous Tab": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上一个标签页"
+          }
+        }
+      }
+    },
+    "Tabs": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签页"
+          }
+        }
+      }
+    },
+    "System": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统"
+          }
+        }
+      }
+    },
+    "Managed by macOS — not customizable here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由 macOS 管理，此处不可自定义。"
+          }
+        }
+      }
+    },
+    "Click a shortcut, then press the new keys. ⌘↑ / ⌘↓ and bare ⌘F stay unbound so they reach the terminal.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点击快捷键后按下新的组合键。⌘↑ / ⌘↓ 与单独的 ⌘F 故意不绑定，以便传给终端。"
+          }
+        }
+      }
+    },
+    "Press keys…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请按键…"
+          }
+        }
+      }
+    },
+    "Reset All Shortcuts": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置全部快捷键"
+          }
+        }
+      }
+    },
+    "Already used by “%@”.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已用于「%@」。"
+          }
+        }
+      }
+    },
+    "Click, then press a new shortcut": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "点击后按下新的快捷键"
+          }
+        }
+      }
+    },
+    "Reset to default": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复默认"
+          }
+        }
+      }
+    },
+    "No archived workspaces": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有已归档的工作区"
+          }
+        }
+      }
+    },
+    "Nothing parked yet.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "目前还没有停放的工作区。"
+          }
+        }
+      }
+    },
+    "Archived workspaces leave the sidebar but keep their panes and scrollback. Use Archive from a workspace’s context menu, or the Archive Workspace shortcut (default ⌘0).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档的工作区会离开侧栏，但保留分屏与滚动缓冲。可在工作区右键菜单选择归档，或使用归档快捷键（默认 ⌘0）。"
+          }
+        }
+      }
+    },
+    "Unarchive returns a workspace to the sidebar and selects it. Delete is permanent.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消归档会把工作区放回侧栏并选中它。删除不可恢复。"
+          }
+        }
+      }
+    },
+    "No working directory": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无工作目录"
           }
         }
       }

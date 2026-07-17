@@ -20,7 +20,9 @@
 		2D9012046800A06555DEA381 /* GitRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */; };
 		2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */ = {isa = PBXBuildFile; fileRef = D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */; };
 		2E52C3AC5AD998CD3604D6BE /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */; };
+		315A37A793978029ECA337C0 /* ShortcutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0149644D9C66D1E2D27B0850 /* ShortcutStore.swift */; };
 		3194A1545E36E400BC2C33E6 /* PaneSessionIdMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */; };
+		31B9D23C9642121D7D8930A9 /* UpdaterVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E915CEF581085DF7D1B9D1 /* UpdaterVersionTests.swift */; };
 		34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */; };
 		370FA310A4B7CC8489BF51DE /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712159D2C27AD5B865820384 /* WhatsNewView.swift */; };
 		3932A4CFEFF6FB81AE283645 /* AgentHookInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */; };
@@ -52,7 +54,6 @@
 		AB89FA6EF5785EC4026F4402 /* VisualEffectBackground.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */; };
 		ABFF3BCAC4AE8CCCAFF89CA0 /* NewWorkspaceSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */; };
 		B1DE20B081ACC4536DBD2089 /* GitStatusPopover.swift in Sources */ = {isa = PBXBuildFile; fileRef = 54663E213FE879B96C0D80E7 /* GitStatusPopover.swift */; };
-		B70CAFEBB2416E25B0FFED97 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = C48F9D3C512A0ABE8369D0F4 /* Sparkle */; };
 		BFF9A1736CA029241BB0622D /* SSHGitRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B8EDEAA2D0EAD42ED6F1915 /* SSHGitRunnerTests.swift */; };
 		C0667FA434EF07D98DED44D1 /* AEBridge.m in Sources */ = {isa = PBXBuildFile; fileRef = 0D5B5D0462A1225A56E6EE85 /* AEBridge.m */; };
 		C0E8D97C08BA3F0FA33F31E7 /* CommandPalette.swift in Sources */ = {isa = PBXBuildFile; fileRef = 235E2D958A2244483CAA0812 /* CommandPalette.swift */; };
@@ -66,6 +67,7 @@
 		CEA0A8FF66046FEFA80FAC0C /* GlintApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB74659D174004C620D538A /* GlintApp.swift */; };
 		D0C5A885F5B3FE6BD5AFC54A /* CloseOnCmdW.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E574E2A2735328331FC3C78 /* CloseOnCmdW.swift */; };
 		D1BDE1E5DE8D4FE1F96822D1 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */; };
+		D1EA62DA6A5ECE42430F35AE /* ShortcutStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC8AA7A60F82E273980E25FD /* ShortcutStoreTests.swift */; };
 		D3D6CF13B67D30E9DA557F83 /* UsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A1F24DAA7220AD4EE961E2 /* UsageStore.swift */; };
 		DFDF7E690BD53E885484EA00 /* OmpHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE16D678B1BC67A99EBA74F /* OmpHookInstallerTests.swift */; };
 		E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F2CA2243872C8111048EF2 /* AgentBridge.swift */; };
@@ -94,6 +96,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0149644D9C66D1E2D27B0850 /* ShortcutStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutStore.swift; sourceTree = "<group>"; };
 		050E267AE14712D4D6633B4F /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		05F2CA2243872C8111048EF2 /* AgentBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentBridge.swift; sourceTree = "<group>"; };
 		08FC2FBC9E8729A5ECBF857C /* PaneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneView.swift; sourceTree = "<group>"; };
@@ -159,6 +162,7 @@
 		C753FB652599A4C7900F8AA4 /* FontCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontCatalog.swift; sourceTree = "<group>"; };
 		C9E2B9ADF809766CE4278047 /* SafeJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeJSON.swift; sourceTree = "<group>"; };
 		D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */ = {isa = PBXFileReference; path = "zsh-autosuggestions.zsh"; sourceTree = "<group>"; };
+		D5E915CEF581085DF7D1B9D1 /* UpdaterVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterVersionTests.swift; sourceTree = "<group>"; };
 		D7F8C1899F93B387843907FF /* ReviewScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScopeTests.swift; sourceTree = "<group>"; };
 		DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSafety.swift; sourceTree = "<group>"; };
 		E298AD81B1615CBBFD69F48A /* GhosttySurfaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttySurfaceView.swift; sourceTree = "<group>"; };
@@ -170,6 +174,7 @@
 		F5A69ACF962AEDE189F98649 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		F8A1F24DAA7220AD4EE961E2 /* UsageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStore.swift; sourceTree = "<group>"; };
 		FC6FFB5185C403F6F44A1687 /* GhosttyManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyManager.swift; sourceTree = "<group>"; };
+		FC8AA7A60F82E273980E25FD /* ShortcutStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutStoreTests.swift; sourceTree = "<group>"; };
 		FDE16D678B1BC67A99EBA74F /* OmpHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmpHookInstallerTests.swift; sourceTree = "<group>"; };
 		FF0082D535969C315B8D75D7 /* AgentHookRoutingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHookRoutingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -180,7 +185,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				2E52C3AC5AD998CD3604D6BE /* GhosttyKit.xcframework in Frameworks */,
-				B70CAFEBB2416E25B0FFED97 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -236,8 +240,10 @@
 				2CFFB91CE5C44976A6961F1F /* ReviewDiffParsingTests.swift */,
 				D7F8C1899F93B387843907FF /* ReviewScopeTests.swift */,
 				F3B91F000C01FEA1C7E61F5A /* ShellRcBlockTests.swift */,
+				FC8AA7A60F82E273980E25FD /* ShortcutStoreTests.swift */,
 				4B8EDEAA2D0EAD42ED6F1915 /* SSHGitRunnerTests.swift */,
 				3FAD36B4BDB22AB47353C569 /* SyntaxHighlighterTests.swift */,
+				D5E915CEF581085DF7D1B9D1 /* UpdaterVersionTests.swift */,
 				83E4DF4C5180D50C381B4976 /* WorkspaceIconKindTests.swift */,
 			);
 			path = GlintTests;
@@ -351,6 +357,7 @@
 				7CB74659D174004C620D538A /* GlintApp.swift */,
 				407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */,
 				DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */,
+				0149644D9C66D1E2D27B0850 /* ShortcutStore.swift */,
 				4408F9761E584DE2AB6630E2 /* UpdaterController.swift */,
 			);
 			path = App;
@@ -400,7 +407,6 @@
 			);
 			name = Glint;
 			packageProductDependencies = (
-				C48F9D3C512A0ABE8369D0F4 /* Sparkle */,
 			);
 			productName = Glint;
 			productReference = 3E2E78BBA22734DD486C760B /* Glint.app */;
@@ -450,9 +456,6 @@
 			);
 			mainGroup = EA6921C9B6CB486D18C07534;
 			minimizedProjectReferenceProxies = 1;
-			packageReferences = (
-				AAA6FA46A023C46056BE3F0D /* XCRemoteSwiftPackageReference "Sparkle" */,
-			);
 			preferredProjectObjectVersion = 77;
 			projectDirPath = "";
 			projectRoot = "";
@@ -504,7 +507,9 @@
 				7072B8575DB70B2367A7EE1D /* ReviewScopeTests.swift in Sources */,
 				BFF9A1736CA029241BB0622D /* SSHGitRunnerTests.swift in Sources */,
 				4ED4428EEC2AFB777092FAEF /* ShellRcBlockTests.swift in Sources */,
+				D1EA62DA6A5ECE42430F35AE /* ShortcutStoreTests.swift in Sources */,
 				FAB0828152636BBBBC5989CD /* SyntaxHighlighterTests.swift in Sources */,
+				31B9D23C9642121D7D8930A9 /* UpdaterVersionTests.swift in Sources */,
 				C748DE21F23B49B2FFD73DC7 /* WorkspaceIconKindTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -549,6 +554,7 @@
 				F6AFF715FCE5357CEB07683D /* SettingsSafety.swift in Sources */,
 				EF3ACBA990526130228FAD0B /* SettingsView.swift in Sources */,
 				F584D3237E44E7444086E011 /* ShellRcBlock.swift in Sources */,
+				315A37A793978029ECA337C0 /* ShortcutStore.swift in Sources */,
 				CD30F5E1B78B3C46C9990FD6 /* SidebarView.swift in Sources */,
 				456D76955277C3299291BF60 /* SyntaxHighlighter.swift in Sources */,
 				7FC12666816053BEB64079CB /* Theme.swift in Sources */,
@@ -853,25 +859,6 @@
 			defaultConfigurationName = Debug;
 		};
 /* End XCConfigurationList section */
-
-/* Begin XCRemoteSwiftPackageReference section */
-		AAA6FA46A023C46056BE3F0D /* XCRemoteSwiftPackageReference "Sparkle" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/sparkle-project/Sparkle.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 2.6.4;
-			};
-		};
-/* End XCRemoteSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		C48F9D3C512A0ABE8369D0F4 /* Sparkle */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = AAA6FA46A023C46056BE3F0D /* XCRemoteSwiftPackageReference "Sparkle" */;
-			productName = Sparkle;
-		};
-/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = BE6DB378EC4FB00E8DB46BA7 /* Project object */;
 }

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -7,6 +8,7 @@ struct GlintApp: App {
     @StateObject private var updater = UpdaterController()
     @StateObject private var usage = UsageStore()
     @StateObject private var codexHomes = CodexHomeStore()
+    @StateObject private var shortcuts = ShortcutStore()
 
     init() {
         #if DEBUG
@@ -57,6 +59,7 @@ struct GlintApp: App {
                 .environmentObject(updater)
                 .environmentObject(usage)
                 .environmentObject(codexHomes)
+                .environmentObject(shortcuts)
                 .frame(minWidth: 980, minHeight: 600)
                 .preferredColorScheme(Theme.colorScheme)
                 .onAppear { updater.startDeferred() }
@@ -69,93 +72,94 @@ struct GlintApp: App {
         .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         .commands {
-            // Shortcut policy: a terminal app must leave the terminal's own
-            // vocabulary alone. ⌘↑/⌘↓ (prompt-mark jumps) and ⌘F (future
-            // scrollback search) deliberately have NO menu bindings so the
-            // events reach ghostty; workspace switching uses the tab-like
-            // ⌘⇧[ / ⌘⇧] plus ⌘1…⌘9 direct jumps instead.
+            // Bindings come from ShortcutStore (defaults + UserDefaults
+            // overrides). ⌘↑/⌘↓ and bare ⌘F stay unbound so they reach ghostty.
             CommandGroup(replacing: .newItem) {
                 Button("New Workspace") { workspaceStore.requestNewWorkspace() }
-                    .keyboardShortcut("n", modifiers: .command)
+                    .keyboardShortcut(shortcuts.chord(for: .newWorkspace))
                 Button("Next Workspace") { workspaceStore.selectNextWorkspace() }
-                    .keyboardShortcut("]", modifiers: [.command, .shift])
+                    .keyboardShortcut(shortcuts.chord(for: .nextWorkspace))
                 Button("Previous Workspace") { workspaceStore.selectPreviousWorkspace() }
-                    .keyboardShortcut("[", modifiers: [.command, .shift])
+                    .keyboardShortcut(shortcuts.chord(for: .previousWorkspace))
+                Button("Archive Workspace") {
+                    if let id = workspaceStore.selectedWorkspaceID {
+                        workspaceStore.archiveWorkspace(id)
+                    } else {
+                        NSSound.beep()
+                    }
+                }
+                .keyboardShortcut(shortcuts.chord(for: .archiveWorkspace))
+                Button("Delete Workspace") {
+                    if let id = workspaceStore.selectedWorkspaceID {
+                        workspaceStore.deleteWorkspace(id)
+                    } else {
+                        NSSound.beep()
+                    }
+                }
+                .keyboardShortcut(shortcuts.chord(for: .deleteWorkspace))
                 ForEach(1..<10, id: \.self) { n in
                     Button("Workspace \(n)") { workspaceStore.selectWorkspace(at: n - 1) }
-                        .keyboardShortcut(KeyEquivalent(Character("\(n)")), modifiers: .command)
+                        .keyboardShortcut(shortcuts.chord(for: ShortcutID.workspaceIndex(n)!))
                 }
                 Divider()
-                // Direction-explicit names; "horizontal/vertical" read
-                // opposite ways in different terminals and our own palette
-                // copy had it backwards. `.horizontal` = side by side.
                 Button("Split Right") { workspaceStore.requestSplit(.horizontal) }
-                    .keyboardShortcut("d", modifiers: .command)
+                    .keyboardShortcut(shortcuts.chord(for: .splitRight))
                 Button("Split Down") { workspaceStore.requestSplit(.vertical) }
-                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                    .keyboardShortcut(shortcuts.chord(for: .splitDown))
                 Button("Close Pane") { workspaceStore.closeFocused() }
-                    .keyboardShortcut("w", modifiers: .command)
+                    .keyboardShortcut(shortcuts.chord(for: .closePane))
                 Button("Focus Next Pane") { workspaceStore.focusNext() }
-                    .keyboardShortcut("]", modifiers: .command)
+                    .keyboardShortcut(shortcuts.chord(for: .focusNextPane))
                 Button("Focus Previous Pane") { workspaceStore.focusPrevious() }
-                    .keyboardShortcut("[", modifiers: .command)
+                    .keyboardShortcut(shortcuts.chord(for: .focusPreviousPane))
                 Divider()
-                // Tabs deliberately avoid the workspace vocabulary (⌘1…9,
-                // ⌘⇧[ ]) so existing muscle memory is untouched: ⌘T opens,
-                // ⌘⇧W closes, and ⌃Tab / ⌃⇧Tab cycle (iTerm-compatible, and
-                // not a sequence the terminal itself needs).
                 Button("New Tab") { workspaceStore.requestNewTab() }
-                    .keyboardShortcut("t", modifiers: .command)
+                    .keyboardShortcut(shortcuts.chord(for: .newTab))
                 Button("Close Tab") {
                     if let ws = workspaceStore.selectedWorkspace {
                         workspaceStore.closeTab(ws.selectedTabID)
                     }
                 }
-                .keyboardShortcut("w", modifiers: [.command, .shift])
+                .keyboardShortcut(shortcuts.chord(for: .closeTab))
                 Button("Next Tab") { workspaceStore.nextTab() }
-                    .keyboardShortcut(.tab, modifiers: .control)
+                    .keyboardShortcut(shortcuts.chord(for: .nextTab))
                 Button("Previous Tab") { workspaceStore.previousTab() }
-                    .keyboardShortcut(.tab, modifiers: [.control, .shift])
+                    .keyboardShortcut(shortcuts.chord(for: .previousTab))
             }
             CommandGroup(after: .toolbar) {
+                Button("Toggle Sidebar") {
+                    workspaceStore.sidebarCollapsed.toggle()
+                }
+                .keyboardShortcut(shortcuts.chord(for: .toggleSidebar))
                 Button("Command Palette") {
                     workspaceStore.commandPaletteOpen.toggle()
                 }
-                .keyboardShortcut("p", modifiers: [.command, .shift])
+                .keyboardShortcut(shortcuts.chord(for: .commandPalette))
                 Button("Find in Sidebar") {
                     workspaceStore.focusSidebarSearch()
                 }
-                .keyboardShortcut("f", modifiers: [.command, .option])
-                // Read-only diff window for the selected workspace; mirrors the
-                // git button's "Review Changes…" affordance. Disabled when the
-                // selection has no reviewable git path.
+                .keyboardShortcut(shortcuts.chord(for: .findInSidebar))
                 Button("Review Changes…") {
                     if let ws = workspaceStore.selectedWorkspace {
                         workspaceStore.openReview(for: ws)
                     }
                 }
-                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .keyboardShortcut(shortcuts.chord(for: .reviewChanges))
                 .disabled(workspaceStore.selectedWorkspace.flatMap {
                     workspaceStore.effectiveGitPath(for: $0)
                 } == nil)
-                // Reveal the focused pane's cwd in Finder from anywhere — even
-                // outside a git repo (unlike Review Changes). Never disabled.
                 Button("Reveal in Finder") {
                     workspaceStore.revealCurrentInFinder()
                 }
-                .keyboardShortcut("f", modifiers: [.command, .shift])
-                // Copy the focused pane's cwd (⌘⇧C) — cwd-first, so it works
-                // outside a git repo too. Never disabled; beeps if unknown.
+                .keyboardShortcut(shortcuts.chord(for: .revealInFinder))
                 Button("Copy Path") {
                     workspaceStore.copyCurrentPath()
                 }
-                .keyboardShortcut("c", modifiers: [.command, .shift])
-                // Jump to the next pane needing attention (permission / done /
-                // failed). Multi-agent muscle memory; beeps if none.
+                .keyboardShortcut(shortcuts.chord(for: .copyPath))
                 Button("Jump to Attention") {
                     workspaceStore.jumpToAttention()
                 }
-                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .keyboardShortcut(shortcuts.chord(for: .jumpToAttention))
             }
             // Hijack the App menu's Settings… so ⌘, opens our in-window
             // sheet instead of trying to summon a separate scene.
@@ -163,7 +167,7 @@ struct GlintApp: App {
                 Button("Settings…") {
                     workspaceStore.settingsOpen = true
                 }
-                .keyboardShortcut(",", modifiers: .command)
+                .keyboardShortcut(shortcuts.chord(for: .openSettings))
             }
         }
     }
