@@ -1,0 +1,154 @@
+# 每次 push 到 main（或手动 workflow_dispatch）自动：
+#   1. 生成版本号 / tag（应用 0.1.27-dev.N，git tag dmg-0.1.27.N）
+#   2. 在 GitHub 托管的 macOS runner 上 Archive + 打 DMG
+#   3. 创建 GitHub Release，挂上 DMG，可直接下载
+#
+# 不依赖 Apple Developer / Sparkle 密钥：使用 ad-hoc 签名。
+# 首次打开若被隔离，在本机执行：
+#   xattr -dr com.apple.quarantine /Applications/Glint.app
+#
+# 与 release.yml 分工：本工作流的 git tag 形如 dmg-0.1.27.N，
+# 不匹配 release.yml 的 vX.Y.Z 模式，避免 push tag 后双跑。
+
+name: Build DMG
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dmg:
+    name: Build + Release DMG
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      APP_NAME: Glint
+      BUNDLE_ID: app.glint.Glint
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Derive version
+        id: version
+        run: |
+          set -euo pipefail
+          # 应用版本用 0.1.27-dev.<run>（写进 Info.plist / DMG 文件名）。
+          # git tag 用 dmg-0.1.27.<run>，避免触发 release.yml 的 v* 模式。
+          BASE="0.1.27"
+          VERSION="${BASE}-dev.${GITHUB_RUN_NUMBER}"
+          TAG="dmg-${BASE}.${GITHUB_RUN_NUMBER}"
+          BUILD_NUMBER="$(date -u +%Y%m%d%H%M)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "build_number=$BUILD_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$VERSION  TAG=$TAG  BUILD=$BUILD_NUMBER"
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Resolve ghostty SHA
+        id: ghostty
+        run: |
+          set -euo pipefail
+          sha="$(git -C ghostty rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Cache GhosttyKit.xcframework
+        id: ghostty-cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            Vendor/GhosttyKit.xcframework
+            Vendor/.ghosttykit-sha
+          key: ghosttykit-${{ runner.os }}-${{ steps.ghostty.outputs.sha }}
+
+      - name: Download GhosttyKit
+        if: steps.ghostty-cache.outputs.cache-hit != 'true'
+        run: bash scripts/setup-ghosttykit.sh
+
+      - name: Stamp version into Info.plist
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          BUILD_NUMBER: ${{ steps.version.outputs.build_number }}
+        run: |
+          set -euo pipefail
+          plutil -replace CFBundleShortVersionString -string "$VERSION" Glint/Resources/Info.plist
+          plutil -replace CFBundleVersion -string "$BUILD_NUMBER" Glint/Resources/Info.plist
+
+      - name: Archive (Release)
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project Glint.xcodeproj \
+            -scheme Glint \
+            -configuration Release \
+            -derivedDataPath build \
+            -archivePath build/Glint.xcarchive \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            archive
+
+      - name: Export .app
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp -R build/Glint.xcarchive/Products/Applications/Glint.app dist/
+          # 重建 ad-hoc 签名 + CodeResources，避免 Sparkle/系统校验失败。
+          codesign --force --deep --sign - dist/Glint.app
+          codesign --verify --verbose dist/Glint.app
+
+      - name: Build DMG
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DMG="dist/Glint-${VERSION}.dmg"
+          STAGING="$(mktemp -d)"
+          cp -R dist/Glint.app "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create \
+            -volname "Glint $VERSION" \
+            -srcfolder "$STAGING" \
+            -fs HFS+ \
+            -format UDZO \
+            -imagekey zlib-level=9 \
+            "$DMG"
+          echo "DMG=$DMG" >> "$GITHUB_ENV"
+          ls -lh "$DMG"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Glint ${{ steps.version.outputs.version }}
+          files: ${{ env.DMG }}
+          generate_release_notes: true
+          prerelease: true
+          fail_on_unmatched_files: true
+          body: |
+            自动构建（push → main）。
+
+            - 版本: `${{ steps.version.outputs.version }}`
+            - 提交: `${{ github.sha }}`
+            - 签名: ad-hoc（无 Apple Developer ID）
+
+            **安装提示**
+
+            1. 下载 `Glint-*.dmg`，拖到「应用程序」
+            2. 若提示无法打开，在终端执行：
+               ```bash
+               xattr -dr com.apple.quarantine /Applications/Glint.app
+               ```
