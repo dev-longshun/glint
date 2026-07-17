@@ -20,7 +20,6 @@
 		2D9012046800A06555DEA381 /* GitRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */; };
 		2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */ = {isa = PBXBuildFile; fileRef = D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */; };
 		2E52C3AC5AD998CD3604D6BE /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */; };
-		2EF65A8B05BA422612D246AC /* background.png in Resources */ = {isa = PBXBuildFile; fileRef = 677924D446D4F954E03ABB06 /* background.png */; };
 		3194A1545E36E400BC2C33E6 /* PaneSessionIdMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */; };
 		34997DD4A4F9B64A754FE77F /* DevinHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */; };
 		370FA310A4B7CC8489BF51DE /* WhatsNewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 712159D2C27AD5B865820384 /* WhatsNewView.swift */; };
@@ -41,11 +40,11 @@
 		6D74FE6545631EB8193C82E1 /* PaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08FC2FBC9E8729A5ECBF857C /* PaneView.swift */; };
 		7072B8575DB70B2367A7EE1D /* ReviewScopeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7F8C1899F93B387843907FF /* ReviewScopeTests.swift */; };
 		7D07A40DF6411A613624827A /* PaneSurfaceRepresentable.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */; };
-		7E615A7D1866D3A2843188B5 /* icon.json in Resources */ = {isa = PBXBuildFile; fileRef = 13C54AB60C6A12D68AFCA802 /* icon.json */; };
 		7FC12666816053BEB64079CB /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 050E267AE14712D4D6633B4F /* Theme.swift */; };
 		80C9187503230DFF69389EFE /* InlineSuggestionInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98BBD4C70C8DC534304294C9 /* InlineSuggestionInstaller.swift */; };
 		81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */; };
 		930665E39CE84564CBF9D300 /* GlintTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150EEF32284061D527E51866 /* GlintTheme.swift */; };
+		A91EFEF0FEA392A0745724DE /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 89B8883C4456681F07B6D662 /* AppIcon.icon */; };
 		942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3023490E670A10EC38870B12 /* Assets.xcassets */; };
 		9F605AB2DC185A94ED28E6D4 /* AgentChoice.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3EB9A1E80F3CC4BCA468774 /* AgentChoice.swift */; };
 		A019A2AD685F1407D7E2A7E1 /* AgentHookRoutingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0082D535969C315B8D75D7 /* AgentHookRoutingTests.swift */; };
@@ -67,7 +66,6 @@
 		CEA0A8FF66046FEFA80FAC0C /* GlintApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB74659D174004C620D538A /* GlintApp.swift */; };
 		D0C5A885F5B3FE6BD5AFC54A /* CloseOnCmdW.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E574E2A2735328331FC3C78 /* CloseOnCmdW.swift */; };
 		D1BDE1E5DE8D4FE1F96822D1 /* WorkspaceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */; };
-		D3534F3D10B6D925E1F3BC6C /* foreground.png in Resources */ = {isa = PBXBuildFile; fileRef = 3C90B6C47DFDD50F65DB1795 /* foreground.png */; };
 		D3D6CF13B67D30E9DA557F83 /* UsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A1F24DAA7220AD4EE961E2 /* UsageStore.swift */; };
 		DFDF7E690BD53E885484EA00 /* OmpHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE16D678B1BC67A99EBA74F /* OmpHookInstallerTests.swift */; };
 		E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F2CA2243872C8111048EF2 /* AgentBridge.swift */; };
@@ -105,7 +103,6 @@
 		0D751E30DFF2EFA6F705A374 /* GhosttyTickSchedulerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GhosttyTickSchedulerTests.swift; sourceTree = "<group>"; };
 		0F58E2127BAE2C9F5155CF07 /* DevinHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DevinHookInstallerTests.swift; sourceTree = "<group>"; };
 		0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageReaderTests.swift; sourceTree = "<group>"; };
-		13C54AB60C6A12D68AFCA802 /* icon.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = icon.json; sourceTree = "<group>"; };
 		150EEF32284061D527E51866 /* GlintTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintTheme.swift; sourceTree = "<group>"; };
 		16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSurfaceRepresentable.swift; sourceTree = "<group>"; };
 		1E646AABA8ADCE8A2A5C6F55 /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
@@ -117,11 +114,11 @@
 		265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentHookInstaller.swift; sourceTree = "<group>"; };
 		2CFFB91CE5C44976A6961F1F /* ReviewDiffParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewDiffParsingTests.swift; sourceTree = "<group>"; };
 		3023490E670A10EC38870B12 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		89B8883C4456681F07B6D662 /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = wrapper.icon; path = AppIcon.icon; sourceTree = "<group>"; };
 		349714D49AE52D84995314FD /* MascotAssetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MascotAssetTests.swift; sourceTree = "<group>"; };
 		376568363043C189904E4E0A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		38E3B385162995D0F1F5B72D /* CodexHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHome.swift; sourceTree = "<group>"; };
 		39F54835E4A44EC88236EFBE /* GitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitService.swift; sourceTree = "<group>"; };
-		3C90B6C47DFDD50F65DB1795 /* foreground.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = foreground.png; sourceTree = "<group>"; };
 		3E2E78BBA22734DD486C760B /* Glint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glint.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FAD36B4BDB22AB47353C569 /* SyntaxHighlighterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighterTests.swift; sourceTree = "<group>"; };
 		407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotes.swift; sourceTree = "<group>"; };
@@ -137,7 +134,6 @@
 		5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
 		5BDAAD70DC4C2FC80F6DEA51 /* GrokHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokHookInstallerTests.swift; sourceTree = "<group>"; };
 		65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRefreshCoordinatorTests.swift; sourceTree = "<group>"; };
-		677924D446D4F954E03ABB06 /* background.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = background.png; sourceTree = "<group>"; };
 		6860F8F626EFDB9A289FC727 /* themes.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = themes.json; sourceTree = "<group>"; };
 		6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHomeStoreTests.swift; sourceTree = "<group>"; };
 		6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -191,15 +187,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		0B5C2A2893BFF69BD11E43D9 /* Assets */ = {
-			isa = PBXGroup;
-			children = (
-				677924D446D4F954E03ABB06 /* background.png */,
-				3C90B6C47DFDD50F65DB1795 /* foreground.png */,
-			);
-			path = Assets;
-			sourceTree = "<group>";
-		};
 		169D300DD0731BE0FC20E230 /* Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -208,7 +195,7 @@
 				F5A69ACF962AEDE189F98649 /* Info.plist */,
 				376568363043C189904E4E0A /* Localizable.xcstrings */,
 				6860F8F626EFDB9A289FC727 /* themes.json */,
-				8E98DDE9562C294E846B5D95 /* AppIcon.icon */,
+				89B8883C4456681F07B6D662 /* AppIcon.icon */,
 				A4271BA2785D3733E2F3908E /* ShellIntegration */,
 			);
 			path = Resources;
@@ -311,15 +298,6 @@
 				F8A1F24DAA7220AD4EE961E2 /* UsageStore.swift */,
 			);
 			path = Agent;
-			sourceTree = "<group>";
-		};
-		8E98DDE9562C294E846B5D95 /* AppIcon.icon */ = {
-			isa = PBXGroup;
-			children = (
-				13C54AB60C6A12D68AFCA802 /* icon.json */,
-				0B5C2A2893BFF69BD11E43D9 /* Assets */,
-			);
-			path = AppIcon.icon;
 			sourceTree = "<group>";
 		};
 		976DA38BD8100EAB5D19A251 /* Workspace */ = {
@@ -490,11 +468,9 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A91EFEF0FEA392A0745724DE /* AppIcon.icon in Resources */,
 				942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */,
 				FCB67525DF16A4DCF9B2AF7A /* Localizable.xcstrings in Resources */,
-				2EF65A8B05BA422612D246AC /* background.png in Resources */,
-				D3534F3D10B6D925E1F3BC6C /* foreground.png in Resources */,
-				7E615A7D1866D3A2843188B5 /* icon.json in Resources */,
 				47BB527385B84454ABF8FC40 /* themes.json in Resources */,
 				2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */,
 			);

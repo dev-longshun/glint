@@ -5,6 +5,10 @@ options:
     macOS: "14.0"
   createIntermediateGroups: true
   generateEmptyDirectories: true
+  # XcodeGen expands AppIcon.icon into loose png/json Copy Resources entries,
+  # which breaks Icon Composer packaging (no AppIcon.icns in the .app).
+  # Re-wire as a single wrapper.icon after every generate.
+  postGenCommand: python3 scripts/fix-appicon-pbxproj.py
 
 settings:
   base:
@@ -28,7 +32,13 @@ targets:
         excludes:
           - "**/.DS_Store"
     resources:
-      - Glint/Resources
+      # AppIcon.icon is re-attached as wrapper.icon by postGenCommand
+      # (scripts/fix-appicon-pbxproj.py). Do not list it as a recursive
+      # folder here — XcodeGen would split it into loose files again.
+      - path: Glint/Resources
+        excludes:
+          - AppIcon.icon
+          - AppIcon.icon/**
     settings:
       base:
         PRODUCT_NAME: Glint

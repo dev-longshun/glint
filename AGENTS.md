@@ -63,7 +63,12 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - `.github/workflows/build-dmg.yml`：push `main` → 自动打 DMG + GitHub Release  
    - 不要被上游只保留 `release.yml`（仅 `v*` tag）的结构删掉或覆盖  
 
-5. **协作协议**  
+5. **应用图标（AppIcon.icon）**  
+   - 必须是 **单个** `lastKnownFileType = wrapper.icon` 资源；禁止把 `icon.json` / `background.png` / `foreground.png` 拆成 Copy Bundle Resources  
+   - `xcodegen generate` 后必须跑 `python3 scripts/fix-appicon-pbxproj.py`（`project.yml` 的 `postGenCommand` 已挂）  
+   - 验证：归档产物 `Glint.app/Contents/Resources/AppIcon.icns` 存在  
+
+6. **协作协议**  
    - 本文件 `AGENTS.md`、技能树、本「二开」章节：上游若无对应内容，**整段保留**  
 
 ### 同步操作红线
