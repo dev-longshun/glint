@@ -27,12 +27,15 @@ enum FontCatalog {
     typealias Item = (value: String, label: String)
     typealias Section = (header: LocalizedStringKey, items: [Item])
 
+    /// 推荐等宽列表:Kaku/MUX0 默认 JetBrains Mono 置顶,其余常用等宽随后。
+    /// 下拉只展示本机已装项(`installedRecommendedMono`)。
     static let recommendedMono: [String] = [
-        "SF Mono", "Menlo", "Monaco", "Courier New",
-        "JetBrains Mono", "Fira Code", "IBM Plex Mono",
+        "JetBrains Mono", "SF Mono", "Menlo", "Monaco", "Courier New",
+        "Fira Code", "IBM Plex Mono",
     ]
 
     static let recommendedCJK: [String] = [
+        "LXGW WenKai Mono",
         "PingFang SC", "PingFang TC", "PingFang HK",
         "Hiragino Sans GB", "Heiti SC", "Songti SC", "STSong",
         "Source Han Sans CN", "Source Han Serif CN",
@@ -186,5 +189,14 @@ enum FontCatalog {
     private static func isFamilyInstalled(_ family: String, allLowered: Set<String>) -> Bool {
         if allLowered.contains(family.lowercased()) { return true }
         return NSFont(name: family, size: 12) != nil
+    }
+
+    /// 公开安装探测:WorkspaceStore 默认 CJK 等路径用。不触发全量 cache build
+    /// (只做一次家族枚举 + NSFont 探针),适合启动期默认值解析。
+    static func isInstalled(_ family: String) -> Bool {
+        let trimmed = family.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let allLowered = Set(NSFontManager.shared.availableFontFamilies.map { $0.lowercased() })
+        return isFamilyInstalled(trimmed, allLowered: allLowered)
     }
 }

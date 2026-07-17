@@ -695,10 +695,13 @@ final class WorkspaceStore: ObservableObject {
     /// trimmed 值匹配,如果绑定值不 trim,选中态会对不上(老 UserDefaults 里
     /// 留下 " SF Mono " 会让下拉同时出 Recommended 与 Current 两条)。CJK 路径
     /// 已经这么做,这里保持对称。
+    ///
+    /// 默认 JetBrains Mono(对标 Kaku / MUX0)。系统未装时 ghostty 仍用内嵌
+    /// JetBrains 变量字体渲染;UI 会显示 Current 段直到用户另选已装字体。
     @Published var terminalFontFamily: String = {
         let raw = (UserDefaults.standard.string(forKey: "glint.terminalFontFamily") ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        return raw.isEmpty ? "SF Mono" : raw
+        return raw.isEmpty ? "JetBrains Mono" : raw
     }() {
         didSet {
             let canonical = terminalFontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -734,9 +737,15 @@ final class WorkspaceStore: ObservableObject {
     ///
     /// 读写都规范化为「去首尾空白」的形式 —— 下游 FontCatalog 的 Current 行
     /// 用 trimmed 值匹配,如果绑定值不 trim,选中态会对不上。
-    @Published var terminalCJKFontFamily: String = (UserDefaults.standard.string(forKey: "glint.terminalCJKFontFamily") ?? "")
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-    {
+    ///
+    /// 键从未写入时:若本机已装 LXGW WenKai Mono,默认用它(对标 Kaku/MUX0
+    /// 的 CJK 映射);显式清空后保持空,不再自动回填。
+    @Published var terminalCJKFontFamily: String = {
+        if let raw = UserDefaults.standard.string(forKey: "glint.terminalCJKFontFamily") {
+            return raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return FontCatalog.isInstalled("LXGW WenKai Mono") ? "LXGW WenKai Mono" : ""
+    }() {
         didSet {
             let canonical = terminalCJKFontFamily.trimmingCharacters(in: .whitespacesAndNewlines)
             if canonical != terminalCJKFontFamily {
@@ -749,7 +758,8 @@ final class WorkspaceStore: ObservableObject {
         }
     }
     /// One of `block` / `bar` / `underline`, matching ghostty's `cursor-style`.
-    @Published var terminalCursorStyle: String = UserDefaults.standard.string(forKey: "glint.terminalCursorStyle") ?? "block" {
+    /// 默认 bar(对标 Kaku / MUX0),不再用 block。
+    @Published var terminalCursorStyle: String = UserDefaults.standard.string(forKey: "glint.terminalCursorStyle") ?? "bar" {
         didSet {
             UserDefaults.standard.set(terminalCursorStyle, forKey: "glint.terminalCursorStyle")
             GhosttyManager.shared.reloadConfig()

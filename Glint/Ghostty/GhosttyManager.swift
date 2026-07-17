@@ -229,17 +229,27 @@ final class GhosttyManager {
         // 字体家族名直接插值,因此任何嵌入的换行/回车都会把后面的行篡改成新指令。
         // 通常来源(下拉)永远不会带控制字符,但 UserDefaults 是用户可写的,所以
         // 在拼 config 前一律剥掉控制字符,堵住注入面。
-        let family = sanitizeConfigValue(defaults.string(forKey: "glint.terminalFontFamily")) ?? "SF Mono"
+        // Kaku / MUX0 默认: JetBrains Mono + bar 闪烁 + 16pt 内边距。
+        // 系统未装 JetBrains 时 ghostty 仍会落到内嵌 JetBrains 变量字体
+        // (SharedGridSet 的 built-in fallback),视觉与 Kaku 一致。
+        let family = sanitizeConfigValue(defaults.string(forKey: "glint.terminalFontFamily")) ?? "JetBrains Mono"
         let size: Double = {
             let v = defaults.double(forKey: "glint.terminalFontSize")
             return v == 0 ? 13 : v
         }()
         let bold = (defaults.object(forKey: "glint.terminalFontBold") as? Bool) ?? false
-        let cjkFamily = sanitizeConfigValue(defaults.string(forKey: "glint.terminalCJKFontFamily")) ?? ""
+        // CJK: 键存在(含显式空串)→ 尊重用户;键从未写入且本机有 LXGW → 默认注入
+        // (与 WorkspaceStore.terminalCJKFontFamily 初始化一致)。
+        let cjkFamily: String = {
+            if let raw = defaults.string(forKey: "glint.terminalCJKFontFamily") {
+                return sanitizeConfigValue(raw) ?? ""
+            }
+            return FontCatalog.isInstalled("LXGW WenKai Mono") ? "LXGW WenKai Mono" : ""
+        }()
         // 三选一白名单 —— UserDefaults 是用户可写的,塞进去任意串都不能让我们
-        // 写出畸形或被注入的 config 行。落回 "block" 比静默接受随机串更安全。
-        let cursorStyleRaw = defaults.string(forKey: "glint.terminalCursorStyle") ?? "block"
-        let cursorStyle = ["block", "bar", "underline"].contains(cursorStyleRaw) ? cursorStyleRaw : "block"
+        // 写出畸形或被注入的 config 行。落回 "bar"(Kaku 默认)比静默接受随机串更安全。
+        let cursorStyleRaw = defaults.string(forKey: "glint.terminalCursorStyle") ?? "bar"
+        let cursorStyle = ["block", "bar", "underline"].contains(cursorStyleRaw) ? cursorStyleRaw : "bar"
         let cursorBlink = (defaults.object(forKey: "glint.terminalCursorBlink") as? Bool) ?? true
         let accentHex = Theme.accent(named: defaults.string(forKey: "glint.accentName")).rgbHex
         let scrollbackLimitBytes: Int = {
@@ -303,10 +313,10 @@ final class GhosttyManager {
         font-family = Menlo
         font-size = \(size)\(boldStyle)
         scrollback-limit = \(scrollbackLimitBytes)
-        window-padding-x = 14
-        window-padding-y = 12
+        window-padding-x = 16
+        window-padding-y = 16
         window-padding-balance = true
-        adjust-cell-height = 10%
+        adjust-cell-height = 4
         macos-titlebar-style = hidden
         background-opacity = \(termOpacity)
         background-blur = \(blurRadius)
