@@ -160,11 +160,11 @@ struct SidebarView: View {
         return ordered.min(by: { abs($0.value.midY - y) < abs($1.value.midY - y) })?.key
     }
 
-    /// The ⌥n shortcut that would select this workspace, or nil past ⌥9.
-    /// Indexed against `store.activeWorkspaces` (the order ⌥1…⌥9 actually
+    /// The ⌘n shortcut that would select this workspace, or nil past ⌘9.
+    /// Indexed against `store.activeWorkspaces` (the order ⌘1…⌘9 actually
     /// use — archived workspaces are skipped), NOT the filtered/sorted
     /// display order. Returns nil for archived workspaces so their cards
-    /// never show a ⌥ badge while held.
+    /// never show a badge while held.
     private func shortcutNumber(for ws: Workspace) -> Int? {
         guard let idx = store.activeWorkspaces.firstIndex(where: { $0.id == ws.id }),
               idx < 9 else { return nil }
@@ -501,8 +501,8 @@ private struct QuotaColumn: View {
 /// Local monitor only; deactivation force-clears so badges never stick.
 private final class CommandKeyObserver: ObservableObject {
     @Published var commandHeld = false
-    /// Defaults match ShortcutStore's workspace1…9 defaults (Option).
-    var watchedModifiers: NSEvent.ModifierFlags = .option {
+    /// Defaults match ShortcutStore's workspace1…9 defaults (Command).
+    var watchedModifiers: NSEvent.ModifierFlags = .command {
         didSet { reevaluate(flags: NSEvent.modifierFlags) }
     }
     private var monitor: Any?
@@ -535,11 +535,13 @@ private final class CommandKeyObserver: ObservableObject {
     }
 }
 
-/// Number pill shown while workspace-jump modifiers are held.
+/// "⌘n" pill shown in a card's top-right corner while Command is held.
 private struct ShortcutBadge: View {
     let number: Int
     var body: some View {
         HStack(spacing: 1) {
+            Image(systemName: "command")
+                .font(.system(size: 8.5, weight: .semibold))
             Text("\(number)")
                 .font(.system(size: 10, weight: .semibold, design: .rounded))
         }
@@ -574,15 +576,15 @@ private struct WorkspaceCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let ws: Workspace
     /// When true the card renders the archived variant: same chrome, "已归档"
-    /// badge in the secondary row instead of tab/pane counts, no ⌥ shortcut
+    /// badge in the secondary row instead of tab/pane counts, no ⌘ shortcut
     /// badge, no reorder gesture, and the context menu offers Unarchive
     /// instead of Archive. Defaults to false so the active-list call sites
     /// don't need to change.
     var archived: Bool = false
     /// True while this card is the one being dragged (drives the lift).
     var isDragging: Bool = false
-    /// When non-nil, the card shows its ⌥n switch shortcut in the top-right
-    /// corner (driven by the sidebar's Option-held observer).
+    /// When non-nil, the card shows its ⌘n switch shortcut in the top-right
+    /// corner (driven by the sidebar's Command-held observer).
     var shortcutBadge: Int? = nil
     /// Reorder gesture callbacks (owned by `SidebarView`): the pointer's
     /// y in `kSidebarReorderSpace` on every change, and a drag-ended signal.
@@ -911,7 +913,7 @@ private struct WorkspaceCard: View {
 
     /// Top-right corner marker for archived cards — icon only, sits in the
     /// same slot as `ShortcutBadge` (archived workspaces are skipped by
-    /// ⌥1…⌥9 so the two never collide). Replaces the old "Archived" capsule
+    /// ⌘1…⌘9 so the two never collide). Replaces the old "Archived" capsule
     /// in the secondary row; the row itself is omitted for archived cards
     /// so they read as visually parked.
     private var archivedCornerMarker: some View {

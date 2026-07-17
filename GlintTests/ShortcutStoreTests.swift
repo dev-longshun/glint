@@ -19,8 +19,8 @@ final class ShortcutStoreTests: XCTestCase {
         XCTAssertTrue(store.chord(for: .deleteWorkspace).command)
         XCTAssertEqual(store.chord(for: .archiveWorkspace).key, "0")
         XCTAssertTrue(store.chord(for: .archiveWorkspace).command)
-        XCTAssertTrue(store.chord(for: .workspace1).option)
-        XCTAssertFalse(store.chord(for: .workspace1).command)
+        XCTAssertTrue(store.chord(for: .workspace1).command)
+        XCTAssertFalse(store.chord(for: .workspace1).option)
     }
 
     @MainActor
@@ -61,8 +61,8 @@ final class ShortcutStoreTests: XCTestCase {
     func testKeyChordDisplayCaps() {
         let c = KeyChord(key: "backspace", command: true)
         XCTAssertEqual(c.displayCaps, ["⌘", "⌫"])
-        let o = KeyChord(key: "1", option: true)
-        XCTAssertEqual(o.displayCaps, ["⌥", "1"])
+        let o = KeyChord(key: "1", command: true)
+        XCTAssertEqual(o.displayCaps, ["⌘", "1"])
     }
 
     func testCodableRoundTrip() throws {

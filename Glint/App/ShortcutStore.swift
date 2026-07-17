@@ -345,15 +345,17 @@ final class ShortcutStore: ObservableObject {
             return KeyChord(key: "backspace", command: true)
         case .archiveWorkspace:
             return KeyChord(key: "0", command: true)
-        case .workspace1: return KeyChord(key: "1", option: true)
-        case .workspace2: return KeyChord(key: "2", option: true)
-        case .workspace3: return KeyChord(key: "3", option: true)
-        case .workspace4: return KeyChord(key: "4", option: true)
-        case .workspace5: return KeyChord(key: "5", option: true)
-        case .workspace6: return KeyChord(key: "6", option: true)
-        case .workspace7: return KeyChord(key: "7", option: true)
-        case .workspace8: return KeyChord(key: "8", option: true)
-        case .workspace9: return KeyChord(key: "9", option: true)
+        // ⌘1…9 — AppKit menu shortcuts are reliable with Command; pure Option
+        // remaps digits to symbols (¡™£…) and fails to fire in the terminal.
+        case .workspace1: return KeyChord(key: "1", command: true)
+        case .workspace2: return KeyChord(key: "2", command: true)
+        case .workspace3: return KeyChord(key: "3", command: true)
+        case .workspace4: return KeyChord(key: "4", command: true)
+        case .workspace5: return KeyChord(key: "5", command: true)
+        case .workspace6: return KeyChord(key: "6", command: true)
+        case .workspace7: return KeyChord(key: "7", command: true)
+        case .workspace8: return KeyChord(key: "8", command: true)
+        case .workspace9: return KeyChord(key: "9", command: true)
         case .splitRight:
             return KeyChord(key: "d", command: true)
         case .splitDown:
