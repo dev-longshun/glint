@@ -58,3 +58,12 @@ xhs-card-*.png
 
 # Local-only design scratch (HTML approach prototypes, not part of the app).
 _design-prototypes/
+
+# === Agent 协作（Claude / Codex）===
+# worktree 建在项目同级目录（../glint--{分支}/），在仓库外，无需 ignore
+# Codex app 自动生成的 skill 副本（可再生，不入仓；真源在 .claude/skills）
+.agents/
+# Claude Code 本地权限设置（每台机器不同）
+.claude/settings.local.json
+# bug-patrol 排查追踪（项目内部记录，不入仓）
+00_debug-notes/

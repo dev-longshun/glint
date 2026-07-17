@@ -47,6 +47,10 @@ final class AgentHookRoutingTests: XCTestCase {
     func testReporterScriptParses() throws {
         let body = AgentHookInstaller.scriptBody
         XCTAssertTrue(body.contains("plutil -extract session_id"))
+        // Grok emits camelCase sessionId + GROK_SESSION_ID; both must be
+        // mined so resume-on-launch works without a forked reporter.
+        XCTAssertTrue(body.contains("plutil -extract sessionId"))
+        XCTAssertTrue(body.contains("GROK_SESSION_ID"))
         XCTAssertFalse(body.contains("agent-debug.sock"),
                        "broadcast fallback should be gone after the direct-route revert")
         XCTAssertFalse(body.contains("cwd_b64"),

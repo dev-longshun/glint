@@ -1622,6 +1622,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
         markScrollbackDirty()
+        postAccessibilityValueChanged()
         return true
     }
 
@@ -1799,6 +1800,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         str.withCString { ptr in
             ghostty_surface_text(s, ptr, UInt(strlen(ptr)))
         }
+        // Typeless / other AX tools simulate ⌘V then wait for valueChanged
+        // before treating the paste as successful (see Accessibility MARK).
+        postAccessibilityValueChanged()
     }
 
     // MARK: - external control injection (control.sock)
@@ -1852,6 +1856,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         text.withCString { ptr in
             ghostty_surface_text(s, ptr, UInt(n))
         }
+        postAccessibilityValueChanged()
     }
 
     /// Inject a single whitelisted key. Special keys go through
@@ -1881,6 +1886,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
                 }
             }
             markScrollbackDirty()
+            postAccessibilityValueChanged()
         }
     }
 
@@ -2083,6 +2089,120 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         ghostty_surface_mouse_scroll(s, dx, dy, packed)
     }
 
+    // MARK: - Accessibility
+    //
+    // Dictation / assistive-input tools (Typeless, TextExpander, VoiceOver)
+    // first ask macOS what kind of UI element is focused. Without these
+    // overrides AppKit exposes this Metal-backed terminal view as a generic
+    // `.group`, so those tools either refuse to inject or inject via simulated
+    // paste but never receive a success signal — Typeless then shows its
+    // fallback "复制最后的转录" / "Copy last transcript" bar even though the
+    // text already landed. Port of the Mux0 fix (e86e63b / a4cc065).
+
+    override func isAccessibilityElement() -> Bool { true }
+
+    override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
+
+    override func accessibilityHelp() -> String? { "Terminal content area" }
+
+    override func accessibilityValue() -> Any? {
+        readTerminalText(
+            from: GHOSTTY_POINT_SCREEN,
+            topLeft: GHOSTTY_POINT_COORD_TOP_LEFT,
+            bottomRight: GHOSTTY_POINT_COORD_BOTTOM_RIGHT
+        )
+    }
+
+    override func accessibilitySelectedTextRange() -> NSRange {
+        readSelectionRange()
+    }
+
+    override func accessibilitySelectedText() -> String? {
+        guard let selected = readSelectedText(), !selected.isEmpty else { return nil }
+        return selected
+    }
+
+    override func accessibilityNumberOfCharacters() -> Int {
+        accessibilityTextValue.count
+    }
+
+    override func accessibilityVisibleCharacterRange() -> NSRange {
+        let count = accessibilityTextValue.count
+        return NSRange(location: 0, length: count)
+    }
+
+    override func accessibilityLine(for index: Int) -> Int {
+        let content = accessibilityTextValue
+        let safeIndex = max(0, min(index, content.count))
+        let end = content.index(content.startIndex, offsetBy: safeIndex)
+        return content[..<end].filter { $0 == "\n" }.count
+    }
+
+    override func accessibilityString(for range: NSRange) -> String? {
+        let content = accessibilityTextValue
+        guard let swiftRange = Range(range, in: content) else { return nil }
+        return String(content[swiftRange])
+    }
+
+    private var accessibilityTextValue: String {
+        (accessibilityValue() as? String) ?? ""
+    }
+
+    private func readSelectionRange() -> NSRange {
+        guard let surface else { return NSRange(location: NSNotFound, length: 0) }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else {
+            return NSRange(location: NSNotFound, length: 0)
+        }
+        defer { ghostty_surface_free_text(surface, &text) }
+        return NSRange(location: Int(text.offset_start), length: Int(text.offset_len))
+    }
+
+    private func readSelectedText() -> String? {
+        guard let surface else { return nil }
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(surface, &text) else { return nil }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let cstr = text.text else { return nil }
+        if text.text_len > 0 {
+            return cstr.withMemoryRebound(to: UInt8.self, capacity: Int(text.text_len)) { bytes in
+                String(decoding: UnsafeBufferPointer(start: bytes, count: Int(text.text_len)), as: UTF8.self)
+            }
+        }
+        return String(cString: cstr)
+    }
+
+    private func readTerminalText(
+        from tag: ghostty_point_tag_e,
+        topLeft: ghostty_point_coord_e,
+        bottomRight: ghostty_point_coord_e
+    ) -> String {
+        guard let surface else { return "" }
+        var text = ghostty_text_s()
+        let selection = ghostty_selection_s(
+            top_left: ghostty_point_s(tag: tag, coord: topLeft, x: 0, y: 0),
+            bottom_right: ghostty_point_s(tag: tag, coord: bottomRight, x: 0, y: 0),
+            rectangle: false
+        )
+        guard ghostty_surface_read_text(surface, selection, &text) else { return "" }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let cstr = text.text else { return "" }
+        if text.text_len > 0 {
+            return cstr.withMemoryRebound(to: UInt8.self, capacity: Int(text.text_len)) { bytes in
+                String(decoding: UnsafeBufferPointer(start: bytes, count: Int(text.text_len)), as: UTF8.self)
+            }
+        }
+        return String(cString: cstr)
+    }
+
+    /// Notify AX observers after user-driven text reaches ghostty so tools
+    /// like Typeless stop waiting on a silent paste and suppress the
+    /// "copy last transcript" fallback. Not posted for IME preedit
+    /// (`setMarkedText`) or pure keycode navigation.
+    private func postAccessibilityValueChanged() {
+        NSAccessibility.post(element: self, notification: .valueChanged)
+    }
+
     // MARK: - NSTextInputClient (printable text + IME)
 
     func insertText(_ string: Any, replacementRange: NSRange) {
@@ -2108,6 +2228,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // it, leaving underlined ghost text trailing the real input).
         ghostty_surface_preedit(s, nil, 0)
         markedTextValue = NSAttributedString(string: "")
+        postAccessibilityValueChanged()
     }
 
     override func doCommand(by selector: Selector) {
@@ -2146,7 +2267,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     }
 
     func selectedRange() -> NSRange {
-        NSRange(location: NSNotFound, length: 0)
+        // Align with ghostty's real selection so AX clients and IME see the
+        // same range (Mux0 Typeless fix). Falls back to NSNotFound when empty.
+        readSelectionRange()
     }
 
     func markedRange() -> NSRange {

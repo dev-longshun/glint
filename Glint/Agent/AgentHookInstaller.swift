@@ -126,6 +126,7 @@ enum AgentHookInstaller {
         { AgentHookInstaller.isInstalled() },
         { CodexHookInstaller.isInstalled() },
         { DevinHookInstaller.isInstalled() },
+        { GrokHookInstaller.isInstalled() },
     ]
 
     /// Delete the shared reporter script iff no installed agent still
@@ -387,7 +388,14 @@ enum AgentHookInstaller {
     if TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX"); then
       trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
       cat >"$TMP"
+      # Claude/Codex use snake_case session_id; Grok's hook envelope uses
+      # camelCase sessionId (and also injects GROK_SESSION_ID). Try each
+      # source so resume-on-launch works for every agent without forking
+      # the reporter.
       SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null || true)
+      if [ -z "$SESSION" ]; then
+        SESSION=$(/usr/bin/plutil -extract sessionId raw -o - "$TMP" 2>/dev/null || true)
+      fi
       if [ "$HOOK" = "PermissionRequest" ] && [ "$AGENT" = "codex" ]; then
         TRANSCRIPT=$(/usr/bin/plutil -extract transcript_path raw -o - "$TMP" 2>/dev/null || true)
         TURN=$(/usr/bin/plutil -extract turn_id raw -o - "$TMP" 2>/dev/null || true)
@@ -396,6 +404,15 @@ enum AgentHookInstaller {
       trap - EXIT HUP INT TERM
     else
       cat >/dev/null 2>&1
+    fi
+    if [ -z "$SESSION" ] && [ -n "${GROK_SESSION_ID:-}" ]; then
+      SESSION="$GROK_SESSION_ID"
+    fi
+    # If Grok fired the hook but argv[2] was omitted (e.g. a hand-written
+    # ~/.grok/hooks entry that only passes the event name), prefer agent=grok
+    # over the claude default so the pane is not mis-attributed.
+    if [ "$AGENT" = "claude" ] && [ -n "${GROK_SESSION_ID:-}" ]; then
+      AGENT="grok"
     fi
 
     APPROVAL_META=""
@@ -1606,6 +1623,242 @@ enum DevinHookInstaller {
             NSLog("[glint] devin hooks merged into \(url.path)")
         } catch {
             NSLog("[glint] writing ~/.config/devin/config.json failed: \(error)")
+        }
+    }
+
+    private static func equalsJSON(_ a: Any?, _ b: Any) -> Bool {
+        guard let a else { return false }
+        let opts: JSONSerialization.WritingOptions = [.sortedKeys]
+        guard let da = SafeJSON.data(a, options: opts),
+              let db = SafeJSON.data(b, options: opts) else {
+            return false
+        }
+        return da == db
+    }
+}
+
+/// Installs Glint's status reporter into Grok Build's global hooks directory.
+///
+/// Grok discovers hooks from `~/.grok/hooks/*.json` (always trusted) using a
+/// Claude-compatible schema. We write a dedicated file
+/// `~/.grok/hooks/glint-status.json` so install/uninstall is a single file
+/// and never rewrites the user's other hook files. Commands tag the shared
+/// reporter with agent kind `grok` so `WorkspaceStore.handleAgentEvent`
+/// attributes panes correctly (and so Grok is not mis-labeled as Claude
+/// when Grok also scans `~/.claude/settings.json`).
+enum GrokHookInstaller {
+    /// File name under `~/.grok/hooks/`. Marker for isInstalled / uninstall.
+    static let hooksFileName = "glint-status.json"
+
+    /// Events Glint reacts to. Matches the Claude subset that drives the
+    /// sidebar status machine. Grok has no Claude-style PermissionRequest
+    /// hook (only PermissionDenied), so needsPermission is intentionally
+    /// omitted for v1.
+    static let hookEvents: [String] = [
+        "SessionStart",
+        "UserPromptSubmit",
+        "PreToolUse",
+        "PostToolUse",
+        "Notification",
+        "PreCompact",
+        "Stop",
+        "StopFailure",
+    ]
+
+    static func defaultHooksURL() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".grok/hooks", isDirectory: true)
+            .appendingPathComponent(hooksFileName)
+    }
+
+    static func isInstalled(hooksURL: URL = GrokHookInstaller.defaultHooksURL()) -> Bool {
+        guard let data = try? Data(contentsOf: hooksURL),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let hooks = root["hooks"] as? [String: Any] else {
+            return false
+        }
+        for (_, bucket) in hooks {
+            guard let arr = bucket as? [Any] else { continue }
+            for entry in arr {
+                guard let group = entry as? [String: Any],
+                      let inner = group["hooks"] as? [[String: Any]] else { continue }
+                if inner.contains(where: {
+                    ($0["command"] as? String)?.contains("glint-report.sh") == true
+                }) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// Whether Grok Build itself looks installed on this Mac.
+    static func isAgentPresent() -> Bool {
+        AgentPresence.directoryExists(".grok")
+            || AgentPresence.commandExists("grok")
+    }
+
+    static func installIfNeeded(socketPath: String,
+                                hooksURL: URL = GrokHookInstaller.defaultHooksURL()) {
+        guard let scriptPath = AgentHookInstaller.ensureReporterScript() else { return }
+        mergeGrokHooks(scriptPath: scriptPath, hooksURL: hooksURL)
+        _ = socketPath
+    }
+
+    static func uninstall(hooksURL: URL = GrokHookInstaller.defaultHooksURL()) {
+        // Our install owns the whole file — removing it is the clean
+        // uninstall. If the file was hand-edited to include non-Glint
+        // entries, fall back to stripping only glint-report.sh commands.
+        guard FileManager.default.fileExists(atPath: hooksURL.path) else {
+            if hooksURL == defaultHooksURL() {
+                AgentHookInstaller.removeReporterScriptIfUnused()
+            }
+            return
+        }
+        if let data = try? Data(contentsOf: hooksURL),
+           var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+            var touched = false
+            var onlyOurs = true
+            for (event, bucket) in hooks {
+                guard let arr = bucket as? [Any] else {
+                    onlyOurs = false
+                    continue
+                }
+                let filtered = arr.filter { entry in
+                    guard let group = entry as? [String: Any],
+                          let inner = group["hooks"] as? [[String: Any]] else {
+                        onlyOurs = false
+                        return true
+                    }
+                    let hasOurs = inner.contains {
+                        ($0["command"] as? String)?.contains("glint-report.sh") == true
+                    }
+                    let hasOthers = inner.contains {
+                        ($0["command"] as? String)?.contains("glint-report.sh") != true
+                    }
+                    if hasOthers { onlyOurs = false }
+                    return !hasOurs
+                }
+                if filtered.count != arr.count {
+                    touched = true
+                    if filtered.isEmpty {
+                        hooks.removeValue(forKey: event)
+                    } else {
+                        hooks[event] = filtered
+                        onlyOurs = false
+                    }
+                } else if !arr.isEmpty {
+                    onlyOurs = false
+                }
+            }
+            if onlyOurs || hooks.isEmpty {
+                try? FileManager.default.removeItem(at: hooksURL)
+                NSLog("[glint] grok hooks removed (\(hooksURL.lastPathComponent))")
+            } else if touched {
+                root["hooks"] = hooks
+                if let out = SafeJSON.data(
+                    root,
+                    options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                ) {
+                    let mode = posixPermissions(atPath: hooksURL.path)
+                    try? out.write(to: hooksURL, options: [.atomic])
+                    setPosixPermissions(mode, atPath: hooksURL.path)
+                    NSLog("[glint] grok hooks stripped from \(hooksURL.path)")
+                }
+            }
+        } else {
+            // Unreadable / non-JSON — still try to delete our owned file name.
+            if hooksURL.lastPathComponent == hooksFileName {
+                try? FileManager.default.removeItem(at: hooksURL)
+            }
+        }
+        if hooksURL == defaultHooksURL() {
+            AgentHookInstaller.removeReporterScriptIfUnused()
+        }
+    }
+
+    static func mergeGrokHooks(scriptPath: String,
+                               hooksURL: URL = GrokHookInstaller.defaultHooksURL()) {
+        let dir = hooksURL.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(
+                at: dir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            NSLog("[glint] couldn't create ~/.grok/hooks: \(error)")
+            return
+        }
+
+        var root: [String: Any] = [:]
+        if let data = try? Data(contentsOf: hooksURL), !data.isEmpty {
+            guard let parsed = try? JSONSerialization.jsonObject(with: data),
+                  let dict = parsed as? [String: Any] else {
+                let backup = hooksURL.appendingPathExtension("glint-backup")
+                try? FileManager.default.copyItem(at: hooksURL, to: backup)
+                setPosixPermissions(posixPermissions(atPath: hooksURL.path), atPath: backup.path)
+                NSLog("[glint] \(hooksURL.path) isn't a JSON object; backed up, skipping merge")
+                return
+            }
+            root = dict
+        }
+
+        var hooks = (root["hooks"] as? [String: Any]) ?? [:]
+        var changed = false
+        for event in hookEvents {
+            var bucket = (hooks[event] as? [Any]) ?? []
+            let filtered = bucket.filter { entry in
+                guard let group = entry as? [String: Any],
+                      let inner = group["hooks"] as? [[String: Any]] else { return true }
+                return !inner.contains {
+                    ($0["command"] as? String)?.contains("glint-report.sh") == true
+                }
+            }
+            // Grok lifecycle events reject a matcher; omit it for those.
+            // Tool events accept matcher; ".*" matches everything.
+            var ours: [String: Any] = [
+                "hooks": [[
+                    "type": "command",
+                    "command": "\(scriptPath) \(event) grok",
+                ]],
+            ]
+            switch event {
+            case "PreToolUse", "PostToolUse", "Notification":
+                ours["matcher"] = ".*"
+            default:
+                break
+            }
+            bucket = filtered + [ours]
+            if !equalsJSON(hooks[event], bucket) {
+                hooks[event] = bucket
+                changed = true
+            }
+        }
+
+        if !changed { return }
+        root["hooks"] = hooks
+        guard let data = SafeJSON.data(
+            root,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ) else {
+            NSLog("[glint] \(hooksURL.path): hook tree not serializable, skipping write")
+            return
+        }
+        do {
+            let mode = posixPermissions(atPath: hooksURL.path)
+            let prev = hooksURL.appendingPathExtension("glint-prev")
+            if FileManager.default.fileExists(atPath: hooksURL.path),
+               !FileManager.default.fileExists(atPath: prev.path) {
+                try? FileManager.default.copyItem(at: hooksURL, to: prev)
+                setPosixPermissions(mode, atPath: prev.path)
+            }
+            try data.write(to: hooksURL, options: [.atomic])
+            setPosixPermissions(mode, atPath: hooksURL.path)
+            NSLog("[glint] grok hooks merged into \(hooksURL.path)")
+        } catch {
+            NSLog("[glint] writing \(hooksURL.path) failed: \(error)")
         }
     }
 

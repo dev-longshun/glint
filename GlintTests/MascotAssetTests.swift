@@ -71,6 +71,44 @@ final class MascotAssetTests: XCTestCase {
         XCTAssertEqual(MascotAsset.omp(for: .failed), "OmpFailed")
     }
 
+    // MARK: Grok
+
+    func testGrokIdle() {
+        XCTAssertEqual(MascotAsset.grok(for: .idle), "GrokIdle")
+    }
+
+    func testGrokNil() {
+        XCTAssertEqual(MascotAsset.grok(for: nil), "GrokIdle")
+    }
+
+    func testGrokThinking() {
+        XCTAssertEqual(MascotAsset.grok(for: .thinking), "GrokThinking")
+    }
+
+    func testGrokToolCall() {
+        XCTAssertEqual(MascotAsset.grok(for: .tool), "GrokToolCall")
+    }
+
+    func testGrokCompressing() {
+        XCTAssertEqual(MascotAsset.grok(for: .compacting), "GrokCompressing")
+    }
+
+    func testGrokNeedsPermission() {
+        XCTAssertEqual(MascotAsset.grok(for: .needsPermission), "GrokNeedsPermission")
+    }
+
+    func testGrokDone() {
+        XCTAssertEqual(MascotAsset.grok(for: .justCompleted), "GrokDone")
+    }
+
+    func testGrokFailed() {
+        XCTAssertEqual(MascotAsset.grok(for: .failed), "GrokFailed")
+    }
+
+    func testGrokNeedsReplyUsesIdle() {
+        XCTAssertEqual(MascotAsset.grok(for: .needsReply), "GrokIdle")
+    }
+
     // MARK: Existing agents (regression)
 
     func testClaudeIdleMascot() {
