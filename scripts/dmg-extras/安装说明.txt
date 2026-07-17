@@ -1,0 +1,26 @@
+Glint（二开 fork）安装说明
+========================
+
+本包来自 dev-longshun/glint，为 ad-hoc 签名，未做 Apple 公证。
+从浏览器下载后，macOS 可能提示「已损坏」或「无法验证开发者」——这是隔离属性，不是文件真坏了。
+
+推荐步骤
+--------
+1. 打开本 DMG，把「Glint.app」拖到「应用程序」(Applications)。
+2. 双击「首次打开-去除隔离.command」
+   （若系统拦截：右键 → 打开 → 仍要打开）
+3. 从启动台或「应用程序」里打开 Glint。
+
+手动命令（任选）
+----------------
+  xattr -dr com.apple.quarantine /Applications/Glint.app
+  open /Applications/Glint.app
+
+若 DMG 还在「下载」里：
+  xattr -dr com.apple.quarantine ~/Downloads/Glint-*.dmg
+
+说明
+----
+- 无法使用原作者的开发者签名；正式签名需自备 Apple Developer ID。
+- 官方原版请到：https://github.com/chenbstack/glint
+- 本 fork 发布页：https://github.com/dev-longshun/glint/releases

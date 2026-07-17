@@ -16,10 +16,12 @@
 
 从本仓库 [Releases](https://github.com/dev-longshun/glint/releases) 下载最新 `Glint-*.dmg`，挂载后拖进「应用程序」。
 
-若提示无法打开（ad-hoc 签名 / 隔离属性），在终端执行：
+DMG 内附有 **`首次打开-去除隔离.command`** 与 **`安装说明.txt`**。  
+把 App 拖进「应用程序」后双击该脚本即可；也可在终端执行：
 
 ```bash
 xattr -dr com.apple.quarantine /Applications/Glint.app
+open /Applications/Glint.app
 ```
 
 > 官方 Homebrew / 官方 Releases 是上游产物，与本 fork 不是同一条线。需要官方原版请走 [上游仓库](https://github.com/chenbstack/glint)。

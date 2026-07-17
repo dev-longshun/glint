@@ -119,6 +119,12 @@ jobs:
           STAGING="$(mktemp -d)"
           cp -R dist/Glint.app "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
+          # ad-hoc 包：附带去隔离脚本 + 安装说明（见 scripts/dmg-extras/）
+          cp "scripts/dmg-extras/首次打开-去除隔离.command" "$STAGING/"
+          cp "scripts/dmg-extras/安装说明.txt" "$STAGING/"
+          chmod +x "$STAGING/首次打开-去除隔离.command"
+          # 脚本自身也别带隔离，避免用户双击时先被拦
+          xattr -cr "$STAGING/首次打开-去除隔离.command" 2>/dev/null || true
           hdiutil create \
             -volname "Glint $VERSION" \
             -srcfolder "$STAGING" \
@@ -128,6 +134,11 @@ jobs:
             "$DMG"
           echo "DMG=$DMG" >> "$GITHUB_ENV"
           ls -lh "$DMG"
+          echo "DMG contents:"
+          hdiutil attach -nobrowse -readonly "$DMG" | tee /tmp/dmg-mount.txt
+          MOUNT="$(awk -F'\t' '/\/Volumes\// {print $NF; exit}' /tmp/dmg-mount.txt)"
+          ls -la "$MOUNT"
+          hdiutil detach "$MOUNT" >/dev/null
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
@@ -145,10 +156,14 @@ jobs:
             - 提交: `${{ github.sha }}`
             - 签名: ad-hoc（无 Apple Developer ID）
 
-            **安装提示**
+            **安装**
 
-            1. 下载 `Glint-*.dmg`，拖到「应用程序」
-            2. 若提示无法打开，在终端执行：
-               ```bash
-               xattr -dr com.apple.quarantine /Applications/Glint.app
-               ```
+            1. 打开 DMG，把 `Glint.app` 拖到「应用程序」
+            2. 双击 DMG 内 **`首次打开-去除隔离.command`**（若被拦：右键 → 打开）
+            3. 从「应用程序」启动
+
+            或在终端：
+            ```bash
+            xattr -dr com.apple.quarantine /Applications/Glint.app
+            open /Applications/Glint.app
+            ```
