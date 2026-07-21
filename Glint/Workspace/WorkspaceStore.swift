@@ -1700,7 +1700,71 @@ final class WorkspaceStore: ObservableObject {
             initialInput: restoreCommand
         )
         surfaceViews[key] = v
+        // New mint is always for a pane about to be shown (PaneView only
+        // asks for the selected workspace's tree). Explicitly mark it host-
+        // visible so a subsequent background sync can't race a stale false.
+        v.setHostVisible(true)
         return v
+    }
+
+    /// Hard gate for ghostty render work across keep-alive surfaces.
+    ///
+    /// Surfaces outlive workspace/tab switches (so PTYs and scrollback stay
+    /// warm). Without an explicit push, a race in `viewDidMoveToWindow` can
+    /// leave a detached surface with `set_occlusion(true)` and it keeps
+    /// cursor-blink + display-link running forever — N open workspaces then
+    /// cost N idle render loops. Mirrors MUX0's `makeFrontmost`: only panes
+    /// on the selected workspace's selected tab are host-visible.
+    ///
+    /// Safe to call often; `setHostVisible` is cheap/idempotent.
+    private func syncSurfaceVisibility() {
+        let visibleKeys: Set<WorkspacePaneKey> = {
+            guard let wsID = selectedWorkspaceID,
+                  let tab = workspaces.first(where: { $0.id == wsID })?.selectedTab
+            else { return [] }
+            return Set(tab.root.leaves.map {
+                WorkspacePaneKey(workspace: wsID, pane: $0)
+            })
+        }()
+        for (key, view) in surfaceViews {
+            view.setHostVisible(visibleKeys.contains(key))
+        }
+        logSurfacePerfSnapshot(reason: "sync", expectedVisible: visibleKeys.count)
+    }
+
+    /// Opt-in dump of keep-alive surface visibility. Enable with
+    /// `GLINT_LOG_PERF=1`. After multi-workspace idle hangs, look for:
+    ///   effectiveVisible > selected-tab leaf count  → background render leak
+    ///   hostVisible > expectedVisible               → store gate not applied
+    ///   inWindow > expectedVisible                  → surfaces still re-parented
+    private func logSurfacePerfSnapshot(reason: String, expectedVisible: Int? = nil) {
+        guard ProcessInfo.processInfo.environment["GLINT_LOG_PERF"] != nil else { return }
+        var hostOn = 0
+        var inWindowCount = 0
+        var windowVisibleCount = 0
+        var effectiveCount = 0
+        for view in surfaceViews.values {
+            let s = view.perfSnapshot
+            if s.hostVisible { hostOn += 1 }
+            if s.inWindow { inWindowCount += 1 }
+            if s.windowVisible { windowVisibleCount += 1 }
+            if s.effectiveVisible { effectiveCount += 1 }
+        }
+        let expected = expectedVisible ?? {
+            guard let wsID = selectedWorkspaceID,
+                  let tab = workspaces.first(where: { $0.id == wsID })?.selectedTab
+            else { return 0 }
+            return tab.root.leaves.count
+        }()
+        let selectedShort: String = {
+            guard let id = selectedWorkspaceID else { return "nil" }
+            return String(id.uuidString.prefix(8))
+        }()
+        NSLog("[glint.perf] snapshot reason=%@ total=%d hostOn=%d inWindow=%d winVis=%d effective=%d expected=%d selected=%@",
+              reason as NSString,
+              surfaceViews.count,
+              hostOn, inWindowCount, windowVisibleCount, effectiveCount, expected,
+              selectedShort as NSString)
     }
 
     /// Walks the split tree to decide whether `target` sits flush with the
@@ -2300,6 +2364,9 @@ final class WorkspaceStore: ObservableObject {
         ) ?? workspaces[i].tabs[t].root
         workspaces[i].tabs[t].focusedPane = new
         queueInitialInput(agentCommand, codexHome: codexHome, workspace: workspaces[i].id, pane: new)
+        // New leaf will mint host-visible on first paint; re-assert the
+        // whole selected-tab set so any keep-alive siblings stay correct.
+        syncSurfaceVisibility()
     }
 
     /// Shells whose presence as the foreground process means "nothing of
@@ -2443,6 +2510,7 @@ final class WorkspaceStore: ObservableObject {
         workspaces[i].tabs[t].focusedPane = survivor
             ?? workspaces[i].tabs[t].root.leaves.first
             ?? PaneID(value: 0)
+        syncSurfaceVisibility()
     }
 
     func focusNext() {
@@ -2482,6 +2550,7 @@ final class WorkspaceStore: ObservableObject {
         clearDockBadge(for: key)
         acknowledgeCompletionIfNeeded(for: workspace)
         refreshGitStatusNow(for: workspace)
+        syncSurfaceVisibility()
     }
 
     /// ⌘⇧A: jump to the next pane that needs you. `PaneAgentStatus.attentionRank`
@@ -2600,6 +2669,7 @@ final class WorkspaceStore: ObservableObject {
         selectedWorkspaceID = id
         acknowledgeCompletionIfNeeded(for: id)
         refreshGitStatusNow(for: id)   // switching the shown terminal re-detects git
+        syncSurfaceVisibility()
     }
 
     /// Select the nth workspace in sidebar order (0-based). Used by the
@@ -2645,6 +2715,7 @@ final class WorkspaceStore: ObservableObject {
         }
         workspaces[i].selectedTabID = tab.id
         queueInitialInput(agentCommand, codexHome: codexHome, workspace: workspaces[i].id, pane: pane)
+        syncSurfaceVisibility()
     }
 
     /// Close a tab and every pane it holds, cleaning up each pane's surface,
@@ -2678,6 +2749,7 @@ final class WorkspaceStore: ObservableObject {
             let nextIdx = min(t, workspaces[i].tabs.count - 1)
             workspaces[i].selectedTabID = workspaces[i].tabs[nextIdx].id
         }
+        syncSurfaceVisibility()
     }
 
     /// Close every tab in the current workspace except `keepID`. Confirms once
@@ -2714,6 +2786,7 @@ final class WorkspaceStore: ObservableObject {
             teardownTab(at: t, in: i, wsID: wsID)
         }
         workspaces[i].selectedTabID = keepID
+        syncSurfaceVisibility()
     }
 
     /// Remove one tab (at `index` in `workspaces[i]`) and tear down every pane
@@ -2742,6 +2815,7 @@ final class WorkspaceStore: ObservableObject {
         // Viewing the tab is what "reads" its ✓ done / error badges.
         acknowledgeCompletionIfNeeded(for: workspaces[i].id)
         refreshGitStatusNow(for: workspaces[i].id)   // tab's focused pane may sit in a different repo
+        syncSurfaceVisibility()
     }
 
     /// Set a custom display name for a tab in the current workspace. Empty
@@ -2773,6 +2847,7 @@ final class WorkspaceStore: ObservableObject {
         let n = (t + 1) % workspaces[i].tabs.count
         workspaces[i].selectedTabID = workspaces[i].tabs[n].id
         acknowledgeCompletionIfNeeded(for: workspaces[i].id)
+        syncSurfaceVisibility()
     }
 
     func previousTab() {
@@ -2781,6 +2856,7 @@ final class WorkspaceStore: ObservableObject {
         let n = (t - 1 + workspaces[i].tabs.count) % workspaces[i].tabs.count
         workspaces[i].selectedTabID = workspaces[i].tabs[n].id
         acknowledgeCompletionIfNeeded(for: workspaces[i].id)
+        syncSurfaceVisibility()
     }
 
     /// Cycle to the next workspace in sidebar order, wrapping at the end.

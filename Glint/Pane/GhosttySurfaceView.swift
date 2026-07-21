@@ -151,10 +151,42 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// produces. Cleared the moment that forced frame is drawn.
     private var pendingVisibleRedraw = false
 
+    /// Host-level "this pane is the one the user is looking at" gate. Combined
+    /// with window occlusion in `pushOcclusionToGhostty`: a surface only
+    /// renders when BOTH the store says it's on the selected workspace/tab
+    /// AND the window is not occluded. Mirrors MUX0's `makeFrontmost` hard
+    /// gate so keep-alive surfaces in background workspaces stop cursor-blink
+    /// / display-link work even if `viewDidMoveToWindow` races a re-parent.
+    /// Defaults true: surfaces are only minted for panes about to be shown.
+    private var hostVisible = true
+
+    /// Last value pushed to `ghostty_surface_set_occlusion` (its param means
+    /// *visible*). Used for perf diagnostics and to avoid spam-logging no-ops.
+    private var lastPushedVisible: Bool?
+
     /// Opt-in tracing for the blank-pane-on-switch investigation. Launch the dev
     /// build with `GLINT_LOG_VISIBLE=1` to see attach / forced-redraw events.
     private let logVisible = ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil
+    /// Opt-in multi-workspace idle-CPU diagnostics. Launch with `GLINT_LOG_PERF=1`.
+    /// Logs host/window/effective visibility transitions and store-level counts.
+    private static let logPerf = ProcessInfo.processInfo.environment["GLINT_LOG_PERF"] != nil
+    /// Escape hatch for A/B: `GLINT_NO_HOST_VISIBLE=1` ignores the store gate and
+    /// falls back to window-only occlusion (pre-fix-B behavior) so we can
+    /// confirm whether host-visible is what stops the idle CPU.
+    private static let disableHostVisibleGate =
+        ProcessInfo.processInfo.environment["GLINT_NO_HOST_VISIBLE"] != nil
     var debugKey: String { paneKey ?? "?" }
+
+    /// Snapshot fields for `WorkspaceStore` perf dumps. Cheap, main-thread only.
+    var perfSnapshot: (hostVisible: Bool, inWindow: Bool, windowVisible: Bool, effectiveVisible: Bool) {
+        let inWindow = window != nil
+        let windowVisible = window?.occlusionState.contains(.visible) ?? false
+        let host = Self.disableHostVisibleGate ? true : hostVisible
+        return (hostVisible: host,
+                inWindow: inWindow,
+                windowVisible: windowVisible,
+                effectiveVisible: host && windowVisible)
+    }
 
     /// (Re)apply the opaque/clear backing to whatever layer is currently
     /// installed. Must be called AGAIN after `createSurface` because ghostty
@@ -271,10 +303,43 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         pushOcclusionToGhostty()
     }
 
+    /// Store-driven visibility (selected workspace + selected tab leaf).
+    /// Idempotent; safe to call from workspace/tab switch paths.
+    func setHostVisible(_ visible: Bool) {
+        if Self.logPerf, hostVisible != visible {
+            NSLog("[glint.perf] hostVisible pane=%@ %@ -> %@",
+                  debugKey as NSString,
+                  hostVisible ? "true" : "false",
+                  visible ? "true" : "false")
+        }
+        guard hostVisible != visible else {
+            // Still re-push: a stale occlusion flag after re-parent can leave
+            // us rendering while hostVisible is already the right value.
+            pushOcclusionToGhostty()
+            return
+        }
+        hostVisible = visible
+        pushOcclusionToGhostty()
+    }
+
     private func pushOcclusionToGhostty() {
         guard let s = surface else { return }
-        let visible = window?.occlusionState.contains(.visible) ?? false
-        ghostty_surface_set_occlusion(s, visible)
+        // `set_occlusion`'s C param is `visible` (true = run display link /
+        // render thread; false = stop). See ghostty Surface.zig.
+        let windowVisible = window?.occlusionState.contains(.visible) ?? false
+        let host = Self.disableHostVisibleGate ? true : hostVisible
+        let effective = host && windowVisible
+        if Self.logPerf, lastPushedVisible != effective {
+            NSLog("[glint.perf] occlusion pane=%@ effective=%@ host=%@ win=%@ inWindow=%@ gateOff=%@",
+                  debugKey as NSString,
+                  effective ? "true" : "false",
+                  host ? "true" : "false",
+                  windowVisible ? "true" : "false",
+                  window != nil ? "true" : "false",
+                  Self.disableHostVisibleGate ? "true" : "false")
+        }
+        lastPushedVisible = effective
+        ghostty_surface_set_occlusion(s, effective)
     }
 
     private func pushDisplayIDToGhostty() {
