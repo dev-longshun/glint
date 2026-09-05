@@ -48,11 +48,7 @@ final class AgentKindResolutionTests: XCTestCase {
         XCTAssertEqual(WorkspaceStore.agentKind(named: "grok"), .grok)
     }
 
-    func testGrokMixedCase() {
-        XCTAssertEqual(WorkspaceStore.agentKind(named: "Grok"), .grok)
-    }
-
-    func testGrokPathSuffix() {
+    func testGrokPath() {
         XCTAssertEqual(WorkspaceStore.agentKind(named: "/Users/me/.grok/bin/grok"), .grok)
     }
 

@@ -53,6 +53,25 @@ final class GhosttyManager {
     private let tickScheduler = GhosttyTickScheduler()
     private var focusObservers: [NSObjectProtocol] = []
 
+    /// `ghostty_surface_needs_confirm_quit` reports the cursor's prompt state
+    /// only when confirm-close-surface is not disabled. With `false`, it always
+    /// returns false and cannot safely drive automatic terminal offlining.
+    var canReliablyDetectIdlePrompt: Bool {
+        guard let config else { return false }
+        let key = "confirm-close-surface"
+        var mode: UnsafePointer<CChar>?
+        guard ghostty_config_get(config, &mode, key, UInt(key.utf8.count)),
+              let mode else { return false }
+        return Self.promptDetectionIsReliable(confirmCloseSurfaceTag: String(cString: mode))
+    }
+
+    static func promptDetectionIsReliable(confirmCloseSurfaceTag tag: String?) -> Bool {
+        // "always" reports needsConfirmQuit == true unconditionally (fork
+        // Surface.zig `.always` branch), so it can never signal an idle
+        // prompt — only "true" actually exposes the OSC 133 cursor state.
+        tag == "true"
+    }
+
     private init() {
         bootstrap()
     }
@@ -172,11 +191,33 @@ final class GhosttyManager {
     /// IOSurfaceLayer and the pane container so the two can't diverge — clear +
     /// non-opaque when translucent, theme-bg + opaque otherwise.
     func applyTerminalBacking(to layer: CALayer?) {
-        guard let layer else { return }
-        let transparent = terminalIsTransparent
-        layer.isOpaque = !transparent
-        layer.backgroundColor = transparent ? NSColor.clear.cgColor
-                                            : currentBackgroundColor.cgColor
+        Self.applyTerminalBacking(
+            to: layer,
+            transparent: terminalIsTransparent,
+            opaqueBackgroundColor: currentBackgroundColor.cgColor
+        )
+    }
+
+    /// Diff-based backing update used by the high-frequency representable
+    /// refresh path. Returns whether the layer actually changed.
+    @discardableResult
+    static func applyTerminalBacking(to layer: CALayer?,
+                                     transparent: Bool,
+                                     opaqueBackgroundColor: CGColor) -> Bool {
+        guard let layer else { return false }
+        let desiredOpaque = !transparent
+        let desiredBackground = transparent ? NSColor.clear.cgColor : opaqueBackgroundColor
+        var changed = false
+
+        if layer.isOpaque != desiredOpaque {
+            layer.isOpaque = desiredOpaque
+            changed = true
+        }
+        if layer.backgroundColor.map({ !CFEqual($0, desiredBackground) }) ?? true {
+            layer.backgroundColor = desiredBackground
+            changed = true
+        }
+        return changed
     }
 
     /// Ask ghostty to install the NSVisualEffectView-backed window blur. This
@@ -306,8 +347,16 @@ final class GhosttyManager {
         // ghostty 把多行 `font-family` 当 fallback 链(声明序为优先级)。
         // 顺序:主字体 → 用户指定的 CJK 兜底(可空) → Menlo 终极兜底。
         let cjkLine = cjkFamily.isEmpty ? "" : "\nfont-family = \(cjkFamily)"
+        // `term`: bundling ghostty's terminfo (needed so shell integration can
+        // emit OSC 133 for idle-prompt detection) makes ghostty default TERM
+        // to xterm-ghostty for every new shell (Exec.zig picks cfg.term once a
+        // resources dir exists). Pin the pre-bundle value: xterm-ghostty
+        // breaks ssh to any host without that terminfo entry, and nothing in
+        // Glint needs the richer entry locally. Shell integration and OSC 133
+        // are independent of TERM, so prompt detection keeps working.
         let overrides = """
-        \(colorBlock)cursor-style = \(cursorStyle)
+        \(colorBlock)term = xterm-256color
+        cursor-style = \(cursorStyle)
         cursor-style-blink = \(cursorBlink)
         font-family = \(family)\(cjkLine)
         font-family = Menlo
@@ -445,6 +494,7 @@ final class GhosttyManager {
         case GHOSTTY_ACTION_COMMAND_FINISHED:
             if let view {
                 DispatchQueue.main.async {
+                    view.noteCommandEndedForIdleTracking()
                     NotificationCenter.default.post(name: .ghosttyCommandFinished, object: view)
                 }
             }

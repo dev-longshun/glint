@@ -71,13 +71,11 @@ final class MascotAssetTests: XCTestCase {
         XCTAssertEqual(MascotAsset.omp(for: .failed), "OmpFailed")
     }
 
-    // MARK: Grok
-
     func testGrokIdle() {
         XCTAssertEqual(MascotAsset.grok(for: .idle), "GrokIdle")
     }
 
-    func testGrokNil() {
+    func testGrokNilIsIdle() {
         XCTAssertEqual(MascotAsset.grok(for: nil), "GrokIdle")
     }
 
@@ -85,7 +83,7 @@ final class MascotAssetTests: XCTestCase {
         XCTAssertEqual(MascotAsset.grok(for: .thinking), "GrokThinking")
     }
 
-    func testGrokToolCall() {
+    func testGrokTool() {
         XCTAssertEqual(MascotAsset.grok(for: .tool), "GrokToolCall")
     }
 
@@ -97,7 +95,7 @@ final class MascotAssetTests: XCTestCase {
         XCTAssertEqual(MascotAsset.grok(for: .needsPermission), "GrokNeedsPermission")
     }
 
-    func testGrokDone() {
+    func testGrokJustCompleted() {
         XCTAssertEqual(MascotAsset.grok(for: .justCompleted), "GrokDone")
     }
 

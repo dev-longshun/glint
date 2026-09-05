@@ -27,6 +27,7 @@ final class WorkspaceIconKindTests: XCTestCase {
 
     func testOmpHasNoSFSymbol() {
         XCTAssertNil(WorkspaceIconKind.omp.sfSymbol)
+        XCTAssertNil(WorkspaceIconKind.grok.sfSymbol)
     }
 
     func testGrokHasNoSFSymbol() {
@@ -53,6 +54,7 @@ final class WorkspaceIconKindTests: XCTestCase {
 
     func testOmpLetter() {
         XCTAssertEqual(WorkspaceIconKind.omp.letter, "π")
+        XCTAssertEqual(WorkspaceIconKind.grok.letter, "G")
     }
 
     func testGrokLetter() {

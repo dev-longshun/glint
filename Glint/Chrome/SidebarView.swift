@@ -5,6 +5,10 @@ import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// Intentionally unread: installing the object subscribes this view to
+    /// pane-activity invalidation, so the `store.agentSummary`/`tabAgentStatus`
+    /// reads below re-render on status changes. Do not remove as "unused".
+    @EnvironmentObject private var activity: PaneActivityStore
     @EnvironmentObject var usage: UsageStore
     @EnvironmentObject var shortcuts: ShortcutStore
     @State private var searchText: String = ""
@@ -571,6 +575,10 @@ private struct CardFrameKey: PreferenceKey {
 
 private struct WorkspaceCard: View {
     @EnvironmentObject var store: WorkspaceStore
+    /// Intentionally unread: installing the object subscribes this view to
+    /// pane-activity invalidation, so the `store.agentSummary`/`tabAgentStatus`
+    /// reads below re-render on status changes. Do not remove as "unused".
+    @EnvironmentObject private var activity: PaneActivityStore
     /// System "Reduce Motion" — when on, the looping decorations (border
     /// glow, pulsing dots/borders, mascot animation) render as static states.
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -766,6 +774,16 @@ private struct WorkspaceCard: View {
             // than removing it so the call-site stays a single chain.
             including: archived ? .subviews : .all
         )
+        // Middle-click closes the workspace — same path as the context menu's
+        // "Close Workspace" (confirm dialog included when panes are busy).
+        // Disabled while renaming and on archived cards (which expose
+        // Unarchive/Delete instead). Catcher is transparent to left/right/hover
+        // so existing gestures, popover, and menu are untouched.
+        .overlay {
+            if !archived && !isEditing && store.middleClickClosesWorkspace {
+                MiddleClickCatcher { store.deleteWorkspace(ws.id) }
+            }
+        }
     }
 
     private func startEditing() {
@@ -845,9 +863,6 @@ private struct WorkspaceCard: View {
         }
         .frame(width: 28, height: 28)
         .overlay(alignment: .bottomTrailing) {
-            // OpenCode / Devin / OMP / Grok already encode status in the
-            // mark (tinted / animated frames) — skip the corner beacon so
-            // state isn't double-shown.
             if !isOpenCode && !isDevin && !isOmp && !isGrok {
                 AgentStatusDot(status: status)
                     .offset(x: 3, y: 3)
@@ -866,7 +881,7 @@ private struct WorkspaceCard: View {
                                 : isOmp
                                     ? Color(red: 0.72, green: 0.55, blue: 0.95).opacity(0.5)
                                     : isGrok
-                                        ? Color(red: 0.85, green: 0.85, blue: 0.88).opacity(0.42)
+                                        ? Color(red: 0.85, green: 0.85, blue: 0.88).opacity(0.45)
                                         : store.accent.opacity(0.5))
                 : .clear,
             radius: 8
@@ -874,7 +889,8 @@ private struct WorkspaceCard: View {
     }
 
     @ViewBuilder
-    private func secondaryRow(summary: (status: PaneAgentStatus, since: Date)?, active: Bool) -> some View {
+    private func secondaryRow(summary: (status: PaneAgentStatus, since: Date, updatedAt: Date)?,
+                              active: Bool) -> some View {
         // Wrap the two branches in a single Group keyed off the row's
         // logical identity so SwiftUI treats a status flip as a view
         // replacement and the `.transition(.opacity)` actually fires.
@@ -887,11 +903,15 @@ private struct WorkspaceCard: View {
                     Text(statusText(summary.status))
                         .foregroundStyle(statusTextColor(summary.status))
                         .fontWeight(.medium)
-                    if showsTimer(summary.status) {
-                        TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                            Text("· \(elapsedString(since: summary.since, now: ctx.date))")
-                                .foregroundStyle(active ? Theme.text3 : Theme.text4)
-                        }
+                    // Shown in every non-idle state, but only *running* while
+                    // the turn is: once it ends the label freezes at the turn's
+                    // total, matching the pane-summary popover.
+                    TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                        let ref = agentElapsedReferenceDate(status: summary.status,
+                                                            updatedAt: summary.updatedAt,
+                                                            now: ctx.date)
+                        Text("· \(agentElapsedLabel(since: summary.since, now: ref))")
+                            .foregroundStyle(active ? Theme.text3 : Theme.text4)
                     }
                 }
                 .font(.system(size: 11, design: .monospaced))
@@ -1006,25 +1026,6 @@ private struct WorkspaceCard: View {
         }
     }
 
-    private func showsTimer(_ s: PaneAgentStatus) -> Bool {
-        switch s {
-        case .thinking, .tool, .compacting, .needsPermission: return true
-        case .justCompleted, .failed, .needsReply, .idle:     return false
-        }
-    }
-
-    /// Compact mm:ss for the first hour, then h:mm. Most turns end inside a
-    /// minute so we want second-precision early; long-running tools care
-    /// about the gross magnitude, not seconds.
-    private func elapsedString(since start: Date, now: Date) -> String {
-        let total = max(0, Int(now.timeIntervalSince(start)))
-        if total < 3600 {
-            return String(format: "%d:%02d", total / 60, total % 60)
-        }
-        let h = total / 3600
-        let m = (total % 3600) / 60
-        return "\(h)h\(m)m"
-    }
 
     /// Card surface fill — extracted so the body's modifier chain stays
     /// inside SwiftUI's type-inference budget. Three states: selected,
@@ -1134,14 +1135,19 @@ private struct WorkspaceCard: View {
 
     /// Spoken description for VoiceOver: the agent-status text the card
     /// already renders, plus a spelled-out elapsed time ("1 minute, 24
-    /// seconds") when the visual row shows a timer. Idle cards read the
-    /// same metadata line they display.
-    private func accessibilityStatus(summary: (status: PaneAgentStatus, since: Date)?) -> String {
+    /// seconds") matching the visible timer — live mid-turn, frozen at the
+    /// turn's total once it ends. Idle cards read the same metadata line
+    /// they display.
+    private func accessibilityStatus(
+        summary: (status: PaneAgentStatus, since: Date, updatedAt: Date)?
+    ) -> String {
         guard let summary, summary.status != .idle else { return cwdLine }
         var parts = [plainStatusText(summary.status)]
-        if showsTimer(summary.status),
-           let spoken = Self.spokenDurationFormatter.string(
-               from: max(0, Date().timeIntervalSince(summary.since))) {
+        let ref = agentElapsedReferenceDate(status: summary.status,
+                                            updatedAt: summary.updatedAt,
+                                            now: Date())
+        if let spoken = Self.spokenDurationFormatter.string(
+            from: max(0, ref.timeIntervalSince(summary.since))) {
             parts.append(spoken)
         }
         return parts.joined(separator: ", ")
@@ -1457,9 +1463,8 @@ private struct OmpMascotIcon: View {
     }
 }
 
-/// Grok's chrome-X mark. Busy states (thinking / tool / compacting) play
-/// looping APNGs; terminal states are static tinted frames. Corner status
-/// dots are suppressed for Grok panes — state is already in the mark.
+/// Grok Build mark, tinted per-status like OpenCode/Devin/OMP so the corner
+/// status dot is suppressed rather than double-encoding state.
 private struct GrokMascotIcon: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let status: PaneAgentStatus?

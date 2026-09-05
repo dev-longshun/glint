@@ -170,7 +170,7 @@ enum SettingsCategory: String, CaseIterable, Identifiable {
         case .general:    return "Startup, layout, updates"
         case .appearance: return "Theme, accent, glass"
         case .terminal:   return "Font, cursor, scrollback"
-        case .agents:     return "Claude Code, Codex, OMP, hook routing"
+        case .agents:     return "Claude Code, Codex, OMP, Grok, Pi, hook routing"
         case .shortcuts:  return "Customize and save shortcuts"
         case .archived:   return "Parked workspaces"
         case .about:      return nil
@@ -424,6 +424,12 @@ private struct GeneralPane: View {
             SettingsRow("Reveal in Finder at repository root",
                         subtitle: "For plain workspaces whose pane is inside a git repo, reveal the repository root instead of the current directory.") {
                 Toggle("", isOn: $store.revealAtRepoRoot)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Middle-click closes workspace",
+                        subtitle: "Click a workspace card with the middle mouse button to close it. Same as the context menu's “Close Workspace”.") {
+                Toggle("", isOn: $store.middleClickClosesWorkspace)
                     .toggleStyle(.switch).labelsHidden()
             }
         }
@@ -1039,8 +1045,22 @@ private struct ThemeBrowserRow: View {
 }
 
 private struct TerminalPane: View {
+    private struct WebRemoteAlert: Identifiable {
+        enum Kind {
+            case failure(String)
+            case portConflict(UInt16)
+            case resetComplete(UInt16)
+        }
+
+        let id = UUID()
+        let kind: Kind
+    }
+
     @EnvironmentObject var store: WorkspaceStore
     @State private var shellKeybindsInstallFailed = false
+    @State private var confirmingWebRemoteKeyReset = false
+    @State private var resettingWebRemoteCredentials = false
+    @State private var webRemoteAlert: WebRemoteAlert?
 
     private let scrollbackSizeChoices: [Int] = [5, 10, 25, 50, 100, 250]
         .map { $0 * 1_000_000 }
@@ -1103,6 +1123,26 @@ private struct TerminalPane: View {
             }
         }
 
+        SettingsCard("Memory", footer: "Releases inactive shell sessions and recreates them in the same folder when you return. Running commands, SSH sessions, agents, tmux, and the focused terminal are never touched.") {
+            SettingsRow("Free idle terminals",
+                        subtitle: store.freeIdleTerminalsEnabled
+                        ? "Only inactive shell prompts are eligible."
+                        : "Off — terminal sessions stay live.") {
+                Toggle("", isOn: $store.freeIdleTerminalsEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            if store.freeIdleTerminalsEnabled {
+                SettingsDivider()
+                SettingsRow("Release after", subtitle: "Time without focus.") {
+                    GlintDropdown(selection: $store.idleTerminalTimeoutSeconds,
+                                  items: WorkspaceStore.idleTerminalTimeoutChoices.map {
+                                      (value: $0, label: idleTerminalTimeoutLabel(for: $0))
+                                  },
+                                  listWidth: 150)
+                }
+            }
+        }
+
         SettingsCard("Paste") {
             SettingsRow("Warn before pasting multi-line text",
                         subtitle: "Ask first when the clipboard contains newlines or control characters — a multi-line paste into a shell prompt runs each line immediately.") {
@@ -1161,6 +1201,234 @@ private struct TerminalPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
         }
+
+        SettingsCard("Web remote control",
+                     footer: "Serves Glint's bundled browser terminal on this Mac for trusted LAN or VPN use. The copied link or access key grants terminal input; traffic is not TLS-encrypted. Off by default.") {
+            SettingsRow("Allow browser control", subtitle: webRemoteStatusText) {
+                Toggle("", isOn: $store.webRemoteEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            if store.webRemoteEnabled {
+                SettingsDivider()
+                SettingsRow("Listen on", subtitle: webRemoteListenSubtitle) {
+                    HStack(spacing: 6) {
+                        Picker("Listen on", selection: $store.webRemoteListenInterface) {
+                            Text("Localhost only").tag(WebRemoteListenTarget.loopback)
+                            ForEach(store.webRemoteInterfaceOptions) { iface in
+                                Text(verbatim: "\(iface.name) (\(iface.address))").tag(iface.name)
+                            }
+                            Text("All interfaces (less secure)").tag(WebRemoteListenTarget.any)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        Button(action: { store.refreshWebRemoteInterfaces() }) {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Refresh interfaces")
+                    }
+                }
+                if WebRemoteListenTarget.requiresActiveAttackWarning(
+                    store.webRemoteListenInterface
+                ) {
+                    SettingsDivider()
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(Color.orange)
+                        Text("Without TLS, encryption only blocks passive sniffing. An active attacker on this network can replace the web client and capture the access key or terminal input.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.text2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(Color.orange.opacity(0.055))
+                }
+                if case let .portConflict(port) = store.webRemoteStatus {
+                    SettingsDivider()
+                    SettingsRow(
+                        "Port conflict",
+                        subtitle: String(
+                            format: String(localized: "Port %d is already in use."),
+                            Int(port)
+                        )
+                    ) {
+                        Button("Reset key and ports", role: .destructive) {
+                            resetWebRemoteCredentials()
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
+            if !store.webRemoteAccessURLs.isEmpty {
+                SettingsDivider()
+                SettingsRow("Access URL", subtitle: displayURL(store.webRemoteAccessURLs[0])) {
+                    if store.webRemoteAccessURLs.count == 1 {
+                        Button("Copy link") {
+                            copyWebRemoteURL(store.webRemoteAccessURLs[0])
+                        }
+                        .controlSize(.small)
+                    } else {
+                        Menu("Copy link") {
+                            ForEach(store.webRemoteAccessURLs, id: \.self) { url in
+                                Button(displayURL(url)) {
+                                    copyWebRemoteURL(url)
+                                }
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                if let key = store.webRemoteAccessKey {
+                    SettingsDivider()
+                    SettingsRow("Access key", subtitle: abbreviatedAccessKey(key)) {
+                        HStack(spacing: 8) {
+                            Button("Copy key") {
+                                copyWebRemoteValue(key)
+                            }
+                            Button("Reset key and ports", role: .destructive) {
+                                confirmingWebRemoteKeyReset = true
+                            }
+                        }
+                        .controlSize(.small)
+                    }
+                }
+            }
+        }
+        .confirmationDialog(
+            "Reset access key and ports?",
+            isPresented: $confirmingWebRemoteKeyReset,
+            titleVisibility: .visible
+        ) {
+            Button("Reset key and ports", role: .destructive) {
+                resetWebRemoteCredentials()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Connected browsers will be disconnected. A new key and ports will be generated, so old links will stop working.")
+        }
+        .onAppear {
+            presentWebRemoteAlert(for: store.webRemoteStatus)
+        }
+        .onChange(of: store.webRemoteStatus) { _, status in
+            presentWebRemoteAlert(for: status)
+        }
+        .alert(item: $webRemoteAlert) { alert in
+            switch alert.kind {
+            case let .failure(message):
+                return Alert(
+                    title: Text("Web remote control unavailable"),
+                    message: Text(message),
+                    dismissButton: .default(Text("OK"))
+                )
+            case let .portConflict(port):
+                return Alert(
+                    title: Text("Web remote port conflict"),
+                    message: Text(
+                        String(
+                            format: String(localized: "Port %d is already in use. Resetting will generate a new key and ports, disconnect browsers, and invalidate old links."),
+                            Int(port)
+                        )
+                    ),
+                    primaryButton: .destructive(Text("Reset key and ports")) {
+                        resetWebRemoteCredentials()
+                    },
+                    secondaryButton: .cancel()
+                )
+            case let .resetComplete(port):
+                return Alert(
+                    title: Text("Access key and ports reset"),
+                    message: Text(
+                        String(
+                            format: String(localized: "New ports: %d (web) and %d (terminal). Copy the new link and key to reconnect."),
+                            Int(port), Int(port) + 1
+                        )
+                    ),
+                    dismissButton: .default(Text("OK"))
+                )
+            }
+        }
+    }
+
+    private var webRemoteStatusText: String {
+        switch store.webRemoteStatus {
+        case .stopped:
+            return String(localized: "Off — no network ports are bound.")
+        case .starting:
+            return String(localized: "Starting the local web server…")
+        case .ready:
+            return String(localized: "Ready — copy a session link to another browser.")
+        case let .portConflict(port):
+            return String(
+                format: String(localized: "Port %d is already in use."),
+                Int(port)
+            )
+        case let .failed(message):
+            return String(
+                format: String(localized: "Could not start: %@"),
+                message
+            )
+        }
+    }
+
+    private func resetWebRemoteCredentials() {
+        resettingWebRemoteCredentials = true
+        store.resetWebRemoteCredentials()
+    }
+
+    private func presentWebRemoteAlert(for status: WebRemoteStatus) {
+        switch status {
+        case let .portConflict(port):
+            resettingWebRemoteCredentials = false
+            webRemoteAlert = WebRemoteAlert(kind: .portConflict(port))
+        case let .failed(message):
+            resettingWebRemoteCredentials = false
+            webRemoteAlert = WebRemoteAlert(kind: .failure(message))
+        case let .ready(urls) where resettingWebRemoteCredentials:
+            resettingWebRemoteCredentials = false
+            guard let url = urls.first,
+                  let port = URLComponents(string: url)?.port,
+                  let httpPort = UInt16(exactly: port)
+            else { return }
+            webRemoteAlert = WebRemoteAlert(kind: .resetComplete(httpPort))
+        default:
+            break
+        }
+    }
+
+    private var webRemoteListenSubtitle: String {
+        switch store.webRemoteListenInterface {
+        case WebRemoteListenTarget.loopback:
+            return String(localized: "Only this Mac (127.0.0.1) can connect.")
+        case WebRemoteListenTarget.any:
+            return String(localized: "Reachable from any network this Mac joins (least secure).")
+        default:
+            if let iface = store.webRemoteInterfaceOptions.first(where: { $0.name == store.webRemoteListenInterface }) {
+                return iface.address
+            }
+            return String(localized: "Selected interface is no longer available. Pick another or use All interfaces.")
+        }
+    }
+
+    private func displayURL(_ value: String) -> String {
+        WebRemoteAccessURL.redacted(from: value)
+    }
+
+    private func abbreviatedAccessKey(_ value: String) -> String {
+        guard value.count > 16 else { return value }
+        return "\(value.prefix(8))…\(value.suffix(8))"
+    }
+
+    private func copyWebRemoteURL(_ value: String) {
+        // Strip the #token= fragment so the secret isn't written to the
+        // clipboard alongside the address. The key is copied separately via
+        // the "Access key" row.
+        copyWebRemoteValue(WebRemoteAccessURL.redacted(from: value))
+    }
+
+    private func copyWebRemoteValue(_ value: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(value, forType: .string)
     }
 
     private func scrollbackSizeLabel(for bytes: Int) -> String {
@@ -1168,6 +1436,18 @@ private struct TerminalPane: View {
         return String(format: String(localized: "%d MB (~%@ lines)"),
                       mb,
                       scrollbackLineRangeLabel(for: bytes))
+    }
+
+    private func idleTerminalTimeoutLabel(for seconds: Int) -> String {
+        switch seconds {
+        case 60: return "1 minute"
+        case 300: return "5 minutes"
+        case 600: return "10 minutes"
+        case 900: return "15 minutes"
+        case 1_800: return "30 minutes"
+        case 3_600: return "1 hour"
+        default: return "5 minutes"
+        }
     }
 
     private func scrollbackLineRangeLabel(for bytes: Int) -> String {
@@ -1208,6 +1488,7 @@ private struct AgentsPane: View {
     @State private var devinInstallFailed = false
     @State private var ompInstallFailed = false
     @State private var grokInstallFailed = false
+    @State private var piInstallFailed = false
     @State private var newCodexHomePath = ""
     @State private var newCodexHomeLabel = ""
     @State private var codexHomeErrors: [UUID: String] = [:]
@@ -1479,7 +1760,7 @@ private struct AgentsPane: View {
         }
 
         SettingsCard("Grok",
-                     footer: "Glint writes a dedicated hooks file at ~/.grok/hooks/glint-status.json (always trusted by Grok Build) so Grok sessions report thinking / tool / done / failed status. Other hook files in that directory are left alone.") {
+                     footer: "Glint writes ~/.grok/hooks/glint.json so Grok Build sessions report thinking, tools, and ask_user_question (awaiting reply). Dedicated file — not Claude's settings — so Grok is attributed as Grok. The reporter ignores Claude-compat dual-fires under Grok (GROK_SESSION_ID present).") {
             SettingsRow("Status", subtitle: grokInstallFailed
                         ? "Install failed — check Console for [glint] logs."
                         : (store.grokHooksInstalled
@@ -1515,9 +1796,56 @@ private struct AgentsPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
-            SettingsRow("Hooks file",
-                        subtitle: "Dedicated file under ~/.grok/hooks so install/uninstall never rewrites your other Grok hook configs.") {
-                Text("~/.grok/hooks/glint-status.json")
+            SettingsRow("Hook config",
+                        subtitle: "Dedicated Glint hook file under Grok's global hooks directory; only reports when Glint's pane environment variables are present.") {
+                Text("~/.grok/hooks/glint.json")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Theme.text3)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
+        }
+
+        SettingsCard("Pi",
+                     footer: "Glint installs a TypeScript extension into ~/.pi/agent/extensions/ so pi sessions report thinking, tools, and ask_user_question (awaiting reply). Auto-discovered by pi on every session — no settings merge needed. Only fires when Glint's pane environment variables are present, so a pi session outside Glint is a no-op.") {
+            SettingsRow("Status", subtitle: piInstallFailed
+                        ? "Install failed — check Console for [glint] logs."
+                        : (store.piHooksInstalled
+                           ? "Extension installed into your pi extensions directory."
+                           : (store.piDetected
+                              ? "Pi detected — install the extension to show its status."
+                              : "Pi not detected on this Mac."))) {
+                HStack(spacing: 8) {
+                    StatusPill(
+                        label: store.piHooksInstalled ? "Installed" : (store.piDetected ? "Not installed" : "Not detected"),
+                        tone: store.piHooksInstalled ? .ok : .neutral
+                    )
+                    if store.piHooksInstalled {
+                        Button("Uninstall") {
+                            store.uninstallPiHooks()
+                            piInstallFailed = false
+                        }
+                            .controlSize(.small)
+                    } else {
+                        Button("Install") {
+                            store.installPiHooks()
+                            piInstallFailed = !store.piHooksInstalled
+                        }
+                            .controlSize(.small)
+                            .tint(store.accent)
+                    }
+                }
+            }
+            SettingsDivider()
+            SettingsRow("Resume session on launch",
+                        subtitle: "When Glint reopens, each pane that was running pi at last quit is resumed via `pi --session-id <session-id>` — so multiple pi panes in one workspace land back in their own sessions. Falls back to `pi --continue` for panes whose session id wasn't captured.") {
+                Toggle("", isOn: $store.restorePiSession)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Hook config",
+                        subtitle: "Auto-discovered TypeScript extension under pi's global extensions directory; only reports when Glint's pane environment variables are present.") {
+                Text("~/.pi/agent/extensions/glint-agent-bridge.ts")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Theme.text3)
                     .lineLimit(1)

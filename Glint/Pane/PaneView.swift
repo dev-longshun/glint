@@ -48,19 +48,54 @@ struct PaneView: View {
         if ProcessInfo.processInfo.environment["GLINT_LOG_VISIBLE"] != nil {
             NSLog("[glint.visible] PaneView.body pane=\(paneID.value) ws=\(workspaceID.uuidString.prefix(8))")
         }
-        let isFocused = focusedPane == paneID
+        let isFocused = TerminalFocusPolicy.isPaneFocused(
+            workspaceIsSelected: workspaceID == store.selectedWorkspaceID,
+            paneIsFocused: focusedPane == paneID
+        )
         return ZStack {
             paneBacking
             PaneSurfaceRepresentable(
                 surfaceView: store.surfaceView(workspaceID: workspaceID, paneID: paneID, cwd: cwd),
                 focused: isFocused,
-                deferFocus: store.commandPaletteOpen || store.agentChooserIntent != nil
+                deferFocus: store.commandPaletteOpen || store.agentChooserIntent != nil,
+                isPaneVisible: { [weak store = store] in
+                    // Weak on purpose: the recovery stores this closure on the
+                    // surface for longer than a view lifetime, and the store
+                    // owns the surfaces — a strong capture would be a cycle.
+                    store?.isPaneVisible(.init(workspace: workspaceID, pane: paneID)) ?? false
+                }
             )
             if !isFocused {
                 // Use a black wash so translucent panes stay translucent; tune
                 // the strength by theme so light terminals don't turn gray.
                 Color.black.opacity(unfocusedDimOpacity)
                     .allowsHitTesting(false)
+            }
+            if store.isWebRemoteControlled(workspaceID: workspaceID, paneID: paneID) {
+                VStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Label("Controlled from web", systemImage: "network")
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(Theme.text1)
+                        Text("Layout may be inaccurate while controlled. It will restore automatically after disconnecting.")
+                            .font(.system(size: 9.5, weight: .medium))
+                            .foregroundStyle(Theme.text3)
+                    }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(Theme.bgPane.opacity(0.94))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .stroke(Theme.overlay(0.12), lineWidth: 1)
+                        )
+                        .shadow(color: Color.black.opacity(0.22), radius: 8, y: 3)
+                        .padding(.top, 8)
+                    Spacer()
+                }
+                .allowsHitTesting(false)
             }
         }
         .contentShape(Rectangle())

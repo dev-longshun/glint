@@ -10,23 +10,18 @@ final class GrokHookInstallerTests: XCTestCase {
         tempDir = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("glint-grok-tests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-        hooksURL = tempDir.appendingPathComponent(GrokHookInstaller.hooksFileName)
+        hooksURL = tempDir.appendingPathComponent("glint.json")
     }
 
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: tempDir)
     }
 
-    /// No hooks file → not installed. Uses an injected temp path so the
-    /// result never depends on whether the dev machine actually runs Grok.
-    func testNotInstalledWhenFileMissing() {
+    func testNotInstalledWhenHooksMissing() {
         XCTAssertFalse(GrokHookInstaller.isInstalled(hooksURL: hooksURL))
     }
 
-    /// Registered events drive the sidebar status machine. PermissionRequest
-    /// is intentionally omitted for v1 (Grok has PermissionDenied, not the
-    /// Claude-style approval gate).
-    func testHookEventsMatchGrokSupportedSubset() {
+    func testHookEventsCoverStatusMachineAndGrokSurface() {
         XCTAssertEqual(
             GrokHookInstaller.hookEvents,
             [
@@ -34,19 +29,19 @@ final class GrokHookInstallerTests: XCTestCase {
                 "UserPromptSubmit",
                 "PreToolUse",
                 "PostToolUse",
-                "Notification",
                 "PreCompact",
                 "Stop",
                 "StopFailure",
             ]
         )
+        // Grok has no PermissionRequest hook event (approvals are TUI-native).
         XCTAssertFalse(GrokHookInstaller.hookEvents.contains("PermissionRequest"))
+        // NeedsReply is remapped inside glint-report.sh from PreToolUse +
+        // ask_user_question — not a registered Grok hook event name.
+        XCTAssertFalse(GrokHookInstaller.hookEvents.contains("NeedsReply"))
     }
 
-    /// Merging creates the file, registers one entry per supported event, and
-    /// tags each command with the `grok` agent kind so panes are attributed
-    /// correctly (not mis-labeled as Claude).
-    func testMergeCreatesHooksFileAndRegistersEvents() throws {
+    func testMergeRegistersHooksTaggedAsGrok() throws {
         GrokHookInstaller.mergeGrokHooks(scriptPath: "/tmp/glint-report.sh", hooksURL: hooksURL)
 
         XCTAssertTrue(GrokHookInstaller.isInstalled(hooksURL: hooksURL))
@@ -58,74 +53,43 @@ final class GrokHookInstallerTests: XCTestCase {
         let stop = (hooks["Stop"] as? [Any])?.first as? [String: Any]
         let inner = (stop?["hooks"] as? [[String: Any]])?.first
         XCTAssertEqual(inner?["command"] as? String, "/tmp/glint-report.sh Stop grok")
-        // Lifecycle events reject a matcher in Grok's schema.
-        XCTAssertNil(stop?["matcher"])
+        XCTAssertEqual(inner?["type"] as? String, "command")
     }
 
-    /// Tool-boundary events include a matcher so Grok accepts the entry.
-    func testToolEventsCarryMatcher() throws {
+    /// Grok rejects matchers on lifecycle events; empty/omitted = match-all on
+    /// tool events. Official plugins omit matcher entirely — we must too.
+    func testMergeOmitsMatcherOnEveryEvent() throws {
         GrokHookInstaller.mergeGrokHooks(scriptPath: "/tmp/glint-report.sh", hooksURL: hooksURL)
 
         let root = try JSONSerialization.jsonObject(with: Data(contentsOf: hooksURL)) as? [String: Any]
         let hooks = (root?["hooks"] as? [String: Any]) ?? [:]
-        for event in ["PreToolUse", "PostToolUse", "Notification"] {
+        for event in GrokHookInstaller.hookEvents {
             let group = (hooks[event] as? [Any])?.first as? [String: Any]
-            XCTAssertEqual(group?["matcher"] as? String, ".*",
-                           "\(event) should carry matcher \".*\"")
+            XCTAssertNotNil(group, "missing group for \(event)")
+            XCTAssertNil(group?["matcher"],
+                         "\(event) must not carry matcher (Grok rejects it on lifecycle events)")
+            // And the documented lifecycle set is a subset of what we register.
+            if GrokHookInstaller.lifecycleEventsRejectingMatcher.contains(event) {
+                XCTAssertNil(group?["matcher"])
+            }
         }
     }
 
-    /// Installing twice is idempotent — no duplicate Glint entries pile up.
     func testMergeIsIdempotent() throws {
         GrokHookInstaller.mergeGrokHooks(scriptPath: "/tmp/glint-report.sh", hooksURL: hooksURL)
+        let first = try Data(contentsOf: hooksURL)
         GrokHookInstaller.mergeGrokHooks(scriptPath: "/tmp/glint-report.sh", hooksURL: hooksURL)
-
-        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: hooksURL)) as? [String: Any]
-        let stop = (root?["hooks"] as? [String: Any])?["Stop"] as? [Any]
-        XCTAssertEqual(stop?.count, 1, "duplicate Glint hook entry after second install")
+        let second = try Data(contentsOf: hooksURL)
+        XCTAssertEqual(first, second)
     }
 
-    /// Uninstall removes our owned file when it only contains Glint hooks.
-    func testUninstallRemovesOwnedFile() throws {
-        GrokHookInstaller.mergeGrokHooks(scriptPath: "/tmp/glint-report.sh", hooksURL: hooksURL)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: hooksURL.path))
-        XCTAssertTrue(GrokHookInstaller.isInstalled(hooksURL: hooksURL))
-
-        GrokHookInstaller.uninstall(hooksURL: hooksURL)
-
-        XCTAssertFalse(GrokHookInstaller.isInstalled(hooksURL: hooksURL))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: hooksURL.path),
-                       "owned glint-status.json should be deleted when only ours")
-    }
-
-    /// When the file also holds non-Glint entries, uninstall strips only ours.
-    func testUninstallStripsOursButKeepsForeignHooks() throws {
-        // Seed a file that already has a foreign Stop hook.
-        let seed: [String: Any] = [
-            "hooks": [
-                "Stop": [[
-                    "hooks": [[
-                        "type": "command",
-                        "command": "/usr/bin/true",
-                    ]],
-                ]],
-            ],
-        ]
-        let seedData = try JSONSerialization.data(withJSONObject: seed, options: [.prettyPrinted])
-        try seedData.write(to: hooksURL)
-
+    func testUninstallRemovesHooksFile() throws {
         GrokHookInstaller.mergeGrokHooks(scriptPath: "/tmp/glint-report.sh", hooksURL: hooksURL)
         XCTAssertTrue(GrokHookInstaller.isInstalled(hooksURL: hooksURL))
 
         GrokHookInstaller.uninstall(hooksURL: hooksURL)
 
         XCTAssertFalse(GrokHookInstaller.isInstalled(hooksURL: hooksURL))
-        XCTAssertTrue(FileManager.default.fileExists(atPath: hooksURL.path),
-                      "file should remain when foreign hooks are present")
-        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: hooksURL)) as? [String: Any]
-        let stop = (root?["hooks"] as? [String: Any])?["Stop"] as? [Any]
-        XCTAssertEqual(stop?.count, 1)
-        let inner = ((stop?.first as? [String: Any])?["hooks"] as? [[String: Any]])?.first
-        XCTAssertEqual(inner?["command"] as? String, "/usr/bin/true")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: hooksURL.path))
     }
 }

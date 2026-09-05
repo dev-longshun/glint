@@ -56,6 +56,7 @@ struct GlintApp: App {
         Window("Glint", id: "glint-main") {
             ContentView()
                 .environmentObject(workspaceStore)
+                .environmentObject(workspaceStore.activity)
                 .environmentObject(updater)
                 .environmentObject(usage)
                 .environmentObject(codexHomes)

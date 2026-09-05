@@ -16,6 +16,7 @@ extension PaneAgentKind {
         case .devin:    return .devin
         case .omp:      return .omp
         case .grok:     return .grok
+        case .pi:       return .pi
         }
     }
 }
@@ -55,6 +56,13 @@ func agentElapsedLabel(since start: Date, now: Date) -> String {
     let total = max(0, Int(now.timeIntervalSince(start)))
     if total < 3600 { return String(format: "%d:%02d", total / 60, total % 60) }
     return "\(total / 3600)h\((total % 3600) / 60)m"
+}
+
+/// Busy panes advance against the live clock. Attention states that end or
+/// pause the turn keep the duration captured by their last hook instead of
+/// making a completed/error/reply-wait row look as if it were still running.
+func agentElapsedReferenceDate(status: PaneAgentStatus, updatedAt: Date, now: Date) -> Date {
+    WorkspaceStore.isBusyStatus(status) ? now : updatedAt
 }
 
 // MARK: - Cluster (always-visible glance layer)
@@ -175,7 +183,14 @@ private struct PaneSummaryRow: View {
                 )
 
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                Text(agentElapsedLabel(since: info.since, now: ctx.date))
+                Text(agentElapsedLabel(
+                    since: info.since,
+                    now: agentElapsedReferenceDate(
+                        status: info.status,
+                        updatedAt: info.updatedAt,
+                        now: ctx.date
+                    )
+                ))
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(Theme.text4)
                     .lineLimit(1)

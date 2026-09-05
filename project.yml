@@ -29,6 +29,14 @@ targets:
       - path: Glint
         excludes:
           - "**/.DS_Store"
+      # Folder references preserve Ghostty's required runtime layout under
+      # Contents/Resources.
+      - path: GhosttyResources/ghostty
+        type: folder
+        buildPhase: resources
+      - path: GhosttyResources/terminfo
+        type: folder
+        buildPhase: resources
     resources:
       # AppIcon.icon is re-attached as wrapper.icon by postGenCommand
       # (scripts/fix-appicon-pbxproj.py). Do not list it as a recursive

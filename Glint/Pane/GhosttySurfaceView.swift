@@ -3,6 +3,23 @@ import Darwin
 import QuartzCore
 import GhosttyKit
 
+/// Tracks the last focus state sent across the Ghostty C boundary. SwiftUI can
+/// re-run `updateNSView` for unrelated sidebar changes, so identical focus
+/// values must be a no-op instead of waking the renderer each time.
+struct SurfaceFocusUpdateGate {
+    private var lastApplied: Bool?
+
+    mutating func shouldApply(_ focused: Bool) -> Bool {
+        guard lastApplied != focused else { return false }
+        lastApplied = focused
+        return true
+    }
+
+    mutating func reset() {
+        lastApplied = nil
+    }
+}
+
 /// AppKit view hosting one `ghostty_surface_t`.
 ///
 /// We give ghostty an `NSView*` via `ghostty_surface_config_s.platform.macos.nsview`.
@@ -16,14 +33,56 @@ import GhosttyKit
 /// load-bearing for terminal frame pacing.
 final class GhosttySurfaceView: NSView, NSTextInputClient {
 
-    private var surface: ghostty_surface_t?
+    /// Internal (read-only) so the accessibility extension
+    /// (GhosttySurfaceAccessibility.swift) can query the surface; only this
+    /// file re-parents/replaces it.
+    private(set) var surface: ghostty_surface_t?
+    /// The newest SwiftUI/AppKit container allowed to host this stable surface.
+    /// Split-tree reshapes can briefly leave both the outgoing and incoming
+    /// representables alive; the older one must not re-parent the surface back.
+    weak var paneHostView: NSView?
+    var paneHostGeneration: UInt64 = 0
+    /// A claim that was declined while a recorded host still vetoed, kept so
+    /// the invalidation that dissolves the veto can re-drive it through full
+    /// arbitration (the event-driven side of the recovery in
+    /// `PaneSurfaceRepresentable`). Weak — a dismantled candidate must not be
+    /// kept alive; the visibility closure captures the store weakly because
+    /// the store owns the surfaces and a strong capture would be a cycle.
+    weak var pendingRecoveryHost: NSView?
+    var pendingRecoveryVisibility: (() -> Bool)?
+    /// Bumped on every arm/disarm of the pending recovery. Backstop chains
+    /// capture the epoch at scheduling time and die when it no longer
+    /// matches, so a chain queued for an old claim cannot act after a
+    /// success cleared the pending state or a newer decline re-armed it.
+    var pendingRecoveryEpoch: UInt = 0
+
+    private var focusUpdateGate = SurfaceFocusUpdateGate()
     private var trackingArea: NSTrackingArea?
+    /// Visible (viewport) contents for the accessibility layer, shared by the
+    /// overrides in GhosttySurfaceAccessibility.swift. AX clients poll AXValue
+    /// aggressively and `ghostty_surface_read_text` takes the renderer lock,
+    /// so cache with a short TTL. Viewport-scoped rather than the whole screen
+    /// (upstream SurfaceView_AppKit's `cachedScreenContents`) on purpose: the
+    /// viewport is bounded by window size so per-poll reads and
+    /// `accessibilityLine(for:)` walks stay cheap even with a huge scrollback,
+    /// and history contents (old tokens, secrets) are not handed to any AX
+    /// client that asks.
+    private(set) lazy var cachedVisibleContents: CachedValue<String> = .init(duration: .milliseconds(500)) { [weak self] in
+        guard let self, let surface = self.surface else { return "" }
+        var text = ghostty_text_s()
+        let sel = GhosttySurfaceView.viewportSelection()
+        guard ghostty_surface_read_text(surface, sel, &text) else { return "" }
+        defer { ghostty_surface_free_text(surface, &text) }
+        return String(cString: text.text)
+    }
     private var markedTextValue: NSAttributedString = NSAttributedString(string: "")
     /// While non-nil, `insertText`/`doCommand(by:)` divert into this buffer
     /// instead of touching the surface. Used to let the IME observe a chord
     /// (e.g. Shift+Return) without emitting its text/command side-effects.
     private var keyTextAccumulator: [String]?
-    private let initialCwd: String?
+    /// Directory used the next time a surface is created. Updated before an
+    /// idle surface is released so waking the pane returns to the same folder.
+    private var launchCwd: String?
     /// Identifier (`"<wsuuid>:<paneSeq>"`) passed into the pty as
     /// `$GLINT_PANE_ID` so CLI-agent hooks can address us back.
     private let paneKey: String?
@@ -38,7 +97,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// the session — ghostty handles the timing (waits until the shell is
     /// ready). Used to auto-resume `claude --continue` / `codex resume --last`
     /// when the corresponding setting is on. nil = no initial input.
-    private let initialInput: String?
+    /// One-shot launch input. Cleared after the first successful surface
+    /// creation so waking an offline terminal never re-runs an agent command.
+    private var pendingInitialInput: String?
     /// Latest cwd pushed by ghostty via OSC 7 / PWD action. Preferred over
     /// proc_pidinfo polling because it's event-driven.
     var cachedCwd: String?
@@ -93,6 +154,19 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// the final window width. -1 = no probe yet.
     private var lastRestoreProbeCols = -1
 
+    /// Nil while this pane is the active first responder; otherwise the point
+    /// from which the configurable idle timeout is measured.
+    private var inactiveSince: Date?
+    /// True once any user input (keystroke, IME commit, paste, control-socket
+    /// injection) reached the surface after the last OSC 133 command end.
+    /// While set, the pane is treated as holding unsubmitted prompt input and
+    /// is never idle-released — the grid-level probe can't see typed text
+    /// whose trailing blank cell was never semantically stamped, so this is
+    /// the fail-closed superset. Cleared when a command finishes (the shell
+    /// consumed the line) or a fresh surface spawns.
+    private var typedSinceCommandEnd = false
+    private(set) var isTakenOffline = false
+
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
     override var isFlipped: Bool { false }
@@ -121,11 +195,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
          agentSocketPath: String? = nil,
          topAligned: Bool = true,
          initialInput: String? = nil) {
-        self.initialCwd = initialCwd
+        self.launchCwd = initialCwd
         self.paneKey = paneKey
         self.agentSocketPath = agentSocketPath
         self.topAligned = topAligned
-        self.initialInput = initialInput
+        self.pendingInitialInput = initialInput
         super.init(frame: frame)
         wantsLayer = true
         // Placeholder until ghostty installs its IOSurfaceLayer. Opaque mode:
@@ -141,7 +215,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     deinit {
-        if let s = surface { ghostty_surface_free(s) }
+        if let s = surface {
+            ghostty_surface_set_pty_tee_v2_cb(s, nil, nil)
+            ghostty_surface_free(s)
+        }
     }
 
     /// One-shot: a kept-alive surface was re-attached to a window, so the next
@@ -150,6 +227,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// occlusion transition, neither of which a same-size workspace switch-back
     /// produces. Cleared the moment that forced frame is drawn.
     private var pendingVisibleRedraw = false
+    /// While a browser controls this pane, size the PTY grid for the browser
+    /// instead of the narrower AppKit pane. Releasing control restores bounds.
+    private var webRemoteGridSize: WebRemoteTerminalSize?
 
     /// Host-level "this pane is the one the user is looking at" gate. Combined
     /// with window occlusion in `pushOcclusionToGhostty`: a surface only
@@ -243,8 +323,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard window != nil else {
             // Detached (e.g. switched to another workspace). Occlusion was
             // pushed false above; nothing to draw.
+            noteInactive()
             return
         }
+
+        refreshIdleClock()
 
         if surface == nil {
             createSurface()
@@ -352,6 +435,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     }
 
     private func createSurface() {
+        removeOfflinePlaceholder()
         // Memory-profiling escape hatch: launch with GLINT_NO_SURFACE=1 to
         // measure the app's footprint without any ghostty renderer.
         if ProcessInfo.processInfo.environment["GLINT_NO_SURFACE"] != nil {
@@ -377,7 +461,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // working_directory lives only while cfg is alive — strdup so the
         // C string outlives this scope; ghostty copies it during surface_new.
         var cwdBuf: UnsafeMutablePointer<CChar>? = nil
-        if let cwd = initialCwd, !cwd.isEmpty {
+        if let cwd = launchCwd, !cwd.isEmpty {
             cwdBuf = strdup(cwd)
             cfg.working_directory = UnsafePointer(cwdBuf)
         }
@@ -387,7 +471,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // bytes into the PTY after the shell is ready, so callers don't have
         // to time the injection themselves.
         var inputBuf: UnsafeMutablePointer<CChar>? = nil
-        if let input = initialInput, !input.isEmpty {
+        if let input = pendingInitialInput, !input.isEmpty {
             inputBuf = strdup(input)
             cfg.initial_input = UnsafePointer(inputBuf)
         }
@@ -431,6 +515,16 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return
         }
         self.surface = s
+        ghostty_surface_set_pty_tee_v2_cb(
+            s,
+            webRemotePTYTeeCallback,
+            Unmanaged.passUnretained(self).toOpaque()
+        )
+        focusUpdateGate.reset()
+        pendingInitialInput = nil
+        isTakenOffline = false
+        typedSinceCommandEnd = false
+        removeOfflinePlaceholder()
         // ghostty just swapped in its IOSurfaceLayer — re-stamp the
         // opaque/clear backing onto the NEW layer (init's settings were on the
         // discarded placeholder layer).
@@ -573,11 +667,36 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             let cell_width: Int
             let text: String
         }
+        struct Cursor: Decodable {
+            let row: Int
+            let column: Int
+            let visible: Bool
+            let style: String
+            let blinking: Bool
+        }
+        struct Mode: Decodable {
+            let code: Int
+            let ansi: Bool
+            let on: Bool
+        }
+        struct ScrollingRegion: Decodable {
+            let top: Int
+            let bottom: Int
+            let left: Int
+            let right: Int
+        }
+        let columns: Int?
         let styles: [Style]
         let row_spans: [Span]
         let scrollback_spans: [Span]
         let scrollback_rows: Int
         let rows: Int
+        let cursor: Cursor?
+        let active_screen: String?
+        let modes: [Mode]?
+        let scrolling_region: ScrollingRegion?
+        let pty_output_seq: UInt64?
+        let pty_stream_safe: Bool?
         // Per-row soft-wrap flags (true = row continues into the next). Optional
         // so snapshots written before this field still decode.
         let row_wraps: [Bool]?
@@ -757,6 +876,51 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         return text.isEmpty ? nil : text
     }
 
+    static func webRemoteSnapshotPayload(fromRenderGrid data: Data, maxLines: Int) -> Data? {
+        guard let grid = try? JSONDecoder().decode(RenderGrid.self, from: data) else { return nil }
+        let ansi = reconstructANSI(fromRenderGrid: data, maxLines: maxLines)
+        guard let columns = grid.columns,
+              let cursor = grid.cursor,
+              let activeScreen = grid.active_screen.flatMap(WebRemoteTerminalState.Screen.init(rawValue:)),
+              let modes = grid.modes
+        else { return WebRemoteSnapshotPayload.make(ansi: ansi) }
+
+        let scrollingRegion = grid.scrolling_region.map {
+            WebRemoteTerminalState.ScrollingRegion(
+                top: $0.top,
+                bottom: $0.bottom,
+                left: $0.left,
+                right: $0.right
+            )
+        }
+        let state = WebRemoteTerminalState(
+            columns: columns,
+            rows: grid.rows,
+            activeScreen: activeScreen,
+            modes: modes.map {
+                WebRemoteTerminalState.Mode(code: $0.code, ansi: $0.ansi, on: $0.on)
+            },
+            scrollingRegion: scrollingRegion,
+            cursor: WebRemoteTerminalState.Cursor(
+                row: cursor.row,
+                column: cursor.column,
+                visible: cursor.visible,
+                style: WebRemoteTerminalState.Cursor.Style(rawValue: cursor.style) ?? .block,
+                blinking: cursor.blinking
+            )
+        )
+        return WebRemoteSnapshotPayload.make(ansi: ansi, state: state)
+    }
+
+    static func webRemoteSnapshot(fromRenderGrid data: Data, maxLines: Int) -> WebRemoteTerminalSnapshot? {
+        guard let grid = try? JSONDecoder().decode(RenderGrid.self, from: data),
+              grid.pty_stream_safe == true,
+              let outputSequence = grid.pty_output_seq,
+              let payload = webRemoteSnapshotPayload(fromRenderGrid: data, maxLines: maxLines)
+        else { return nil }
+        return WebRemoteTerminalSnapshot(payload: payload, outputSequence: outputSequence)
+    }
+
     // MARK: - surface creation failure UI
 
     /// Centered "Terminal failed to start" + Retry, shown when ghostty
@@ -799,6 +963,50 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         surfaceErrorStack = nil
     }
 
+    private var offlinePlaceholderStack: NSStackView?
+
+    private func showOfflinePlaceholder() {
+        guard offlinePlaceholderStack == nil else { return }
+
+        let title = NSTextField(labelWithString: String(localized: "Idle terminal released"))
+        title.font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        title.textColor = NSColor(red: 0.925, green: 0.929, blue: 0.949, alpha: 1.0)
+        title.alignment = .center
+
+        let detail = NSTextField(labelWithString: String(localized: "Reopens in the same folder."))
+        detail.font = NSFont.systemFont(ofSize: 11)
+        detail.textColor = NSColor(red: 0.60, green: 0.62, blue: 0.69, alpha: 1.0)
+        detail.alignment = .center
+
+        let wake = NSButton(title: String(localized: "Reopen Terminal"),
+                            target: self,
+                            action: #selector(wakeOfflineTerminal(_:)))
+        wake.bezelStyle = .rounded
+        wake.controlSize = .regular
+
+        let stack = NSStackView(views: [title, detail, wake])
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        offlinePlaceholderStack = stack
+    }
+
+    private func removeOfflinePlaceholder() {
+        offlinePlaceholderStack?.removeFromSuperview()
+        offlinePlaceholderStack = nil
+    }
+
+    @objc private func wakeOfflineTerminal(_ sender: Any?) {
+        guard ensureLiveSurface() else { return }
+        window?.makeFirstResponder(self)
+    }
+
     @objc private func retrySurfaceCreation(_ sender: Any?) {
         guard surface == nil else { return }
         // createSurface removes the placeholder itself on success.
@@ -809,6 +1017,212 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // keyboard focus to the freshly created surface.
         pushDisplayIDToGhostty()
         window?.makeFirstResponder(self)
+    }
+
+    /// Start a fresh grace period when the preference is enabled or changed.
+    func resetIdleTimeout(now: Date = Date(), workspaceIsSelected: Bool) {
+        if TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: NSApp.isActive,
+            workspaceIsSelected: workspaceIsSelected,
+            viewIsFirstResponder: window?.firstResponder === self,
+            viewIsAttachedToWindow: window != nil
+        ) {
+            inactiveSince = nil
+        } else {
+            inactiveSince = now
+        }
+    }
+
+    func applicationDidResignActive(now: Date = Date()) {
+        noteInactive(now: now)
+    }
+
+    func applicationDidBecomeActive(now: Date = Date(), workspaceIsSelected: Bool) {
+        if TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: true,
+            workspaceIsSelected: workspaceIsSelected,
+            viewIsFirstResponder: window?.firstResponder === self,
+            viewIsAttachedToWindow: window != nil
+        ) {
+            _ = ensureLiveSurface()
+            inactiveSince = nil
+        } else {
+            noteInactive(now: now)
+        }
+    }
+
+    @discardableResult
+    func takeOfflineIfEligible(enabled: Bool,
+                               timeout: TimeInterval,
+                               now: Date = Date(),
+                               workspaceIsSelected: Bool) -> Bool {
+        refreshIdleClock(now: now, workspaceIsSelected: workspaceIsSelected)
+        // Cheap guards first: the disposability probes below mutate selection
+        // state (queueing renders) and walk the process tree, so they must
+        // not run on every 30s sweep for panes that can't qualify anyway.
+        guard enabled, let s = surface,
+              let idleStart = inactiveSince,
+              now.timeIntervalSince(idleStart) >= timeout,
+              GhosttyManager.shared.canReliablyDetectIdlePrompt,
+              !ghostty_surface_needs_confirm_quit(s) else { return false }
+        let processName = foregroundProcessName()
+        let hasUserOrJobState = TerminalOfflinePolicy.isIdleShell(processName)
+            ? !shellStateIsDisposable(s)
+            : true
+        let shouldTakeOffline = TerminalOfflinePolicy.shouldTakeOffline(
+            enabled: enabled,
+            hasLiveSurface: true,
+            inactiveSince: inactiveSince,
+            now: now,
+            timeout: timeout,
+            promptStateDetectionEnabled: GhosttyManager.shared.canReliablyDetectIdlePrompt,
+            needsConfirmQuit: ghostty_surface_needs_confirm_quit(s),
+            foregroundProcessName: processName,
+            hasUserOrJobState: hasUserOrJobState
+        )
+        guard shouldTakeOffline else { return false }
+
+        if let cwd = currentCwd(), !cwd.isEmpty { launchCwd = cwd }
+        if scrollbackEnabled {
+            // Force the final capture: flushScrollbackToDisk early-outs on a
+            // clean dirty flag, and output can have arrived without any of
+            // its usual dirty signals — this flush is the last chance.
+            markScrollbackDirty()
+            noteForegroundPidForScrollback()
+            flushScrollbackToDisk()
+            ScrollbackArchive.drain()
+        }
+
+        ghostty_surface_set_pty_tee_v2_cb(s, nil, nil)
+        surface = nil
+        ghostty_surface_free(s)
+        pendingVisibleRedraw = false
+        pendingRestoreData = nil
+        markedTextValue = NSAttributedString(string: "")
+        isTakenOffline = true
+
+        // Ghostty owns and replaces this layer while the surface is alive.
+        // Install a fresh backing layer for the lightweight placeholder.
+        layer = nil
+        wantsLayer = true
+        refreshAppearanceBacking()
+        showOfflinePlaceholder()
+        return true
+    }
+
+    /// An idle-looking shell can still own typed input or background/stopped
+    /// jobs. Both must be absent before releasing its PTY.
+    private func shellStateIsDisposable(_ s: ghostty_surface_t) -> Bool {
+        guard promptHasUnsubmittedInput(s) == false,
+              shellHasChildProcesses(s) == false else { return false }
+        return true
+    }
+
+    /// Shell integration marks input separately from the prompt. The cmux
+    /// Ghostty bridge selects only the semantic segment under the cursor, so
+    /// an empty input segment produces no selection while typed text does.
+    ///
+    /// The probe alone has false negatives (typed text whose trailing blank
+    /// cell was never stamped `.input` reads as empty), so the primary guard
+    /// is `typedSinceCommandEnd`; the probe stays as a second opinion for
+    /// input the tracker can't have seen (e.g. text echoed by the pty side).
+    private func promptHasUnsubmittedInput(_ s: ghostty_surface_t) -> Bool? {
+        if typedSinceCommandEnd { return true }
+        if hasMarkedText() || ghostty_surface_has_selection(s) { return true }
+        // selectCursorLine returns false for two cases the C API can't
+        // distinguish: the cursor scrolled out of the viewport (must stay
+        // protected) and an input segment that trims to whitespace — which
+        // includes the EMPTY prompt, the primary release scenario. The grid
+        // export's cursor flag (mode-visible AND in-viewport) tells them
+        // apart; a hidden/off-screen cursor errs toward protection.
+        guard ghostty_surface_select_cursor_line(s) else {
+            return cursorIsInViewport(s) ? false : nil
+        }
+        defer { _ = ghostty_surface_clear_selection(s) }
+
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_selection(s, &text) else { return nil }
+        defer { ghostty_surface_free_text(s, &text) }
+        return text.text_len > 0
+    }
+
+    /// Any user input headed for the pty — physical keys, IME commits,
+    /// pastes, control-socket injections. See `typedSinceCommandEnd`.
+    fileprivate func noteUserInputForIdleTracking() {
+        typedSinceCommandEnd = true
+    }
+
+    /// The grid export's cursor `visible` flag is mode-visible AND
+    /// in-viewport, which is exactly the disambiguation
+    /// `promptHasUnsubmittedInput` needs. 0 scrollback lines keeps the
+    /// export to the viewport; this only runs for panes already past their
+    /// idle timeout.
+    private struct RenderGridCursorProbe: Decodable {
+        struct Cursor: Decodable { let visible: Bool }
+        let cursor: Cursor
+    }
+
+    private func cursorIsInViewport(_ s: ghostty_surface_t) -> Bool {
+        let json = ghostty_surface_render_grid_json(s, "", 0, 0, 0)
+        defer { ghostty_string_free(json) }
+        guard let ptr = json.ptr, json.len > 0 else { return false }
+        let data = Data(bytes: ptr, count: Int(json.len))
+        let probe = try? JSONDecoder().decode(RenderGridCursorProbe.self, from: data)
+        return probe?.cursor.visible ?? false
+    }
+
+    /// OSC 133 command end: the shell consumed whatever was typed.
+    func noteCommandEndedForIdleTracking() {
+        typedSinceCommandEnd = false
+    }
+
+    /// A background or stopped job remains a child of the interactive shell
+    /// even though that shell is once again the foreground PTY process.
+    private func shellHasChildProcesses(_ s: ghostty_surface_t) -> Bool? {
+        let rawPID = ghostty_surface_foreground_pid(s)
+        guard rawPID > 0, rawPID <= UInt64(Int32.max) else { return nil }
+        var childPID: pid_t = 0
+        let count = withUnsafeMutablePointer(to: &childPID) { ptr in
+            proc_listchildpids(pid_t(rawPID), ptr, Int32(MemoryLayout<pid_t>.size))
+        }
+        guard count >= 0 else { return nil }
+        return count > 0
+    }
+
+    private func refreshIdleClock(now: Date = Date(), workspaceIsSelected: Bool = true) {
+        if TerminalFocusPolicy.protectsFromIdleOfflining(
+            appIsActive: NSApp.isActive,
+            workspaceIsSelected: workspaceIsSelected,
+            viewIsFirstResponder: window?.firstResponder === self,
+            viewIsAttachedToWindow: window != nil
+        ) {
+            inactiveSince = nil
+        } else {
+            noteInactive(now: now)
+        }
+    }
+
+    private func noteInactive(now: Date = Date()) {
+        if inactiveSince == nil { inactiveSince = now }
+    }
+
+    @discardableResult
+    private func ensureLiveSurface() -> Bool {
+        guard surface == nil else { return true }
+        createSurface()
+        guard surface != nil else { return false }
+        pushDisplayIDToGhostty()
+        pushOcclusionToGhostty()
+        pendingVisibleRedraw = true
+        syncSurfaceSize(pointsSize: bounds.size)
+        return true
+    }
+
+    @discardableResult
+    func ensureLiveForWebRemoteControl() -> Bool {
+        guard ensureLiveSurface() else { return false }
+        inactiveSince = nil
+        return true
     }
 
     /// Best-effort current cwd: prefers the cached value pushed via ghostty's
@@ -1132,6 +1546,26 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         let pixelHeight = floor(pointsSize.height * scale)
         guard pixelWidth > 0, pixelHeight > 0 else { return }
 
+        var targetWidth = UInt32(pixelWidth)
+        var targetHeight = UInt32(pixelHeight)
+        if let remoteSize = webRemoteGridSize {
+            let current = ghostty_surface_size(s)
+            let cellWidth = Int(current.cell_width_px)
+            let cellHeight = Int(current.cell_height_px)
+            if cellWidth > 0, cellHeight > 0 {
+                let horizontalRemainder = max(
+                    0,
+                    Int(current.width_px) - Int(current.columns) * cellWidth
+                )
+                let verticalRemainder = max(
+                    0,
+                    Int(current.height_px) - Int(current.rows) * cellHeight
+                )
+                targetWidth = UInt32(remoteSize.columns * cellWidth + horizontalRemainder)
+                targetHeight = UInt32(remoteSize.rows * cellHeight + verticalRemainder)
+            }
+        }
+
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         // ghostty's IOSurfaceLayer only learns the scale at surface creation;
@@ -1139,7 +1573,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // at the right DPI. It reads layer.contentsScale when sizing frames.
         layer?.contentsScale = scale
         ghostty_surface_set_content_scale(s, scale, scale)
-        ghostty_surface_set_size(s, UInt32(pixelWidth), UInt32(pixelHeight))
+        ghostty_surface_set_size(s, targetWidth, targetHeight)
         CATransaction.commit()
 
         // Echo restored history only once the surface width has SETTLED. The
@@ -1192,21 +1626,33 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     // MARK: - focus
 
     override func becomeFirstResponder() -> Bool {
+        _ = ensureLiveSurface()
         let ok = super.becomeFirstResponder()
-        if let s = surface { ghostty_surface_set_focus(s, true) }
+        if ok { inactiveSince = nil }
+        setGhosttyFocus(true)
         return ok
     }
 
     override func resignFirstResponder() -> Bool {
         let ok = super.resignFirstResponder()
-        if let s = surface { ghostty_surface_set_focus(s, false) }
+        if ok { noteInactive() }
+        setGhosttyFocus(false)
         return ok
     }
 
     /// Explicit focus sync — splits / SwiftUI rebuilds don't always route
     /// firstResponder cleanly, so the SwiftUI layer pokes us directly.
     func setGhosttyFocus(_ flag: Bool) {
-        guard let s = surface else { return }
+        // Idle-clock bookkeeping only — the focus VALUE pushed to ghostty is
+        // the caller's flag unchanged (altering it to flag && isActive left
+        // surface focus stale until the next updateNSView pass).
+        if flag && NSApp.isActive {
+            _ = ensureLiveSurface()
+            inactiveSince = nil
+        } else {
+            noteInactive()
+        }
+        guard let s = surface, focusUpdateGate.shouldApply(flag) else { return }
         ghostty_surface_set_focus(s, flag)
     }
 
@@ -1214,6 +1660,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
 
     override func keyDown(with event: NSEvent) {
         guard let s = surface else { super.keyDown(with: event); return }
+        noteUserInputForIdleTracking()
         let mods = event.modifierFlags
         // ⌘V (keycode 9): handle explicitly. Embedded ghostty's default
         // keybindings don't include cmd+v=paste_from_clipboard (standalone
@@ -1479,6 +1926,12 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private var swallowingFocusClick = false
 
     override func mouseDown(with event: NSEvent) {
+        if surface == nil {
+            guard ensureLiveSurface() else { return }
+            window?.makeFirstResponder(self)
+            swallowingFocusClick = true
+            return
+        }
         if window?.firstResponder !== self {
             window?.makeFirstResponder(self)
             swallowingFocusClick = true
@@ -1683,6 +2136,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // Quoting preserves filenames intact, but a filename can legally embed
         // a newline — gate on the actual injected string, same as paste.
         guard confirmUnsafeTextInjection(joined) else { return false }
+        noteUserInputForIdleTracking()
         joined.withCString { ptr in
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
@@ -1862,6 +2316,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let str = NSPasteboard.general.string(forType: .string),
               !str.isEmpty else { return }
         guard confirmUnsafeTextInjection(str) else { return }
+        noteUserInputForIdleTracking()
         str.withCString { ptr in
             ghostty_surface_text(s, ptr, UInt(strlen(ptr)))
         }
@@ -1913,6 +2368,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// thread only (ghostty surface APIs are not thread-safe).
     func injectText(_ text: String) {
         guard let s = surface, !text.isEmpty else { return }
+        noteUserInputForIdleTracking()
         // UTF-8 length, not strlen: a control-socket payload can carry an
         // embedded NUL (a literal NUL byte), and strlen would truncate the paste at
         // it. withCString's buffer is exactly utf8.count bytes + a NUL, so
@@ -1924,12 +2380,58 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         postAccessibilityValueChanged()
     }
 
+    func setWebRemoteGridSize(_ size: WebRemoteTerminalSize) {
+        guard surface != nil, webRemoteGridSize != size else { return }
+        webRemoteGridSize = size
+        syncSurfaceSize(pointsSize: bounds.size)
+    }
+
+    func releaseWebRemoteGridSize() {
+        guard webRemoteGridSize != nil else { return }
+        webRemoteGridSize = nil
+        syncSurfaceSize(pointsSize: bounds.size)
+    }
+
+    func injectRemoteInput(_ data: Data) {
+        guard let s = surface, !data.isEmpty else { return }
+        noteUserInputForIdleTracking()
+        data.withUnsafeBytes { raw in
+            guard let bytes = raw.bindMemory(to: CChar.self).baseAddress else { return }
+            ghostty_surface_text_input(s, bytes, UInt(data.count))
+        }
+        markScrollbackDirty()
+    }
+
+    func webRemoteSnapshot(maxLines: Int = 1000) -> WebRemoteTerminalSnapshot? {
+        guard let s = surface else { return nil }
+        let json = ghostty_surface_render_grid_json(s, "", 0, 0, UInt(maxLines))
+        defer { ghostty_string_free(json) }
+        guard let pointer = json.ptr, json.len > 0 else { return nil }
+        let grid = Data(bytes: pointer, count: Int(json.len))
+        return Self.webRemoteSnapshot(fromRenderGrid: grid, maxLines: maxLines)
+    }
+
+    fileprivate func forwardWebRemoteOutput(
+        _ bytes: UnsafePointer<UInt8>?,
+        count: UInt,
+        sequence: UInt64
+    ) {
+        guard let paneKey else { return }
+        WebRemoteServer.shared.forwardTerminalOutput(
+            pane: paneKey,
+            bytes: bytes,
+            count: count,
+            sequence: sequence
+        )
+    }
+
     /// Inject a single whitelisted key. Special keys go through
     /// `ghostty_surface_key` (press+release) so ghostty maps them to the right
     /// escape sequence; printable chars go straight through the text-input pipe
     /// to avoid the keycode→preedit "marked text" path. Main thread only.
     func injectKey(_ key: InjectableKey) {
         guard let s = surface else { return }
+        noteUserInputForIdleTracking()
         switch key {
         case .special(let kc):
             var k = ghostty_input_key_s()
@@ -1959,8 +2461,9 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// newlines (\n / \r — most shells and REPLs execute on CR even inside
     /// bracketed paste when the running program doesn't support it) or C0
     /// control characters other than tab (ESC can rewrite the line, ^C can
-    /// kill the foreground job, etc.).
-    private func injectedTextLooksUnsafe(_ text: String) -> Bool {
+    /// kill the foreground job, etc.). Internal so the accessibility
+    /// extension (GhosttySurfaceAccessibility.swift) can reuse the predicate.
+    func injectedTextLooksUnsafe(_ text: String) -> Bool {
         for scalar in text.unicodeScalars {
             let v = scalar.value
             if v == 0x09 { continue }                 // tab is fine
@@ -2024,6 +2527,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let pngData = imagePNGData(from: pb) else { return false }
         guard let path = persistPastedImage(pngData) else { return false }
         let quoted = posixShellQuoted(path)
+        noteUserInputForIdleTracking()
         quoted.withCString { ptr in
             ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
         }
@@ -2154,65 +2658,6 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         ghostty_surface_mouse_scroll(s, dx, dy, packed)
     }
 
-    // MARK: - Accessibility
-    //
-    // Dictation / assistive-input tools (Typeless, TextExpander, VoiceOver)
-    // first ask macOS what kind of UI element is focused. Without these
-    // overrides AppKit exposes this Metal-backed terminal view as a generic
-    // `.group`, so those tools either refuse to inject or inject via simulated
-    // paste but never receive a success signal — Typeless then shows its
-    // fallback "复制最后的转录" / "Copy last transcript" bar even though the
-    // text already landed. Port of the Mux0 fix (e86e63b / a4cc065).
-
-    override func isAccessibilityElement() -> Bool { true }
-
-    override func accessibilityRole() -> NSAccessibility.Role? { .textArea }
-
-    override func accessibilityHelp() -> String? { "Terminal content area" }
-
-    override func accessibilityValue() -> Any? {
-        readTerminalText(
-            from: GHOSTTY_POINT_SCREEN,
-            topLeft: GHOSTTY_POINT_COORD_TOP_LEFT,
-            bottomRight: GHOSTTY_POINT_COORD_BOTTOM_RIGHT
-        )
-    }
-
-    override func accessibilitySelectedTextRange() -> NSRange {
-        readSelectionRange()
-    }
-
-    override func accessibilitySelectedText() -> String? {
-        guard let selected = readSelectedText(), !selected.isEmpty else { return nil }
-        return selected
-    }
-
-    override func accessibilityNumberOfCharacters() -> Int {
-        accessibilityTextValue.count
-    }
-
-    override func accessibilityVisibleCharacterRange() -> NSRange {
-        let count = accessibilityTextValue.count
-        return NSRange(location: 0, length: count)
-    }
-
-    override func accessibilityLine(for index: Int) -> Int {
-        let content = accessibilityTextValue
-        let safeIndex = max(0, min(index, content.count))
-        let end = content.index(content.startIndex, offsetBy: safeIndex)
-        return content[..<end].filter { $0 == "\n" }.count
-    }
-
-    override func accessibilityString(for range: NSRange) -> String? {
-        let content = accessibilityTextValue
-        guard let swiftRange = Range(range, in: content) else { return nil }
-        return String(content[swiftRange])
-    }
-
-    private var accessibilityTextValue: String {
-        (accessibilityValue() as? String) ?? ""
-    }
-
     private func readSelectionRange() -> NSRange {
         guard let surface else { return NSRange(location: NSNotFound, length: 0) }
         var text = ghostty_text_s()
@@ -2221,43 +2666,6 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         }
         defer { ghostty_surface_free_text(surface, &text) }
         return NSRange(location: Int(text.offset_start), length: Int(text.offset_len))
-    }
-
-    private func readSelectedText() -> String? {
-        guard let surface else { return nil }
-        var text = ghostty_text_s()
-        guard ghostty_surface_read_selection(surface, &text) else { return nil }
-        defer { ghostty_surface_free_text(surface, &text) }
-        guard let cstr = text.text else { return nil }
-        if text.text_len > 0 {
-            return cstr.withMemoryRebound(to: UInt8.self, capacity: Int(text.text_len)) { bytes in
-                String(decoding: UnsafeBufferPointer(start: bytes, count: Int(text.text_len)), as: UTF8.self)
-            }
-        }
-        return String(cString: cstr)
-    }
-
-    private func readTerminalText(
-        from tag: ghostty_point_tag_e,
-        topLeft: ghostty_point_coord_e,
-        bottomRight: ghostty_point_coord_e
-    ) -> String {
-        guard let surface else { return "" }
-        var text = ghostty_text_s()
-        let selection = ghostty_selection_s(
-            top_left: ghostty_point_s(tag: tag, coord: topLeft, x: 0, y: 0),
-            bottom_right: ghostty_point_s(tag: tag, coord: bottomRight, x: 0, y: 0),
-            rectangle: false
-        )
-        guard ghostty_surface_read_text(surface, selection, &text) else { return "" }
-        defer { ghostty_surface_free_text(surface, &text) }
-        guard let cstr = text.text else { return "" }
-        if text.text_len > 0 {
-            return cstr.withMemoryRebound(to: UInt8.self, capacity: Int(text.text_len)) { bytes in
-                String(decoding: UnsafeBufferPointer(start: bytes, count: Int(text.text_len)), as: UTF8.self)
-            }
-        }
-        return String(cString: cstr)
     }
 
     /// Notify AX observers after user-driven text reaches ghostty so tools
@@ -2282,11 +2690,15 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             return
         }
         guard !text.isEmpty, let s = surface else { return }
+        noteUserInputForIdleTracking()
         text.withCString { ptr in
             // text_input is the IME-aware commit path. Use it for all
             // printable input; surface_text leaves preedit state behind,
             // which ghostty's renderer shows as a white-background highlight.
-            ghostty_surface_text_input(s, ptr, UInt(strlen(ptr)))
+            // UTF-8 length, not strlen: text reaching here can carry an
+            // embedded NUL (AX clients set arbitrary strings), and strlen
+            // would truncate at it. Mirrors injectText.
+            ghostty_surface_text_input(s, ptr, UInt(text.utf8.count))
         }
         markScrollbackDirty()
         // Explicitly clear any residual preedit (commit doesn't always wipe
@@ -2375,6 +2787,18 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     func characterIndex(for point: NSPoint) -> Int {
         0
     }
+}
+
+private let webRemotePTYTeeCallback: @convention(c) (
+    UnsafeMutableRawPointer?,
+    UnsafePointer<CChar>?,
+    UInt,
+    UInt64
+) -> Void = { userData, bytes, count, sequence in
+    guard let userData, let bytes else { return }
+    let view = Unmanaged<GhosttySurfaceView>.fromOpaque(userData).takeUnretainedValue()
+    let unsigned = UnsafeRawPointer(bytes).assumingMemoryBound(to: UInt8.self)
+    view.forwardWebRemoteOutput(unsigned, count: count, sequence: sequence)
 }
 
 // MARK: - Terminal scrollback restore (colored snapshot via render_grid_json)
@@ -2466,9 +2890,9 @@ enum ScrollbackArchive {
         }
     }
 
-    /// Block until every queued snapshot write has hit disk. Called on app
-    /// terminate — the writes are async on a utility queue, so without this
-    /// the process can exit with the final flush still in flight.
+    /// Block until every queued snapshot write has hit disk. Called before an
+    /// idle surface is released and on app terminate so recreation/exit cannot
+    /// race the final async write.
     static func drain() {
         queue.sync {}
     }

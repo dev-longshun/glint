@@ -159,8 +159,7 @@ final class PaneAgentKindTests: XCTestCase {
     private func isIconKind(_ actual: WorkspaceIconKind, _ expected: WorkspaceIconKind) -> Bool {
         switch (actual, expected) {
         case (.claude, .claude), (.codex, .codex),
-             (.opencode, .opencode), (.devin, .devin), (.omp, .omp),
-             (.grok, .grok),
+             (.opencode, .opencode), (.devin, .devin), (.omp, .omp), (.grok, .grok),
              (.shell, .shell), (.ssh, .ssh), (.vim, .vim),
              (.python, .python), (.node, .node), (.git, .git):
             return true

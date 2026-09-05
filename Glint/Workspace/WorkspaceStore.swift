@@ -4,6 +4,56 @@ import AppKit
 import Darwin
 import UserNotifications
 
+enum TerminalOfflinePolicy {
+    private static let idleShells: Set<String> = [
+        "zsh", "bash", "fish", "sh", "dash", "ksh", "login",
+    ]
+
+    static func isIdleShell(_ processName: String?) -> Bool {
+        guard let processName else { return false }
+        return idleShells.contains(processName.lowercased())
+    }
+
+    static func shouldTakeOffline(enabled: Bool,
+                                  hasLiveSurface: Bool,
+                                  inactiveSince: Date?,
+                                  now: Date,
+                                  timeout: TimeInterval,
+                                  promptStateDetectionEnabled: Bool = true,
+                                  needsConfirmQuit: Bool,
+                                  foregroundProcessName: String?,
+                                  hasUserOrJobState: Bool = false) -> Bool {
+        guard enabled,
+              hasLiveSurface,
+              promptStateDetectionEnabled,
+              !needsConfirmQuit,
+              !hasUserOrJobState,
+              let inactiveSince,
+              now.timeIntervalSince(inactiveSince) >= timeout,
+              isIdleShell(foregroundProcessName) else { return false }
+        return true
+    }
+}
+
+enum TerminalFocusPolicy {
+    static func isPaneFocused(workspaceIsSelected: Bool,
+                              paneIsFocused: Bool) -> Bool {
+        workspaceIsSelected && paneIsFocused
+    }
+
+    /// A pane the user can currently SEE must never be swapped for the
+    /// offline placeholder in front of them — keyboard focus may legitimately
+    /// live in the sidebar/search for long stretches. `viewIsAttachedToWindow`
+    /// is the visibility proxy: workspace/tab switches detach pane views.
+    static func protectsFromIdleOfflining(appIsActive: Bool,
+                                          workspaceIsSelected: Bool,
+                                          viewIsFirstResponder: Bool,
+                                          viewIsAttachedToWindow: Bool) -> Bool {
+        appIsActive && workspaceIsSelected
+            && (viewIsFirstResponder || viewIsAttachedToWindow)
+    }
+}
+
 // MARK: - Domain types
 
 enum SplitDirection: String, Codable, Hashable {
@@ -312,7 +362,14 @@ struct Workspace: Identifiable, Codable {
 
         if let tabs = try? c.decode([WorkspaceTab].self, forKey: .tabs), !tabs.isEmpty {
             self.tabs = tabs
-            self.selectedTabID = (try? c.decode(TabID.self, forKey: .selectedTabID)) ?? tabs[0].id
+            // A selection naming no existing tab leaves `selectedTab` nil, and
+            // everything downstream degrades from there: `currentRoot` falls
+            // back to a synthetic leaf while `isPaneVisible` answers false for
+            // every pane — which `SurfaceAttachGate` reads as "this tree is on
+            // its way out", so the pane it still renders never gets a surface
+            // and stays blank. Snap a dangling selection back to the first tab.
+            let decodedTabID = (try? c.decode(TabID.self, forKey: .selectedTabID)) ?? tabs[0].id
+            self.selectedTabID = tabs.contains { $0.id == decodedTabID } ? decodedTabID : tabs[0].id
             let maxSeq = tabs.map(\.id.value).max() ?? 0
             self.nextTabSeq = (try? c.decode(UInt32.self, forKey: .nextTabSeq))
                 .map { Swift.max($0, maxSeq + 1) } ?? (maxSeq + 1)
@@ -515,14 +572,24 @@ final class WorkspaceStore: ObservableObject {
     @Published var workspaces: [Workspace]
     @Published var selectedWorkspaceID: UUID?
     @Published var sidebarCollapsed: Bool
+    /// High-frequency, non-persistent pane state is published separately so
+    /// agent hooks and foreground-process changes don't invalidate every view
+    /// that observes the workspace model (including the terminal subtree).
+    let activity: PaneActivityStore
     /// Latest foreground-process name per (workspace, pane). Event-driven with
     /// a slow fallback capture; drives the workspace card icon. Non-persistent.
-    @Published var paneProcesses: [WorkspacePaneKey: String] = [:]
+    var paneProcesses: [WorkspacePaneKey: String] {
+        get { activity.paneProcesses }
+        set { activity.paneProcesses = newValue }
+    }
     /// CLI-agent state per pane (push-driven via AgentBridge hooks).
     /// Beats `paneProcesses` for icon/state because hooks carry live
     /// status (thinking/permission/…) a process-name capture can't know.
     /// Non-persistent.
-    @Published var paneAgentState: [WorkspacePaneKey: PaneAgentState] = [:]
+    var paneAgentState: [WorkspacePaneKey: PaneAgentState] {
+        get { activity.paneAgentState }
+        set { activity.paneAgentState = newValue }
+    }
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
     /// button and the ⌘⇧P global shortcut. Mutually exclusive with the agent
@@ -798,6 +865,35 @@ final class WorkspaceStore: ObservableObject {
         }
     }
 
+    static let idleTerminalTimeoutChoices = [60, 300, 600, 900, 1_800, 3_600]
+
+    /// Opt-in memory saving: release inactive Ghostty surfaces only when they
+    /// are sitting at a plain shell prompt. The pane itself remains and wakes
+    /// in its last directory when selected again.
+    @Published var freeIdleTerminalsEnabled: Bool =
+        (UserDefaults.standard.object(forKey: "glint.freeIdleTerminalsEnabled") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(freeIdleTerminalsEnabled,
+                                      forKey: "glint.freeIdleTerminalsEnabled")
+            if freeIdleTerminalsEnabled { resetIdleTerminalTimeouts() }
+        }
+    }
+
+    @Published var idleTerminalTimeoutSeconds: Int = {
+        let saved = UserDefaults.standard.integer(forKey: "glint.idleTerminalTimeoutSeconds")
+        return WorkspaceStore.idleTerminalTimeoutChoices.contains(saved) ? saved : 300
+    }() {
+        didSet {
+            guard Self.idleTerminalTimeoutChoices.contains(idleTerminalTimeoutSeconds) else {
+                idleTerminalTimeoutSeconds = 300
+                return
+            }
+            UserDefaults.standard.set(idleTerminalTimeoutSeconds,
+                                      forKey: "glint.idleTerminalTimeoutSeconds")
+            resetIdleTerminalTimeouts()
+        }
+    }
+
     /// Which Claude icon family the UI draws: the animated robot mascot, or
     /// the spark mark (StatusIconsPreview.jsx port — see
     /// scripts/generate_claude_spark_icons.py). Completion has no spark
@@ -828,8 +924,11 @@ final class WorkspaceStore: ObservableObject {
     /// Whether Glint's OMP extension is registered in `~/.omp/agent/settings.json`.
     @Published var ompHooksInstalled: Bool = false
 
-    /// Whether Glint's Grok status hooks are registered in `~/.grok/hooks/`.
+    /// Whether Glint's Grok Build hooks are registered in `~/.grok/hooks/glint.json`.
     @Published var grokHooksInstalled: Bool = false
+
+    /// Whether Glint's pi extension is installed in `~/.pi/agent/extensions`.
+    @Published var piHooksInstalled: Bool = false
 
     /// Whether Glint's modified-Enter shell keybindings are present in the
     /// user's shell rc (~/.zshrc / ~/.bashrc). Opt-in, default off.
@@ -859,6 +958,7 @@ final class WorkspaceStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(accentName, forKey: "glint.accentName")
             GhosttyManager.shared.reloadConfig()
+            WebRemoteServer.shared.refreshAppearance()
         }
     }
 
@@ -873,6 +973,7 @@ final class WorkspaceStore: ObservableObject {
             GhosttyManager.shared.reloadConfig()
             GhosttyManager.shared.syncWindowAppearance()   // 浅/暗主题 → 玻璃材质跟随
             themeRevision &+= 1
+            WebRemoteServer.shared.refreshAppearance()
         }
     }
 
@@ -889,6 +990,7 @@ final class WorkspaceStore: ObservableObject {
         GhosttyManager.shared.reloadConfig()
         GhosttyManager.shared.syncWindowAppearance()
         themeRevision &+= 1
+        WebRemoteServer.shared.refreshAppearance()
     }
 
     // MARK: 透明度与模糊
@@ -943,6 +1045,7 @@ final class WorkspaceStore: ObservableObject {
         didSet {
             UserDefaults.standard.set(appIconPreset.rawValue, forKey: "glint.appIconPreset")
             applyAppIcon()
+            WebRemoteServer.shared.refreshAppearance()
         }
     }
 
@@ -1003,10 +1106,14 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreOmpSession, forKey: "glint.restoreOmpSession") }
     }
 
-    /// Same as `restoreClaudeSession` but for Grok — feeds `grok --continue` /
-    /// `grok --resume <id>` (`-c` / `-r` aliases).
+    /// Same as `restoreClaudeSession` but for Grok Build — feeds `grok --continue` / `grok --resume <id>`.
     @Published var restoreGrokSession: Bool = (UserDefaults.standard.object(forKey: "glint.restoreGrokSession") as? Bool) ?? false {
         didSet { UserDefaults.standard.set(restoreGrokSession, forKey: "glint.restoreGrokSession") }
+    }
+
+    /// Same as `restoreClaudeSession` but for pi — feeds `pi --continue` / `pi --session-id <id>`.
+    @Published var restorePiSession: Bool = (UserDefaults.standard.object(forKey: "glint.restorePiSession") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restorePiSession, forKey: "glint.restorePiSession") }
     }
 
     /// Maps each agent kind to the @Published toggle that gates its
@@ -1020,6 +1127,7 @@ final class WorkspaceStore: ObservableObject {
         .devin:    \.restoreDevinSession,
         .omp:      \.restoreOmpSession,
         .grok:     \.restoreGrokSession,
+        .pi:       \.restorePiSession,
     ]
 
     /// Whether session-restore-on-launch is enabled for `kind`. Used by
@@ -1040,6 +1148,55 @@ final class WorkspaceStore: ObservableObject {
             if externalControlEnabled { ControlBridge.shared.start() }
             else { ControlBridge.shared.stop() }
         }
+    }
+
+    @Published var webRemoteEnabled: Bool = (UserDefaults.standard.object(forKey: "glint.webRemoteEnabled") as? Bool) ?? false {
+        didSet {
+            UserDefaults.standard.set(webRemoteEnabled, forKey: "glint.webRemoteEnabled")
+            if webRemoteEnabled { WebRemoteServer.shared.start() }
+            else { WebRemoteServer.shared.stop() }
+        }
+    }
+
+    /// Which local address the web remote binds: `loopback`, `any`, or an
+    /// interface name (e.g. `en0`). Defaults to loopback — the safest choice;
+    /// users who want LAN access pick a NIC or "All interfaces" explicitly.
+    @Published var webRemoteListenInterface: String = {
+        let key = "glint.webRemoteListenInterface"
+        let stored = UserDefaults.standard.string(forKey: key)
+        return stored?.isEmpty == false ? stored! : WebRemoteListenTarget.loopback
+    }() {
+        didSet {
+            guard oldValue != webRemoteListenInterface else { return }
+            UserDefaults.standard.set(webRemoteListenInterface, forKey: "glint.webRemoteListenInterface")
+            WebRemoteServer.shared.setListenInterface(webRemoteListenInterface)
+            if webRemoteEnabled { WebRemoteServer.shared.start() }
+        }
+    }
+
+    /// Bind targets currently available on this Mac, for the "Listen on" menu.
+    /// Snapshotted at init; call `refreshWebRemoteInterfaces()` to rescan after
+    /// networks change (e.g. joining a different Wi-Fi).
+    @Published private(set) var webRemoteInterfaceOptions: [WebRemoteInterface] = WebRemoteAddressResolver.interfaces()
+
+    func refreshWebRemoteInterfaces() {
+        webRemoteInterfaceOptions = WebRemoteAddressResolver.interfaces()
+    }
+
+    @Published private(set) var webRemoteStatus: WebRemoteStatus = .stopped
+    @Published private var webRemoteControlledPanes = Set<WorkspacePaneKey>()
+
+    var webRemoteAccessURLs: [String] {
+        guard case let .ready(urls) = webRemoteStatus else { return [] }
+        return urls
+    }
+
+    var webRemoteAccessKey: String? {
+        webRemoteAccessURLs.first.flatMap(WebRemoteAccessURL.token(from:))
+    }
+
+    func resetWebRemoteCredentials() {
+        WebRemoteServer.shared.resetCredentials()
     }
 
     /// Whether the sidebar's "Archived" section is currently expanded.
@@ -1173,6 +1330,14 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(sortCompletedFirst, forKey: "glint.sortCompletedFirst") }
     }
 
+    /// Middle-click on a workspace card in the sidebar closes it (same path
+    /// as the context menu's "Close Workspace"). Defaults to on so the
+    /// behaviour stays available without configuration; users who find it
+    /// surprising can disable it here.
+    @Published var middleClickClosesWorkspace: Bool = (UserDefaults.standard.object(forKey: "glint.middleClickClosesWorkspace") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(middleClickClosesWorkspace, forKey: "glint.middleClickClosesWorkspace") }
+    }
+
     /// Show the "Paste potentially unsafe text?" confirm dialog when the
     /// clipboard contains newlines or control characters. The underlying
     /// default (`glint.skipUnsafePasteConfirmation`) is inverted so the
@@ -1244,6 +1409,13 @@ final class WorkspaceStore: ObservableObject {
                 isInstalled: { GrokHookInstaller.isInstalled() },
                 install: { GrokHookInstaller.installIfNeeded(socketPath: socketPath) }
             ),
+            AgentHookSpec(
+                handledKey: "glint.piHooksAutoInstalled",
+                displayName: "Pi",
+                isPresent: PiHookInstaller.isAgentPresent,
+                isInstalled: { PiHookInstaller.isInstalled() },
+                install: { PiHookInstaller.installIfNeeded(socketPath: socketPath) }
+            ),
         ]
     }
 
@@ -1293,6 +1465,7 @@ final class WorkspaceStore: ObservableObject {
             WorkspaceStore.current?.devinHooksInstalled = DevinHookInstaller.isInstalled()
             WorkspaceStore.current?.ompHooksInstalled = OmpHookInstaller.isInstalled()
             WorkspaceStore.current?.grokHooksInstalled = GrokHookInstaller.isInstalled()
+            WorkspaceStore.current?.piHooksInstalled = PiHookInstaller.isInstalled()
         }
     }
 
@@ -1359,6 +1532,16 @@ final class WorkspaceStore: ObservableObject {
         self.grokHooksInstalled = GrokHookInstaller.isInstalled()
     }
 
+    func installPiHooks() {
+        PiHookInstaller.installIfNeeded(socketPath: AgentBridge.shared.socketPath)
+        self.piHooksInstalled = PiHookInstaller.isInstalled()
+    }
+
+    func uninstallPiHooks() {
+        PiHookInstaller.uninstall()
+        self.piHooksInstalled = PiHookInstaller.isInstalled()
+    }
+
     func installShellKeybinds() {
         ShellKeybindInstaller.install()
         self.shellKeybindsInstalled = ShellKeybindInstaller.isInstalled()
@@ -1378,6 +1561,7 @@ final class WorkspaceStore: ObservableObject {
     var devinDetected: Bool { DevinHookInstaller.isAgentPresent() }
     var ompDetected: Bool { OmpHookInstaller.isAgentPresent() }
     var grokDetected: Bool { GrokHookInstaller.isAgentPresent() }
+    var piDetected: Bool { PiHookInstaller.isAgentPresent() }
 
     /// Locale to inject into the SwiftUI environment. Driven by
     /// `preferredLanguage`. On macOS 14+, SwiftUI re-resolves
@@ -1417,7 +1601,12 @@ final class WorkspaceStore: ObservableObject {
     /// created by GlintApp as a @StateObject).
     static private(set) weak var current: WorkspaceStore?
 
-    init() {
+    convenience init() {
+        self.init(activity: PaneActivityStore())
+    }
+
+    init(activity: PaneActivityStore) {
+        self.activity = activity
         let loaded = Persistence.load() ?? PersistedState.fresh
         self.workspaces = loaded.workspaces
         let shouldRestore = (UserDefaults.standard.object(forKey: "glint.restoreLastWorkspace") as? Bool) ?? true
@@ -1480,7 +1669,9 @@ final class WorkspaceStore: ObservableObject {
             // scheduledTimer fires on the main run loop, so this is already the
             // main actor — assumeIsolated avoids allocating a Task per fallback.
             MainActor.assumeIsolated {
-                guard let self, NSApp.isActive else { return }
+                guard let self else { return }
+                self.offlineIdleTerminals()
+                guard NSApp.isActive else { return }
                 self.captureCwdsFromLiveSurfaces()
                 self.flushScrollback()
                 self.fallbackGitTick += 1
@@ -1568,8 +1759,23 @@ final class WorkspaceStore: ObservableObject {
                 // callback that follows this same change ~0.5s later doesn't
                 // spawn a second `git status` (the in-flight gate only merges
                 // runs that overlap in time; a fast git finishes first).
-                self.gitRefreshCoordinator.request(wsID) { [weak self] in
+                self.gitRefreshCoordinator.request(wsID, source: .commandFinished) { [weak self] in
                     self?.refreshGitStatusNow(for: wsID)
+                }
+            }
+        })
+
+        // Start the idle grace period at the moment the app loses focus rather
+        // than at the next 30-second fallback tick.
+        observerTokens.append(NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                let now = Date()
+                self?.surfaceViews.values.forEach {
+                    $0.applicationDidResignActive(now: now)
                 }
             }
         })
@@ -1583,8 +1789,17 @@ final class WorkspaceStore: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                guard let self, let id = self.selectedWorkspaceID else { return }
-                self.acknowledgeCompletionIfNeeded(for: id)
+                guard let self else { return }
+                let now = Date()
+                for (key, view) in self.surfaceViews {
+                    view.applicationDidBecomeActive(
+                        now: now,
+                        workspaceIsSelected: key.workspace == self.selectedWorkspaceID
+                    )
+                }
+                if let id = self.selectedWorkspaceID {
+                    self.acknowledgeCompletionIfNeeded(for: id)
+                }
                 self.captureCwdsFromLiveSurfaces()
                 self.flushScrollback()
                 self.refreshAllGitStatuses()
@@ -1598,6 +1813,12 @@ final class WorkspaceStore: ObservableObject {
         // docs/external-pane-control.md. Toggling it later is live.
         if externalControlEnabled { ControlBridge.shared.start() }
         else { ControlBridge.shared.reapStale() }
+        WebRemoteServer.shared.setStatusHandler { [weak self] status in
+            self?.webRemoteStatus = status
+        }
+        WebRemoteServer.shared.setListenInterface(webRemoteListenInterface)
+        if webRemoteEnabled { WebRemoteServer.shared.start() }
+        else { WebRemoteServer.shared.stop() }
         Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
@@ -1646,6 +1867,29 @@ final class WorkspaceStore: ObservableObject {
     struct WorkspacePaneKey: Hashable {
         let workspace: UUID
         let pane: PaneID
+    }
+
+    private func resetIdleTerminalTimeouts(now: Date = Date()) {
+        for (key, view) in surfaceViews {
+            view.resetIdleTimeout(
+                now: now,
+                workspaceIsSelected: key.workspace == selectedWorkspaceID
+            )
+        }
+    }
+
+    private func offlineIdleTerminals(now: Date = Date()) {
+        guard freeIdleTerminalsEnabled else { return }
+        let timeout = TimeInterval(idleTerminalTimeoutSeconds)
+        for (key, view) in surfaceViews {
+            guard !webRemoteControlledPanes.contains(key) else { continue }
+            view.takeOfflineIfEligible(
+                enabled: true,
+                timeout: timeout,
+                now: now,
+                workspaceIsSelected: key.workspace == selectedWorkspaceID
+            )
+        }
     }
 
     func surfaceView(workspaceID: UUID, paneID: PaneID, cwd: String?) -> GhosttySurfaceView {
@@ -2231,7 +2475,20 @@ final class WorkspaceStore: ObservableObject {
 
     /// True when `key`'s pane is on screen right now: its workspace is the
     /// selected workspace AND it lives in that workspace's selected tab.
-    private func isPaneVisible(_ key: WorkspacePaneKey) -> Bool {
+    /// Shared by the idle-release "is the user watching" checks and the
+    /// deferred surface re-pin guard in `PaneSurfaceRepresentable` — the two
+    /// must agree on what "visible" means, so don't fork this logic.
+    func isPaneVisible(_ key: WorkspacePaneKey) -> Bool {
+        Self.paneIsVisible(key, selectedWorkspaceID: selectedWorkspaceID,
+                           in: selectedWorkspace)
+    }
+
+    /// Pure core of `isPaneVisible(_:)`, split out so tests can exercise it
+    /// without a live store (whose init loads persisted state and touches
+    /// the filesystem).
+    static func paneIsVisible(_ key: WorkspacePaneKey,
+                              selectedWorkspaceID: UUID?,
+                              in selectedWorkspace: Workspace?) -> Bool {
         guard selectedWorkspaceID == key.workspace,
               let tab = selectedWorkspace?.selectedTab else { return false }
         return tab.root.leaves.contains(key.pane)
@@ -2297,7 +2554,7 @@ final class WorkspaceStore: ObservableObject {
 
     /// Queue a command to run in a freshly created pane once its surface comes
     /// up. Reuses the same one-shot channel as the worktree sheet
-    /// (`pendingInitialInput` → `GhosttySurfaceView.initialInput`); a nil/empty
+    /// (`pendingInitialInput` → `GhosttySurfaceView.pendingInitialInput`); a nil/empty
     /// command leaves the pane a bare shell. Call right after creating the pane,
     /// before its surface is built, so the lookup finds the entry.
     private func queueInitialInput(_ command: String?, codexHome: String? = nil,
@@ -2406,6 +2663,13 @@ final class WorkspaceStore: ObservableObject {
         // check would false-positive on process names like "compiz".
         if lower == "omp" || lower.hasSuffix("/omp") { return .omp }
         if lower.contains("grok") { return .grok }
+        // Exact match for "pi" — it's only two letters, so a substring check
+        // would false-positive on process names like "pipe", "pip", "copy",
+        // "spiped". pi is an npm bin shim (node dist/cli.js), but
+        // GhosttySurfaceView.scriptBasenameFromArgv already resolves the
+        // shim's argv to its basename "pi", so the comm/argv we see here is
+        // the clean short name.
+        if lower == "pi" || lower.hasSuffix("/pi") { return .pi }
         return nil
     }
 
@@ -2646,7 +2910,7 @@ final class WorkspaceStore: ObservableObject {
         return nil
     }
 
-    func controlFocus(pane: String) -> String? {
+    func controlFocus(pane: String, activateApp: Bool = true) -> String? {
         guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
         guard let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
               workspaces[wsIdx].panes[key.pane] != nil,
@@ -2661,8 +2925,175 @@ final class WorkspaceStore: ObservableObject {
                 workspaces[i].tabs[t].focusedPane = key.pane
             }
         }
-        NSApp.activate(ignoringOtherApps: true)
+        if activateApp {
+            NSApp.activate(ignoringOtherApps: true)
+        }
         return nil
+    }
+
+    func webRemoteWorkspacePayload() -> [[String: Any]] {
+        workspaces.map { workspace in
+            let focusedPane = workspace.selectedTab?.focusedPane
+            let panes: [[String: Any]] = workspace.panes.values
+                .sorted { $0.id.value < $1.id.value }
+                .map { pane in
+                    let key = WorkspacePaneKey(workspace: workspace.id, pane: pane.id)
+                    var value: [String: Any] = [
+                        "id": "\(workspace.id.uuidString):\(pane.id.value)",
+                        "title": pane.title,
+                        "ready": surfaceViews[key]?.hasLiveSurface ?? false,
+                        "selected": workspace.id == selectedWorkspaceID && pane.id == focusedPane,
+                    ]
+                    if let cwd = pane.workingDirectory { value["cwd"] = cwd }
+                    if let state = paneAgentState[key] { value["agent"] = state.status.rawValue }
+                    return value
+                }
+            return [
+                "id": workspace.id.uuidString,
+                "name": workspace.displayName,
+                "accent": workspace.accentHex,
+                "archived": workspace.archived,
+                "selected": workspace.id == selectedWorkspaceID,
+                "panes": panes,
+            ]
+        }
+    }
+
+    func webRemoteThemePayload() -> [String: Any] {
+        let theme = Theme.current
+        let accentColor = accent
+        return [
+            "id": theme.id,
+            "dark": theme.isDark,
+            "background": "#\(theme.background.rgbHex)",
+            "foreground": "#\(theme.foreground.rgbHex)",
+            "cursor": "#\(accentColor.rgbHex)",
+            "selectionBackground": "#\(accentColor.rgbHex)",
+            "selectionForeground": "#\(theme.foreground.rgbHex)",
+            "palette": theme.palette.map { "#\($0.rgbHex)" },
+            "chrome": [
+                "window": "#\(theme.bgWindow.rgbHex)",
+                "pane": "#\(theme.bgPane.rgbHex)",
+                "sidebar": "#\(theme.bgSidebar.rgbHex)",
+                "text1": "#\(theme.text1.rgbHex)",
+                "text3": "#\(theme.text3.rgbHex)",
+                "text4": "#\(theme.text4.rgbHex)",
+                "accent": "#\(accentColor.rgbHex)",
+            ],
+        ]
+    }
+
+    func webRemoteBrandPayload() -> [String: Any]? {
+        guard let dataURL = WebRemoteBrandIcon.dataURL(for: appIconPreset) else { return nil }
+        return [
+            "preset": appIconPreset.rawValue,
+            "dataURL": dataURL,
+        ]
+    }
+
+    func webRemoteTerminalSnapshot(pane: String) -> WebRemoteTerminalSnapshotResult {
+        guard let key = Self.parsePaneKey(pane) else { return .failure("bad-request") }
+        guard paneExists(key) else { return .failure("unknown-pane") }
+        guard let view = surfaceViews[key], view.ensureLiveForWebRemoteControl() else {
+            return .failure("pane-not-ready")
+        }
+        webRemoteControlledPanes.insert(key)
+        guard let snapshot = view.webRemoteSnapshot() else { return .failure("pane-not-ready") }
+        return .success(snapshot)
+    }
+
+    func webRemoteSetTerminalSize(pane: String, size: WebRemoteTerminalSize) -> String? {
+        guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
+        guard paneExists(key) else { return "unknown-pane" }
+        guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
+        view.setWebRemoteGridSize(size)
+        webRemoteControlledPanes.insert(key)
+        return nil
+    }
+
+    func webRemoteReleaseTerminalSize(pane: String) {
+        guard let key = Self.parsePaneKey(pane) else { return }
+        webRemoteControlledPanes.remove(key)
+        surfaceViews[key]?.releaseWebRemoteGridSize()
+    }
+
+    func isWebRemoteControlled(workspaceID: UUID, paneID: PaneID) -> Bool {
+        webRemoteControlledPanes.contains(
+            WorkspacePaneKey(workspace: workspaceID, pane: paneID)
+        )
+    }
+
+    func webRemoteSendInput(pane: String, data: Data) -> String? {
+        guard let key = Self.parsePaneKey(pane) else { return "bad-request" }
+        guard paneExists(key) else { return "unknown-pane" }
+        guard let view = surfaceViews[key], view.hasLiveSurface else { return "pane-not-ready" }
+        view.injectRemoteInput(data)
+        return nil
+    }
+
+    func webRemoteOpenProject(path: String) -> WebRemoteOpenProjectResult {
+        guard let standardized = WebRemoteProjectPath.resolveExistingDirectory(path) else {
+            return .failure("invalid-project-path")
+        }
+        return .success(openFolderWorkspace(standardized, addTabIfExisting: false))
+    }
+
+    func webRemoteCreateTerminal(workspace workspaceID: UUID) -> WebRemoteCreateTerminalResult {
+        guard let index = workspaces.firstIndex(where: { $0.id == workspaceID }) else {
+            return .failure("unknown-workspace")
+        }
+        guard !workspaces[index].archived else {
+            return .failure("workspace-archived")
+        }
+
+        selectWorkspace(workspaceID)
+        newTab()
+        guard let pane = workspaces[index].selectedTab?.focusedPane else {
+            return .failure("terminal-not-ready")
+        }
+        return .success("\(workspaceID.uuidString):\(pane.value)")
+    }
+
+    func webRemoteCloseTerminal(
+        pane: String,
+        confirmed: Bool
+    ) -> WebRemoteCloseTerminalResult {
+        guard let key = Self.parsePaneKey(pane) else { return .failure("bad-request") }
+        guard let workspaceIndex = workspaces.firstIndex(where: { $0.id == key.workspace }),
+              workspaces[workspaceIndex].panes[key.pane] != nil,
+              let tabIndex = workspaces[workspaceIndex].tabs.firstIndex(where: {
+                  $0.root.leaves.contains(key.pane)
+              })
+        else { return .failure("unknown-pane") }
+
+        if paneNeedsCloseConfirmation(key), !confirmed {
+            return .confirmationRequired
+        }
+
+        let tab = workspaces[workspaceIndex].tabs[tabIndex]
+        if tab.root.leaves.count == 1 {
+            guard workspaces[workspaceIndex].tabs.count > 1 else {
+                return .failure("last-terminal")
+            }
+            let wasSelected = workspaces[workspaceIndex].selectedTabID == tab.id
+            teardownTab(at: tabIndex, in: workspaceIndex, wsID: key.workspace)
+            if wasSelected {
+                let nextIndex = min(tabIndex, workspaces[workspaceIndex].tabs.count - 1)
+                workspaces[workspaceIndex].selectedTabID = workspaces[workspaceIndex].tabs[nextIndex].id
+            }
+            return .success
+        }
+
+        let (newRoot, survivor) = Self.removeLeaf(tab.root, target: key.pane)
+        guard let newRoot else { return .failure("unknown-pane") }
+        workspaces[workspaceIndex].tabs[tabIndex].root = newRoot
+        teardownPane(key, in: workspaceIndex)
+        if tab.focusedPane == key.pane {
+            workspaces[workspaceIndex].tabs[tabIndex].focusedPane = survivor
+                ?? newRoot.leaves.first
+                ?? PaneID(value: 0)
+        }
+        return .success
     }
 
     func selectWorkspace(_ id: UUID) {
@@ -2797,15 +3228,20 @@ final class WorkspaceStore: ObservableObject {
         let panes = workspaces[i].tabs[index].root.leaves
         for pane in panes {
             let key = WorkspacePaneKey(workspace: wsID, pane: pane)
-            workspaces[i].panes.removeValue(forKey: pane)
-            surfaceViews.removeValue(forKey: key)
-            ScrollbackArchive.delete(
-                id: ScrollbackArchive.fileID(forPaneKey: "\(wsID.uuidString):\(pane.value)"))
-            paneAgentState.removeValue(forKey: key)
-            paneProcesses.removeValue(forKey: key)
-            clearDockBadge(for: key)
+            teardownPane(key, in: i)
         }
         workspaces[i].tabs.remove(at: index)
+    }
+
+    private func teardownPane(_ key: WorkspacePaneKey, in workspaceIndex: Int) {
+        workspaces[workspaceIndex].panes.removeValue(forKey: key.pane)
+        surfaceViews.removeValue(forKey: key)
+        ScrollbackArchive.delete(
+            id: ScrollbackArchive.fileID(forPaneKey: "\(key.workspace.uuidString):\(key.pane.value)"))
+        paneAgentState.removeValue(forKey: key)
+        paneProcesses.removeValue(forKey: key)
+        webRemoteControlledPanes.remove(key)
+        clearDockBadge(for: key)
     }
 
     func selectTab(_ tabID: TabID) {
@@ -3052,11 +3488,17 @@ final class WorkspaceStore: ObservableObject {
     /// dedupes instead of racing into a duplicate; the source is upgraded to
     /// `.localRepo` in place once git reports the repo root.
     private func openFolder(_ directory: String) {
+        openFolderWorkspace(directory, addTabIfExisting: true)
+    }
+
+    @discardableResult
+    private func openFolderWorkspace(_ directory: String, addTabIfExisting: Bool) -> UUID {
         if let existingIndex = workspaces.firstIndex(where: { isAnchoredAt($0, directory) }) {
             if workspaces[existingIndex].archived { workspaces[existingIndex].archived = false }
-            selectWorkspace(workspaces[existingIndex].id)
-            newTab(cwd: directory)
-            return
+            let workspaceID = workspaces[existingIndex].id
+            selectWorkspace(workspaceID)
+            if addTabIfExisting { newTab(cwd: directory) }
+            return workspaceID
         }
         let dirName = (directory as NSString).lastPathComponent
         let wsID = appendWorkspace(cwd: directory, source: .plain,
@@ -3068,6 +3510,7 @@ final class WorkspaceStore: ObservableObject {
             }
             await refreshGitStatus(for: wsID)
         }
+        return wsID
     }
 
     /// True if `ws` opens into `directory` — for deduping folder opens. Matches
@@ -3614,7 +4057,7 @@ final class WorkspaceStore: ObservableObject {
             let paths = GitRepositoryWatcher.watchPaths(for: path)
             let watcher = GitRepositoryWatcher(paths: paths) { [weak self] in
                 guard NSApp.isActive else { return }
-                self?.gitRefreshCoordinator.request(id) { [weak self] in
+                self?.gitRefreshCoordinator.request(id, source: .fileWatcher) { [weak self] in
                     self?.refreshGitStatusNow(for: id)
                 }
             }
@@ -3776,6 +4219,7 @@ enum WorkspaceIconKind {
     case devin
     case omp
     case grok
+    case pi
     case ssh
     case vim
     case python
@@ -3792,7 +4236,7 @@ enum WorkspaceIconKind {
         case .python: return "chevron.left.forwardslash.chevron.right"
         case .node:   return "hexagon.fill"
         case .git:    return "arrow.triangle.branch"
-        case .claude, .codex, .opencode, .devin, .omp, .grok, .other:
+        case .claude, .codex, .opencode, .devin, .omp, .grok, .pi, .other:
             return nil
         }
     }
@@ -3806,6 +4250,7 @@ enum WorkspaceIconKind {
         case .devin:  return "D"
         case .omp:    return "π"
         case .grok:   return "G"
+        case .pi:     return "π"
         case .other(let s):
             return s.first.map { String($0).uppercased() } ?? "?"
         default:
@@ -3864,6 +4309,23 @@ enum AppIconPreset: String, CaseIterable, Identifiable {
     }
 }
 
+enum WebRemoteBrandIcon {
+    static func dataURL(for preset: AppIconPreset) -> String? {
+        guard let image = NSImage(named: preset.headerLogoAsset),
+              let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let png = bitmap.representation(using: .png, properties: [:])
+        else { return nil }
+        return "data:image/png;base64,\(png.base64EncodedString())"
+    }
+}
+
+@MainActor
+final class PaneActivityStore: ObservableObject {
+    @Published var paneProcesses: [WorkspaceStore.WorkspacePaneKey: String] = [:]
+    @Published var paneAgentState: [WorkspaceStore.WorkspacePaneKey: PaneAgentState] = [:]
+}
+
 extension WorkspaceStore {
     /// Best attention rank across the panes that are actually present in this
     /// workspace's tab layout. This deliberately does not reuse `agentSummary`:
@@ -3885,21 +4347,26 @@ extension WorkspaceStore {
         agentSummary(for: workspace)?.status
     }
 
-    /// Same as `agentStatusSummary` but also returns when the winning pane
-    /// last transitioned, so the sidebar card can show a live turn timer.
-    func agentSummary(for workspace: Workspace) -> (status: PaneAgentStatus, since: Date)? {
-        var best: (PaneAgentStatus, Date)?
+    /// Same as `agentStatusSummary` but also returns the winning pane's turn
+    /// start and last transition, so the sidebar card can run a turn timer
+    /// while the turn runs and freeze it once the turn ends.
+    func agentSummary(for workspace: Workspace)
+        -> (status: PaneAgentStatus, since: Date, updatedAt: Date)? {
+        var best: (status: PaneAgentStatus, since: Date, updatedAt: Date)?
         for paneID in workspace.panes.keys {
             let key = WorkspacePaneKey(workspace: workspace.id, pane: paneID)
             guard let entry = paneAgentState[key] else { continue }
             // `since` is the turn start (not last status change) so the sidebar
             // timer shows total turn elapsed time, not per-tool-call time.
             if let cur = best {
-                let merged = mergeStatus(cur.0, entry.status)
-                // Take the timestamp from whichever side won the merge.
-                best = (merged, merged == cur.0 ? cur.1 : entry.turnStartedAt)
+                let merged = mergeStatus(cur.status, entry.status)
+                // Take both timestamps from whichever side won the merge —
+                // they have to describe the same turn as the status does.
+                best = merged == cur.status
+                    ? (merged, cur.since, cur.updatedAt)
+                    : (merged, entry.turnStartedAt, entry.updatedAt)
             } else {
-                best = (entry.status, entry.turnStartedAt)
+                best = (entry.status, entry.turnStartedAt, entry.updatedAt)
             }
         }
         return best
@@ -3919,6 +4386,8 @@ extension WorkspaceStore {
         let status: PaneAgentStatus
         /// Turn start — drives the "2m" elapsed label (total turn time).
         let since: Date
+        /// Last hook time — freezes the elapsed label once the turn stops.
+        let updatedAt: Date
         var id: PaneID { paneID }
     }
 
@@ -3928,21 +4397,21 @@ extension WorkspaceStore {
     /// rank, then most-recently-updated — same precedence as the icon merge.
     private func agentPaneBreakdown(ordered: [(pane: PaneID, label: String)],
                                     workspaceID: UUID) -> [AgentPaneInfo] {
-        var out: [(info: AgentPaneInfo, updatedAt: Date)] = []
+        var out: [AgentPaneInfo] = []
         for (idx, item) in ordered.enumerated() {
             let key = WorkspacePaneKey(workspace: workspaceID, pane: item.pane)
             guard let e = paneAgentState[key], e.status != .idle else { continue }
-            out.append((AgentPaneInfo(paneID: item.pane, number: idx + 1,
-                                      label: item.label, kind: e.kind,
-                                      status: e.status, since: e.turnStartedAt),
-                        e.updatedAt))
+            out.append(AgentPaneInfo(paneID: item.pane, number: idx + 1,
+                                     label: item.label, kind: e.kind,
+                                     status: e.status, since: e.turnStartedAt,
+                                     updatedAt: e.updatedAt))
         }
         out.sort {
-            let (ra, rb) = (statusRank($0.info.status), statusRank($1.info.status))
+            let (ra, rb) = (statusRank($0.status), statusRank($1.status))
             if ra != rb { return ra > rb }
             return $0.updatedAt > $1.updatedAt
         }
-        return out.map(\.info)
+        return out
     }
 
     /// Non-idle agent panes in a single tab, numbered left→right within the
@@ -3967,7 +4436,7 @@ extension WorkspaceStore {
     /// A turn is actively running in these states — used to anchor the turn
     /// clock (set on the first non-busy → busy transition, kept through the
     /// turn). `.justCompleted`/`.failed`/`.idle` are turn-end / no-turn.
-    static func isBusyStatus(_ s: PaneAgentStatus) -> Bool {
+    nonisolated static func isBusyStatus(_ s: PaneAgentStatus) -> Bool {
         switch s {
         case .thinking, .tool, .compacting, .needsPermission: return true
         case .justCompleted, .failed, .needsReply, .idle:     return false
@@ -4057,6 +4526,7 @@ extension WorkspaceStore {
             case .devin: return .devin
             case .omp: return .omp
             case .grok: return .grok
+            case .pi: return .pi
             }
         }
 
@@ -4072,6 +4542,7 @@ extension WorkspaceStore {
         if names.contains(where: { $0 == "devin" || $0.contains("devin") }) { return .devin }
         if names.contains(where: { $0 == "omp" || $0.hasSuffix("/omp") }) { return .omp }
         if names.contains(where: { $0 == "grok" || $0.contains("grok") }) { return .grok }
+        if names.contains(where: { $0 == "pi" || $0.hasSuffix("/pi") }) { return .pi }
         if names.contains(where: { $0 == "vim" || $0 == "nvim" || $0 == "vi" }) { return .vim }
         if names.contains(where: { $0 == "python" || $0 == "python3" || $0 == "ipython" }) { return .python }
         if names.contains(where: { $0 == "node" || $0 == "deno" || $0 == "bun" }) { return .node }

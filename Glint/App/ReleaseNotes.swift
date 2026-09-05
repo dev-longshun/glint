@@ -52,6 +52,100 @@ enum ReleaseNotes {
     /// "发版「更新内容」" for the release-time workflow.
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "0.1.28-beta.4",
+            en: [
+                "Panes no longer get stranded when the layout changes. Two problems that came back in beta.2 and beta.3: after switching workspaces, a pane could keep showing the previous workspace's terminal until you relaunched Glint, and after closing or splitting panes, one side could stop resizing when you dragged the divider. Terminals are now handed between containers explicitly instead of racing for them.",
+                "VoiceOver and other accessibility tools now read the visible screen instead of the entire scrollback. Reading stays fast however much history a terminal has piled up, and that history — old tokens and secrets included — is no longer handed to any tool that asks for it. To read something that has scrolled off, scroll it back into view."
+            ],
+            zh: [
+                "布局变化不再让窗格「掉线」。beta.2 和 beta.3 上复发的两个问题：切换工作区后，窗格可能一直显示上一个工作区的终端，直到重启 Glint；关闭或拆分窗格后，拖动分割线可能有一侧不再跟着变化。终端现在在容器之间显式交接，不再靠抢。",
+                "VoiceOver 等辅助工具现在读取的是屏幕可视区，而不是整个滚动历史。无论终端积累了多少历史，朗读都保持流畅；这些历史内容（包括滚上去的旧 token 和密钥）也不再交给任何前来索取的辅助工具。想读已经滚出屏幕的内容，把它滚回可视区即可。"
+            ]
+        ),
+        ReleaseNote(
+            version: "0.1.28-beta.3",
+            en: [
+                "Dictation and voice input now work in a terminal. Glint exposes each pane as a standard text area, so hotkey dictation — the system's own, Qianwen, and friends — types straight into the terminal instead of falling back to its \"no text field here\" popup. Dictated text goes through the same input path as the keyboard, and anything a shell would execute on the spot (newlines, control characters) is refused rather than run.",
+                "VoiceOver can read a terminal: its contents, the current selection, and line-by-line navigation, with emoji and CJK text landing at the right offsets."
+            ],
+            zh: [
+                "终端现在支持听写和语音输入。Glint 把每个窗格暴露为标准文本区，系统听写、千问等快捷键听写会直接把文字打进终端，不再弹「这里没有输入框」的备用菜单。听写文本走的是和键盘一样的输入通道；换行、控制字符这类 shell 会立刻执行的内容会被拒绝，不会被执行。",
+                "VoiceOver 现在可以朗读终端：内容、当前选中的文本，以及逐行导航，emoji 和中日韩文字的位置也不会再错位。"
+            ]
+        ),
+        ReleaseNote(
+            version: "0.1.28-beta.2",
+            en: [
+                "Typing Chinese — or any other IME language — into the web remote from an iPhone or iPad no longer drops the composed text.",
+                "Long-pressing in the web remote on iPhone and iPad now brings up the system selection and paste menu, so you can paste into a terminal from your phone."
+            ],
+            zh: [
+                "在 iPhone / iPad 上通过网页远程输入中文（以及其它需要输入法的语言）不再丢字。",
+                "iPhone / iPad 上网页远程长按可以正常呼出系统的选择与粘贴菜单，终于能从手机往终端里粘贴内容了。"
+            ]
+        ),
+        ReleaseNote(
+            version: "0.1.28-beta.1",
+            en: [
+                "Switching workspaces no longer leaves a pane showing the previous workspace's terminal — a pane that lost its surface to a recycled container now reclaims it instead of waiting for a relaunch.",
+                "Programs run inside a Glint terminal can now ask for microphone access; the request used to be denied outright instead of showing a prompt.",
+                "The agent turn timer stops when the turn does. Both the sidebar and the pane summary now freeze at the turn's total time instead of counting up forever or hiding the number."
+            ],
+            zh: [
+                "切换工作区后，窗格不再显示上一个工作区的终端 —— 容器被回收导致丢失画面的窗格会自行重新接管，不用再重启应用。",
+                "终端里运行的程序现在可以申请麦克风权限；此前这类请求会被直接拒绝，连授权框都弹不出来。",
+                "Agent 回合计时器会随回合结束而停止。侧边栏和窗格摘要现在都会停在这一回合的总耗时，不再一直往上走、也不再直接把数字藏掉。"
+            ]
+        ),
+        ReleaseNote(
+            version: "0.1.27-beta.2",
+            en: [
+                "Web Remote is steadier on phones: two-finger scrolling works in terminal panes, rapid pane switches no longer bounce back, and stale connections automatically reconnect after network or page interruptions.",
+                "Closing a split no longer briefly leaves the surviving terminal blank; the remaining pane stays attached throughout the layout transition."
+            ],
+            zh: [
+                "网页远程端在手机上更稳定：终端窗格支持双指滚动，快速切换窗格不再跳回旧选择，网络或页面中断导致连接失效时也会自动重连。",
+                "关闭分屏时，保留下来的终端不再短暂白屏；布局切换过程中窗格会持续保持连接。"
+            ]
+        ),
+        ReleaseNote(
+            version: "0.1.27-beta.1",
+            en: [
+                "Control your terminals from a browser: open Glint's web remote on your phone or another machine on the same network, see live output, and type into any pane. Traffic is end-to-end encrypted and gated by an access key you can rotate at any time.",
+                "pi joins Claude Code and Codex as a built-in agent — install its hooks from Settings and Glint tracks its sessions, tool calls, and prompts for input just like the others, including session restore.",
+                "Middle-click a workspace in the sidebar to close it. Can be turned off in Settings ▸ General ▸ Workspace.",
+                "Fixed panes jumping to the wrong size while dragging a divider, and the resize cursor no longer disappears over dividers."
+            ],
+            zh: [
+                "用浏览器控制终端：在手机或同一网络下的另一台设备上打开 Glint 的网页远程端，即可实时查看输出并向任意窗格输入。通信全程加密，并由可随时重置的访问密钥保护。",
+                "pi 加入内置 Agent 行列，与 Claude Code、Codex 并列 —— 在设置里安装 hooks 后，Glint 会像对待其它 Agent 一样跟踪它的会话、工具调用和待输入提示，也支持会话恢复。",
+                "在侧栏用鼠标中键点击工作区即可关闭。可在「设置 ▸ 通用 ▸ 工作区」中关闭该行为。",
+                "修复拖动分隔条时窗格尺寸跳变的问题，分隔条上的调整光标也不再消失。"
+            ]
+        ),
+        ReleaseNote(
+            version: "0.1.26-beta.5",
+            en: [
+                "Fixed panes showing another workspace's terminal after a workspace or tab switch: SwiftUI-recycled pane containers could be reclaimed by the outgoing workspace's terminal surface; that stale re-attach is now blocked."
+            ],
+            zh: [
+                "修复切换 workspace 或标签页后，窗格可能显示另一个 workspace 终端内容的问题：被 SwiftUI 复用的窗格容器可能被切走的 workspace 的终端 surface 重新占用，现已拦截这类过期的重新挂载。"
+            ]
+        ),
+        ReleaseNote(
+            version: "0.1.26-beta.4",
+            en: [
+                "Grok Build joins the built-in agent lineup: live status in the sidebar and tabs, one-click hook install in Settings → Agents, and per-pane session restore on relaunch.",
+                "New in Settings → Memory: automatically release terminals left idle at an empty shell prompt. A released pane frees its renderer and shell, keeps its scrollback and folder, and comes back instantly on click or focus. Terminals running commands or agents, holding typed-but-unsent input, or with background jobs are never touched — and the feature is off by default.",
+                "Snappier under load: per-pane agent status updates no longer re-render the whole window, duplicate focus churn stops waking the terminal renderer, and Git status refresh backs off while an agent is rapidly writing files instead of re-scanning on every burst."
+            ],
+            zh: [
+                "Grok Build 加入内置 Agent 阵容：侧边栏和标签页实时显示状态，设置 → Agents 一键安装 hook，重启后每个窗格恢复各自会话。",
+                "设置 → 内存新增「自动释放空闲终端」：停在空 shell 提示符上闲置的终端会自动释放渲染器和 shell 进程，滚动历史和所在目录保留，点击或聚焦即刻恢复。正在跑命令或 Agent、有已输入未回车内容、有后台任务的终端一律不受影响——该功能默认关闭。",
+                "高负载下更流畅：单个窗格的 Agent 状态更新不再重绘整个窗口，重复的焦点事件不再唤醒终端渲染器，Agent 高频写文件时 Git 状态刷新会自动退避，不再每次风暴都全量扫描。"
+            ]
+        ),
+        ReleaseNote(
             version: "0.1.26-beta.3",
             en: [
                 "Oh My Pi (OMP) joins Claude, Codex, OpenCode, and Devin as a first-class agent: live status in the sidebar and tabs, one-click hook install in Settings → Agents, and per-pane session restore on relaunch.",
