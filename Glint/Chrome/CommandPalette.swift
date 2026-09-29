@@ -7,6 +7,7 @@ import Combine
 struct CommandPalette: View {
     @EnvironmentObject var store: WorkspaceStore
     @EnvironmentObject var codexHomes: CodexHomeStore
+    @EnvironmentObject var shortcuts: ShortcutStore
     @State private var query: String = ""
     @FocusState private var queryFocused: Bool
     /// Selection + the key-monitor token live on a reference type. The arrows
@@ -224,6 +225,19 @@ struct CommandPalette: View {
             tint: actionTint,
             action: { store.openNewWorkspace() }
         ))
+        if let cur = store.selectedWorkspace, !cur.archived {
+            items.append(.action(
+                title: "Rename Workspace",
+                subtitle: "Rename the current workspace",
+                symbol: "pencil",
+                shortcut: shortcuts.chord(for: .renameWorkspace).displayString,
+                tint: actionTint,
+                // Next runloop, after the palette has closed: while it's open
+                // the request bails (modal guard), and its close hands focus
+                // back to the terminal — this lets the rename field claim it last.
+                action: { DispatchQueue.main.async { store.requestRenameSelectedWorkspace() } }
+            ))
+        }
 
         // Worktree actions on the current workspace, only when it is one.
         if let cur = store.workspaces.first(where: { $0.id == store.selectedWorkspaceID }),

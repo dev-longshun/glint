@@ -4589,6 +4589,17 @@
         }
       }
     },
+    "Rename the current workspace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重命名当前工作区"
+          }
+        }
+      }
+    },
     "Render all terminal text in the family's bold variant.": {
       "extractionState": "manual",
       "localizations": {
