@@ -184,6 +184,16 @@ input:focus {
 
 .project-list-section { min-height: 0; display: flex; flex: 1; flex-direction: column; padding-top: 15px; }
 .list-heading { padding: 0 16px 11px; }
+.remote-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 16px 10px;
+  color: var(--muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+.remote-option input { accent-color: var(--accent); }
 .workspace-list { min-height: 0; flex: 1; overflow: auto; padding: 0 9px 18px; }
 .workspace-group { margin-bottom: 8px; }
 .workspace-pane-list { min-height: 0; }
@@ -289,7 +299,9 @@ input:focus {
   min-height: 0;
   padding: 12px 10px 4px;
   display: none;
-  touch-action: none;
+  /* Keep pinch zoom available until the two-finger handler identifies a
+     vertical terminal scroll. The handler then cancels only that gesture. */
+  touch-action: manipulation;
 }
 #terminal.visible { display: block; }
 #terminal .xterm { height: 100%; }

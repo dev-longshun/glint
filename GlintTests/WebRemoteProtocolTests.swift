@@ -3,6 +3,48 @@ import XCTest
 @testable import Glint
 
 final class WebRemoteProtocolTests: XCTestCase {
+    @MainActor
+    func testWebRemoteWakeSnapshotsPendingHistoryAtBrowserSize() throws {
+        let paneKey = "\(UUID().uuidString):0"
+        let archiveID = ScrollbackArchive.fileID(forPaneKey: paneKey)
+        let support = try XCTUnwrap(SupportDir.url)
+        let archiveDir = support.appendingPathComponent("scrollback", isDirectory: true)
+        let archive = archiveDir.appendingPathComponent("\(archiveID).ansi")
+        try FileManager.default.createDirectory(at: archiveDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: archive) }
+
+        let sentinel = "WEB_REMOTE_OFFLINE_HISTORY_SENTINEL"
+        let history = String(repeating: "W", count: 180) + sentinel
+        let historyData = Data(history.utf8)
+        try historyData.write(to: archive, options: [.atomic])
+        XCTAssertEqual(ScrollbackArchive.read(id: archiveID), historyData)
+
+        let defaults = UserDefaults.standard
+        let key = "glint.restoreTerminalScrollback"
+        let previous = defaults.object(forKey: key)
+        defaults.set(true, forKey: key)
+        defer {
+            if let previous { defaults.set(previous, forKey: key) }
+            else { defaults.removeObject(forKey: key) }
+        }
+
+        let view = GhosttySurfaceView(
+            frame: NSRect(x: 0, y: 0, width: 160, height: 120),
+            paneKey: paneKey
+        )
+        var receivedSnapshot: WebRemoteTerminalSnapshot?
+        view.webRemoteSnapshot(size: WebRemoteTerminalSize(columns: 240, rows: 40)) {
+            receivedSnapshot = $0
+        }
+        let deadline = Date().addingTimeInterval(1)
+        while receivedSnapshot == nil, Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+
+        let snapshot = try XCTUnwrap(receivedSnapshot)
+        XCTAssertTrue(String(decoding: snapshot.payload, as: UTF8.self).contains(sentinel))
+    }
+
     func testTerminalSizeAcceptsBrowserGridWithinSafeBounds() {
         XCTAssertEqual(
             WebRemoteTerminalSize.parse(["columns": 132, "rows": 43]),
@@ -322,17 +364,39 @@ final class WebRemoteProtocolTests: XCTestCase {
         let styleURL = try XCTUnwrap(
             Bundle.main.url(forResource: "web-remote", withExtension: "css")
         )
+        let inputURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "ime-input", withExtension: "mjs")
+        )
         let script = try String(contentsOf: scriptURL, encoding: .utf8)
         let style = try String(contentsOf: styleURL, encoding: .utf8)
+        let input = try String(contentsOf: inputURL, encoding: .utf8)
 
-        XCTAssertTrue(script.contains("\"touchstart\""))
-        XCTAssertTrue(script.contains("\"touchmove\""))
-        XCTAssertTrue(script.contains("terminal.scrollLines"))
-        XCTAssertTrue(script.contains("terminal.buffer.active.baseY > 0"))
-        XCTAssertTrue(script.contains("new WheelEvent(\"wheel\""))
-        XCTAssertTrue(script.contains(".xterm-screen"))
-        XCTAssertTrue(script.contains("passive: false"))
-        XCTAssertTrue(style.contains("touch-action: none"))
+        XCTAssertTrue(script.contains("installTwoFingerTerminalScrolling"))
+        XCTAssertTrue(input.contains("\"touchstart\""))
+        XCTAssertTrue(input.contains("\"touchmove\""))
+        XCTAssertTrue(input.contains("terminal.scrollLines"))
+        XCTAssertTrue(input.contains("terminal.buffer.active.baseY > 0"))
+        XCTAssertTrue(input.contains("terminal.modes?.mouseTrackingMode === \"none\""))
+        XCTAssertTrue(input.contains("new WheelEventLike(\"wheel\""))
+        XCTAssertTrue(input.contains(".xterm-screen"))
+        XCTAssertTrue(input.contains("passive: false"))
+        XCTAssertTrue(style.contains("touch-action: manipulation"))
+    }
+
+    func testBundledClientCanDisableTerminalAutoFocus() throws {
+        let scriptURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote", withExtension: "js")
+        )
+        let htmlURL = try XCTUnwrap(
+            Bundle.main.url(forResource: "web-remote-index", withExtension: "html")
+        )
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let html = try String(contentsOf: htmlURL, encoding: .utf8)
+
+        XCTAssertTrue(html.contains("id=\"auto-focus-terminal\""))
+        XCTAssertTrue(script.contains("glint-auto-focus-terminal"))
+        XCTAssertTrue(script.contains("(hover: none) and (pointer: coarse)"))
+        XCTAssertTrue(script.contains("if (autoFocusTerminal) terminal.focus()"))
     }
 
     func testBundledClientRecoversStaleWebSocketConnections() throws {

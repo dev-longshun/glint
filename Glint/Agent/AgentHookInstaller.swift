@@ -128,6 +128,7 @@ enum AgentHookInstaller {
         { CodexHookInstaller.isInstalled() },
         { DevinHookInstaller.isInstalled() },
         { GrokHookInstaller.isInstalled() },
+        { AgyHookInstaller.isInstalled() },
     ]
 
     /// Delete the shared reporter script iff no installed agent still
@@ -406,11 +407,15 @@ enum AgentHookInstaller {
       # captured that message as the value and made every `[ -z ... ]`
       # fallback below dead. Take the output only when plutil exits 0.
       # Claude/Codex use snake_case; Grok's hook payload uses camelCase
-      # `sessionId`. Try both, then fall back to GROK_SESSION_ID env (set on
-      # every Grok hook process).
+      # `sessionId`. Try both, then Antigravity's `conversationId` (also
+      # camelCase), then fall back to GROK_SESSION_ID env (set on every Grok
+      # hook process).
       SESSION=$(/usr/bin/plutil -extract session_id raw -o - "$TMP" 2>/dev/null) || SESSION=""
       if [ -z "$SESSION" ]; then
         SESSION=$(/usr/bin/plutil -extract sessionId raw -o - "$TMP" 2>/dev/null) || SESSION=""
+      fi
+      if [ -z "$SESSION" ]; then
+        SESSION=$(/usr/bin/plutil -extract conversationId raw -o - "$TMP" 2>/dev/null) || SESSION=""
       fi
       if [ -z "$SESSION" ] && [ -n "${GROK_SESSION_ID:-}" ]; then
         SESSION="$GROK_SESSION_ID"
@@ -427,6 +432,22 @@ enum AgentHookInstaller {
       if [ "$HOOK" = "PermissionRequest" ] && [ "$AGENT" = "codex" ]; then
         TRANSCRIPT=$(/usr/bin/plutil -extract transcript_path raw -o - "$TMP" 2>/dev/null) || TRANSCRIPT=""
         TURN=$(/usr/bin/plutil -extract turn_id raw -o - "$TMP" 2>/dev/null) || TURN=""
+      fi
+      # Antigravity (agy) has no UserPromptSubmit event; the turn's first
+      # PreInvocation plays that role — remap it so the turn timer starts
+      # with the turn instead of the first tool call. Verified against the
+      # live CLI: invocationNum is zero-based (first call reports 0).
+      if [ "$HOOK" = "PreInvocation" ] && [ "$AGENT" = "agy" ]; then
+        NUM=$(/usr/bin/plutil -extract invocationNum raw -o - "$TMP" 2>/dev/null) || NUM=""
+        if [ "$NUM" = "0" ]; then HOOK="UserPromptSubmit"; fi
+      fi
+      # Antigravity reports a failed loop via Stop + terminationReason ERROR
+      # (proto enum, SCREAMING_SNAKE — e.g. NO_TOOL_CALL on a normal finish)
+      # rather than a distinct event — remap to StopFailure so the pane earns
+      # the sticky red badge.
+      if [ "$HOOK" = "Stop" ] && [ "$AGENT" = "agy" ]; then
+        REASON=$(/usr/bin/plutil -extract terminationReason raw -o - "$TMP" 2>/dev/null) || REASON=""
+        case "$REASON" in ERROR|error) HOOK="StopFailure" ;; esac
       fi
       /bin/rm -f "$TMP"
       trap - EXIT HUP INT TERM
@@ -1805,6 +1826,181 @@ enum GrokHookInstaller {
             NSLog("[glint] grok hooks written to \(hooksURL.path)")
         } catch {
             NSLog("[glint] writing ~/.grok/hooks/glint.json failed: \(error)")
+        }
+    }
+}
+
+/// Installs Glint's hook entry for the Antigravity CLI (`agy`) into the
+/// shared `~/.gemini/config/hooks.json`.
+///
+/// Unlike Grok's dedicated file, agy reads ONE shared hooks document that
+/// the TUI and backend keep synchronized — so we merge like the Claude
+/// installer: rewrite only our own named entry (`"glint"`), preserve every
+/// other top-level named hook the user (or plugins) registered.
+///
+/// Schema (per agy's built-in docs, `agy-customizations/docs/hooks.md`):
+/// a top-level map of named hooks, each holding event keys.
+/// `PreToolUse`/`PostToolUse` take GROUPED entries (`matcher` regex + inner
+/// `hooks` array); the lifecycle events (`PreInvocation`, `Stop`) take a
+/// FLAT handler list and ignore matchers. Commands run via `sh -c` with
+/// the hooks file's directory as cwd; payloads arrive camelCase on stdin
+/// (`conversationId`, `toolCall.name`, `invocationNum`, `terminationReason`).
+///
+/// agy has no permission-prompt hook (approvals are TUI-native, same gap as
+/// Grok) and no `UserPromptSubmit`; the shared reporter remaps the turn's
+/// first `PreInvocation` to `UserPromptSubmit` and error `Stop`s to
+/// `StopFailure` so the status machine sees familiar events.
+enum AgyHookInstaller {
+    /// Events agy documents that Glint's status machine reacts to (via the
+    /// reporter's remaps). Internal, not private, so tests can assert the
+    /// exact set.
+    static let hookEvents: [String] = [
+        "PreInvocation",
+        "PreToolUse",
+        "PostToolUse",
+        "Stop",
+    ]
+
+    /// agy requires a matcher on tool events and ignores it on lifecycle
+    /// events; only the tool pair gets a grouped entry.
+    static let toolEvents: Set<String> = ["PreToolUse", "PostToolUse"]
+
+    /// Glint's named entry inside the shared hooks document.
+    static let entryName = "glint"
+
+    static func defaultHooksURL() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".gemini/config/hooks.json")
+    }
+
+    static func isInstalled(hooksURL: URL = AgyHookInstaller.defaultHooksURL()) -> Bool {
+        guard let data = try? Data(contentsOf: hooksURL),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let ours = root[entryName] as? [String: Any] else {
+            return false
+        }
+        for (_, bucket) in ours {
+            guard let arr = bucket as? [Any] else { continue }
+            for entry in arr {
+                // Grouped tool entry: {matcher, hooks: [{command}]}; flat
+                // lifecycle entry: {command} directly.
+                if let flat = entry as? [String: Any],
+                   (flat["command"] as? String)?.contains("glint-report.sh") == true {
+                    return true
+                }
+                if let group = entry as? [String: Any],
+                   let inner = group["hooks"] as? [[String: Any]],
+                   inner.contains(where: { ($0["command"] as? String)?.contains("glint-report.sh") == true }) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    /// Whether the Antigravity CLI itself looks installed on this Mac.
+    /// The `~/.gemini` root alone is NOT enough (gemini-cli shares it) —
+    /// require the agy-owned state dir or the binary on PATH. Installing
+    /// our hooks only creates `~/.gemini/config/`, which must not flip
+    /// detection on a gemini-cli-only machine.
+    static func isAgentPresent() -> Bool {
+        AgentPresence.commandExists("agy")
+            || AgentPresence.directoryExists(".gemini/antigravity-cli")
+    }
+
+    static func installIfNeeded(socketPath: String) {
+        guard let scriptPath = AgentHookInstaller.ensureReporterScript() else { return }
+        mergeAgyHooks(scriptPath: scriptPath)
+        _ = socketPath
+    }
+
+    /// Remove Glint's named entry from the shared hooks document, leaving
+    /// every other hook untouched. The file itself is deleted only when the
+    /// removal leaves an empty document (ours was the only entry). The
+    /// shared reporter script is dropped when no other agent uses it.
+    /// Injectable `hooksURL` keeps unit tests off the real config.
+    static func uninstall(hooksURL: URL = AgyHookInstaller.defaultHooksURL()) {
+        guard let data = try? Data(contentsOf: hooksURL),
+              var root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return
+        }
+        guard root[entryName] != nil else { return }
+        root.removeValue(forKey: entryName)
+        do {
+            if root.isEmpty {
+                try FileManager.default.removeItem(at: hooksURL)
+            } else {
+                let pruned = SafeJSON.data(root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
+                try pruned?.write(to: hooksURL, options: [.atomic])
+            }
+            NSLog("[glint] agy hooks removed from \(hooksURL.path)")
+        } catch {
+            NSLog("[glint] removing agy hooks from \(hooksURL.path) failed: \(error)")
+        }
+        if hooksURL == AgyHookInstaller.defaultHooksURL() {
+            AgentHookInstaller.removeReporterScriptIfUnused()
+        }
+    }
+
+    static func mergeAgyHooks(scriptPath: String,
+                              hooksURL: URL = AgyHookInstaller.defaultHooksURL()) {
+        let dir = hooksURL.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(
+                at: dir,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            NSLog("[glint] couldn't create ~/.gemini/config: \(error)")
+            return
+        }
+
+        // Preserve every other named hook in the shared document; rewrite
+        // only our own entry.
+        var root: [String: Any] = [:]
+        if let existing = try? Data(contentsOf: hooksURL),
+           let decoded = try? JSONSerialization.jsonObject(with: existing) as? [String: Any] {
+            root = decoded
+        }
+        var ours: [String: Any] = [:]
+        for event in hookEvents {
+            let command = "\(scriptPath) \(event) agy"
+            if toolEvents.contains(event) {
+                ours[event] = [
+                    [
+                        "matcher": "*",
+                        "hooks": [["type": "command", "command": command, "timeout": 10]],
+                    ]
+                ] as [Any]
+            } else {
+                ours[event] = [
+                    ["type": "command", "command": command, "timeout": 10]
+                ] as [Any]
+            }
+        }
+        root[entryName] = ours
+
+        guard let data = SafeJSON.data(
+            root,
+            options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        ) else {
+            NSLog("[glint] ~/.gemini/config/hooks.json: hook tree not serializable, skipping write")
+            return
+        }
+        // Skip rewrite when content is identical (idempotent install).
+        if let existing = try? Data(contentsOf: hooksURL), existing == data {
+            return
+        }
+        do {
+            let mode = FileManager.default.fileExists(atPath: hooksURL.path)
+                ? posixPermissions(atPath: hooksURL.path)
+                : 0o600
+            try data.write(to: hooksURL, options: [.atomic])
+            setPosixPermissions(mode, atPath: hooksURL.path)
+            NSLog("[glint] agy hooks written to \(hooksURL.path)")
+        } catch {
+            NSLog("[glint] writing \(hooksURL.path) failed: \(error)")
         }
     }
 }

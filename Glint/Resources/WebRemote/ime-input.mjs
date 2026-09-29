@@ -13,6 +13,111 @@ export function shouldUseNativeTouchInput(navigatorLike, targetWindow) {
   return targetWindow?.matchMedia?.("(hover: none) and (pointer: coarse)").matches ?? true;
 }
 
+export function installTwoFingerTerminalScrolling(
+  terminal,
+  target,
+  WheelEventLike = WheelEvent
+) {
+  let touchScrollY = null;
+  let touchStartY = null;
+  let touchStartDistance = null;
+  let touchGesture = null;
+  let touchScrollRemainder = 0;
+
+  const reset = () => {
+    touchScrollY = null;
+    touchStartY = null;
+    touchStartDistance = null;
+    touchGesture = null;
+    touchScrollRemainder = 0;
+  };
+  const touchCenterY = touches => (touches[0].clientY + touches[1].clientY) / 2;
+  const touchDistance = touches => Math.hypot(
+    touches[0].clientX - touches[1].clientX,
+    touches[0].clientY - touches[1].clientY
+  );
+  const terminalLineHeight = () => {
+    const row = target.querySelector(".xterm-rows > div");
+    const measured = row?.getBoundingClientRect().height;
+    return measured > 0
+      ? measured
+      : terminal.options.fontSize * terminal.options.lineHeight;
+  };
+  const scrollLines = (lines, clientX, clientY) => {
+    // When xterm owns scrollback, scroll it directly. Synthetic one-line wheel
+    // events only move its viewport once on touch browsers, then stall.
+    if (terminal.buffer.active.baseY > 0
+        && terminal.modes?.mouseTrackingMode === "none") {
+      terminal.scrollLines(lines);
+      return;
+    }
+
+    // Full-screen TUIs may own the mouse. Preserve wheel delivery for those
+    // applications so they can scroll themselves.
+    const screen = target.querySelector(".xterm-screen");
+    if (!screen) return;
+    const direction = Math.sign(lines);
+    for (let index = 0; index < Math.abs(lines); index += 1) {
+      screen.dispatchEvent(new WheelEventLike("wheel", {
+        bubbles: true,
+        cancelable: true,
+        clientX,
+        clientY,
+        deltaMode: WheelEventLike.DOM_DELTA_LINE,
+        deltaY: direction,
+      }));
+    }
+  };
+
+  target.addEventListener("touchstart", event => {
+    if (event.touches.length !== 2) {
+      reset();
+      return;
+    }
+    touchScrollY = touchCenterY(event.touches);
+    touchStartY = touchScrollY;
+    touchStartDistance = touchDistance(event.touches);
+    touchGesture = "undecided";
+    touchScrollRemainder = 0;
+  }, { passive: false });
+
+  target.addEventListener("touchmove", event => {
+    if (event.touches.length !== 2 || touchScrollY === null) {
+      reset();
+      return;
+    }
+    const nextY = touchCenterY(event.touches);
+    const verticalMovement = Math.abs(nextY - touchStartY);
+    const scaleMovement = Math.abs(touchDistance(event.touches) - touchStartDistance);
+    if (touchGesture === "undecided") {
+      // Leave pinch/zoom to the browser. Only claim the gesture once the
+      // fingers have clearly moved vertically together.
+      if (scaleMovement > 8 && scaleMovement > verticalMovement) {
+        touchGesture = "pinch";
+        reset();
+        return;
+      }
+      if (verticalMovement > 4 && verticalMovement > scaleMovement) {
+        touchGesture = "scroll";
+      }
+    }
+    if (touchGesture === "pinch") return;
+    if (touchGesture === "scroll") event.preventDefault();
+    touchScrollRemainder += touchScrollY - nextY;
+    touchScrollY = nextY;
+
+    const lineHeight = terminalLineHeight();
+    const lines = Math.trunc(touchScrollRemainder / lineHeight);
+    if (lines === 0) return;
+    const clientX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+    scrollLines(lines, clientX, nextY);
+    touchScrollRemainder -= lines * lineHeight;
+  }, { passive: false });
+
+  target.addEventListener("touchend", reset);
+  target.addEventListener("touchcancel", reset);
+}
+
 function pastedTextFromInput(baseline, newValue, eventData) {
   if (baseline) {
     const prefix = baseline.value.slice(0, baseline.start);

@@ -1,5 +1,77 @@
 import AppKit
+import OSLog
 import SwiftUI
+
+/// Stops a dead macOS view service from taking the whole session down.
+///
+/// macOS parents cross-process `NSRemoteView`s into our window's ordering
+/// group for UI the app never asked for — the text-input cursor HUD
+/// (`TextInputUI.xpc.CursorUIViewService`) and the data-detector helper
+/// (`SafariPlatformSupport.Helper`) both appear there while a pane has
+/// keyboard focus. When macOS reclaims one of those services, its remote view
+/// can stay parented to the window. The next child window to order on screen
+/// makes AppKit broadcast `containingWindowWillOrderOnScreen:` across the
+/// whole ordering group; the orphaned remote view fails an internal ViewBridge
+/// assertion, and the `NSInternalInconsistencyException` it raises unwinds with
+/// no handler anywhere above it. Nothing of ours is on that stack — a healthy
+/// process dies for a service it does not own, losing every terminal in the
+/// window.
+///
+/// `-[NSWindow addChildWindow:ordered:]` is the narrowest frame that encloses
+/// the entire broadcast (`_rebuildOrderingGroup:` → `_doOrderWindow:` →
+/// `NSNotificationCenter` → the remote view), and every child-window
+/// presentation the app can make — SwiftUI `.popover`, sheets, menus — funnels
+/// through it. Wrapping that one method in `@try`/`@catch` is therefore enough
+/// to contain the failure, and it is the *only* thing that is: the exception
+/// never reaches `-[NSApplication reportException:]`, and an uncaught-exception
+/// handler cannot resume execution. Both alternatives were measured against a
+/// reproduction before landing this; see the tracker.
+///
+/// The `@catch` lives in ObjC (`ChildWindowExceptionGuard.m`) because Swift
+/// cannot catch ObjC exceptions. This type owns the policy it applies.
+@objc(GlintChildWindowExceptionGuard)
+final class ChildWindowExceptionGuard: NSObject {
+    private static let log = Logger(subsystem: "app.glint", category: "ChildWindowExceptionGuard")
+
+    /// Swizzles `-[NSWindow addChildWindow:ordered:]`. Idempotent, and a no-op
+    /// if AppKit ever stops responding to that selector, so a future macOS can
+    /// only cost us the guard — never the launch.
+    static func install() {
+        glint_installChildWindowExceptionGuard()
+    }
+
+    /// Whether the swizzle is in place. Exposed so a test can catch the guard
+    /// silently not being installed — an unguarded app looks completely normal
+    /// until the day a view service dies.
+    static var isInstalled: Bool { glint_childWindowExceptionGuardIsInstalled() }
+
+    /// Recognises the "a view service died while its remote view was still in
+    /// our ordering group" family, and nothing else. Anything that fails this
+    /// test is re-thrown by the ObjC guard and still crashes loudly.
+    ///
+    /// Both halves are load-bearing. The name alone is far too broad —
+    /// `NSInternalInconsistencyException` is also the standard raise for our
+    /// own precondition failures. The stack is what pins it to AppKit's
+    /// cross-process view plumbing: `ViewBridge` is the framework that owns
+    /// `NSRemoteView`, and neither string can appear in a frame the app itself
+    /// produced. An exception carrying no symbolicated stack is re-thrown
+    /// rather than guessed at.
+    @objc static func shouldSwallow(name: String, callStack: [String]) -> Bool {
+        guard name == NSExceptionName.internalInconsistencyException.rawValue else { return false }
+        return callStack.contains { $0.contains("NSRemoteView") || $0.contains("ViewBridge") }
+    }
+
+    /// Swallowing must never be silent: this is the only trace that a popover,
+    /// sheet or menu quietly failed to present.
+    @objc static func noteSwallowed(name: String, reason: String?) {
+        log.fault(
+            """
+            swallowed orphaned remote-view exception in addChildWindow: \
+            \(name, privacy: .public) — \(reason ?? "(no reason)", privacy: .public)
+            """
+        )
+    }
+}
 
 @main
 struct GlintApp: App {
@@ -11,6 +83,10 @@ struct GlintApp: App {
     @StateObject private var shortcuts = ShortcutStore()
 
     init() {
+        // Before any window exists: a dead macOS view service left parented to
+        // our window otherwise turns the next popover/sheet/menu into a crash.
+        ChildWindowExceptionGuard.install()
+
         #if DEBUG
         // Dev builds run under their own defaults domain (app.glint.Glint.dev).
         // The first dev launch copies the production app's glint.* preferences

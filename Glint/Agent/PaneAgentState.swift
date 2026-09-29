@@ -9,6 +9,7 @@ enum PaneAgentKind: String, Codable {
     case omp
     case grok
     case pi
+    case agy
 
     /// Human-facing label for the per-pane summary popover.
     var displayName: String {
@@ -20,6 +21,7 @@ enum PaneAgentKind: String, Codable {
         case .omp:      return "OMP"
         case .grok:     return "Grok"
         case .pi:       return "Pi"
+        case .agy:      return "Antigravity"
         }
     }
 
@@ -100,6 +102,13 @@ enum PaneAgentKind: String, Codable {
             // interactive `--resume` would). Falls back to `pi --continue`
             // (resume the most-recent) when no id was captured.
             return validated.map { "pi --session-id \($0)\n" } ?? "pi --continue\n"
+        case .agy:
+            // Antigravity's hooks carry `conversationId` in every payload;
+            // `--conversation <id>` resumes exactly that conversation, so
+            // multiple agy panes in one workspace land back in their own
+            // sessions instead of the most-recent one. Falls back to
+            // `--continue` (resume the most-recent) when no id was captured.
+            return validated.map { "agy --conversation \($0)\n" } ?? "agy --continue\n"
         }
     }
 
@@ -140,7 +149,7 @@ enum PaneAgentKind: String, Codable {
                 LaunchFlagSpec(name: "--permission-mode", takesValue: true),
                 LaunchFlagSpec(name: "--sandbox", takesValue: true),
             ]
-        case .opencode, .devin, .omp, .pi:
+        case .opencode, .devin, .omp, .pi, .agy:
             return []
         }
     }

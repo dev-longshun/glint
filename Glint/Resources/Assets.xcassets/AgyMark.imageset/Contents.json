@@ -1,0 +1,18 @@
+{
+  "images": [
+    {
+      "filename": "agy24.png",
+      "idiom": "universal",
+      "scale": "1x"
+    },
+    {
+      "filename": "agy48.png",
+      "idiom": "universal",
+      "scale": "2x"
+    }
+  ],
+  "info": {
+    "author": "xcode",
+    "version": 1
+  }
+}

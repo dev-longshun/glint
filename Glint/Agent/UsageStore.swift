@@ -19,6 +19,11 @@ struct AgentQuota: Hashable, Codable {
     /// Source-reported window sizes. nil keeps legacy 5h / 7d labels.
     var primaryWindowMinutes: Int? = nil
     var secondaryWindowMinutes: Int? = nil
+    /// True when the source confirms the window but not its usage numbers
+    /// (Grok team/unified billing: xAI's endpoint reports cap 0). The row
+    /// still renders — period countdown and all — with "—" in place of a
+    /// fabricated percent. nil/absent decodes as "known" for old snapshots.
+    var percentUnknown: Bool? = nil
 
     var primaryWindowLabel: String {
         Self.windowLabel(minutes: primaryWindowMinutes, fallback: "5h")
@@ -53,7 +58,8 @@ struct AgentQuota: Hashable, Codable {
             weeklyResetsAt: finite(weeklyResetsAt),
             planType: planType,
             primaryWindowMinutes: primaryWindowMinutes,
-            secondaryWindowMinutes: secondaryWindowMinutes
+            secondaryWindowMinutes: secondaryWindowMinutes,
+            percentUnknown: percentUnknown
         )
     }
 
@@ -125,6 +131,12 @@ struct CodexRefreshCoordinator {
 ///     them out-of-process is the OAuth usage endpoint using the token in the
 ///     login keychain. That path is best-effort (see `ClaudeUsageReader`); any
 ///     failure leaves `claude == nil` so the row simply doesn't render.
+///   • Grok exposes usage on the same billing endpoint its CLI polls,
+///     authorized by the plain-file token `grok login` keeps in
+///     `~/.grok/auth.json` — no keychain, so it can never prompt
+///     (`GrokUsageReader`). Team / unified-billing accounts don't get numbers
+///     on that surface (cap reports 0); those reads stay nil instead of
+///     drawing a fake 0% bar.
 ///
 /// Each agent has its own switch. With both off, polling stops entirely and
 /// nothing is read from disk or network. With one off, only that agent's
@@ -136,6 +148,7 @@ struct CodexRefreshCoordinator {
 final class UsageStore: ObservableObject {
     @Published private(set) var claude: AgentQuota?
     @Published private(set) var codex: AgentQuota?
+    @Published private(set) var grok: AgentQuota?
     @Published private(set) var codexHomeStatuses: [CodexHomeStatus] = []
 
     var codexSidebarQuotas: [CodexSidebarQuota] {
@@ -171,24 +184,36 @@ final class UsageStore: ObservableObject {
             if codexEnabled { refreshNow() }
         }
     }
+    @Published var grokEnabled: Bool {
+        didSet {
+            guard grokEnabled != oldValue else { return }
+            UserDefaults.standard.set(grokEnabled, forKey: Self.grokKey)
+            if !grokEnabled { grok = nil; Self.saveQuota(nil, agent: .grok) }
+            syncTimer()
+            if grokEnabled { refreshNow() }
+        }
+    }
 
     private static let claudeKey = "glint.showClaudeUsage"
     private static let codexKey = "glint.showCodexUsage"
+    private static let grokKey = "glint.showGrokUsage"
     private var timer: Timer?
     private var codexRefreshCoordinator = CodexRefreshCoordinator()
     /// Refresh cadence. Rate-limit windows move on the order of minutes, so a
     /// minute of staleness is invisible and keeps disk/network churn trivial.
     private let interval: TimeInterval = 60
 
-    private var anyEnabled: Bool { claudeEnabled || codexEnabled }
+    private var anyEnabled: Bool { claudeEnabled || codexEnabled || grokEnabled }
 
     init() {
         self.claudeEnabled = (UserDefaults.standard.object(forKey: Self.claudeKey) as? Bool) ?? false
         self.codexEnabled = (UserDefaults.standard.object(forKey: Self.codexKey) as? Bool) ?? false
+        self.grokEnabled = (UserDefaults.standard.object(forKey: Self.grokKey) as? Bool) ?? false
         // Show the last-known numbers immediately so the bars don't pop in blank
         // on launch; the first poll refreshes them a moment later.
         if claudeEnabled { self.claude = Self.loadQuota(.claude) }
         if codexEnabled { self.codex = Self.loadQuota(.codex) }
+        if grokEnabled { self.grok = Self.loadQuota(.grok) }
         syncTimer()
     }
 
@@ -263,6 +288,14 @@ final class UsageStore: ObservableObject {
                 }
             }
         }
+        if grokEnabled {
+            Task { [weak self] in
+                let quota = await GrokUsageReader.read()
+                await MainActor.run {
+                    self?.apply(quota, to: .grok)
+                }
+            }
+        }
     }
 
     private func applyCodex(_ statuses: [CodexHomeStatus]) {
@@ -310,12 +343,16 @@ final class UsageStore: ObservableObject {
             guard codexEnabled, let quota else { return }
             codex = quota
             Self.saveQuota(quota, agent: agent)
+        case .grok:
+            guard grokEnabled, let quota else { return }
+            grok = quota
+            Self.saveQuota(quota, agent: agent)
         }
     }
 
     // MARK: Snapshot persistence (non-sensitive — UserDefaults is fine)
 
-    private enum Agent: String { case claude, codex }
+    private enum Agent: String { case claude, codex, grok }
 
     private static func snapshotKey(_ agent: Agent) -> String {
         "glint.usage.snapshot.\(agent.rawValue)"
@@ -552,6 +589,161 @@ enum CodexLiveReader {
             primaryWindowMinutes: primary.limit_window_seconds.map { $0 / 60 },
             secondaryWindowMinutes: secondary?.limit_window_seconds.map { $0 / 60 }
         )
+    }
+}
+
+// MARK: - Grok (billing endpoint via the CLI's auth token)
+
+/// Reads Grok's usage from the same billing endpoint the Grok CLI's own
+/// billing extension polls (`cli-chat-proxy.grok.com/v1/billing`), authorizing
+/// with the access token `grok login` stores in `~/.grok/auth.json` — a plain
+/// file, so this path can never trigger a macOS prompt (unlike Claude's
+/// keychain). The token is owned and rotated by the Grok CLI; we only read it.
+///
+/// Fails closed like the other readers: a missing token, network error, or
+/// unexpected shape yields nil and the sidebar row simply doesn't render.
+///
+/// Account-surface caveat — the same conclusion CodexBar's Grok provider
+/// shipped (steipete/CodexBar): team / unified-billing accounts report
+/// `onDemandCap: {val: 0}`; the surface exposes the billing period but not
+/// usage numbers for them. Those reads still produce a quota (window + reset
+/// countdown) with `percentUnknown` set, so the sidebar shows a "—" track
+/// instead of a fabricated 0% bar. Personal / credits accounts (cap > 0, or
+/// a source-reported `creditUsagePercent`) get real numbers; if xAI ever
+/// exposes team usage here, it starts working unchanged.
+enum GrokUsageReader {
+    private static let endpoint = URL(string: "https://cli-chat-proxy.grok.com/v1/billing?format=credits")!
+
+    /// The observed weekly window, used as the bar's kind label when the
+    /// period dates can't be parsed ("7d", same rendering as Claude's weekly).
+    private static let fallbackWindowMinutes = 10_080
+
+    /// `~/.grok/auth.json` maps issuer URLs to credential objects; `key`
+    /// holds the OIDC access token the CLI refreshes on its own schedule.
+    private struct Auth: Decodable { let key: String? }
+
+    /// Proto-JSON money wrapper: `{"val": <number>}`.
+    private struct Amount: Decodable { let val: Double? }
+
+    private struct Period: Decodable {
+        let start: String?
+        let end: String?
+    }
+
+    private struct Config: Decodable {
+        let currentPeriod: Period?
+        let onDemandCap: Amount?
+        let onDemandUsed: Amount?
+        /// Reported by prepaid/credits surfaces; absent for team accounts.
+        let creditUsagePercent: Double?
+    }
+
+    private struct Payload: Decodable { let config: Config? }
+
+    static func read(grokHome: URL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".grok", isDirectory: true)) async -> AgentQuota? {
+        guard let token = loadToken(from: grokHome) else { return nil }
+        var req = URLRequest(url: endpoint)
+        req.httpMethod = "GET"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("grok-cli", forHTTPHeaderField: "User-Agent")
+        req.timeoutInterval = 10
+        guard let (data, resp) = try? await URLSession.shared.data(for: req),
+              let http = resp as? HTTPURLResponse, http.statusCode == 200 else { return nil }
+        return decode(data)
+    }
+
+    /// First non-empty access token in the auth map (single-login reality —
+    /// the file has exactly one issuer entry in practice).
+    static func loadToken(from grokHome: URL) -> String? {
+        let path = grokHome.appendingPathComponent("auth.json")
+        guard let data = try? Data(contentsOf: path),
+              let map = try? JSONDecoder().decode([String: Auth].self, from: data) else { return nil }
+        return map.values.compactMap(\.key).first { !$0.isEmpty }
+    }
+
+    static func decode(_ data: Data) -> AgentQuota? {
+        guard let config = (try? JSONDecoder().decode(Payload.self, from: data))?.config else { return nil }
+        return quota(from: config)
+    }
+
+    /// Maps a billing config onto the sidebar's quota model. The billing
+    /// surface has ONE window (the weekly usage period), so it lands in the
+    /// primary slot; `weeklyPercent` stays nil to avoid drawing the same
+    /// numbers twice.
+    ///
+    /// A zero cap means the account type doesn't expose usage numbers here
+    /// (team / unified billing — CodexBar shipped the same conclusion). The
+    /// row still renders: the period and its reset countdown are real, and
+    /// the percent degrades to "—" (`percentUnknown`) instead of drawing a
+    /// fabricated 0% bar. A source-reported `creditUsagePercent` wins over
+    /// the derived math when present.
+    private static func quota(from config: Config) -> AgentQuota? {
+        let start = config.currentPeriod?.start.flatMap(Self.parseDate)
+        let end = config.currentPeriod?.end.flatMap(Self.parseDate)
+        let minutes = Self.windowMinutes(start: start, end: end)
+
+        if let reported = config.creditUsagePercent, reported.isFinite {
+            return AgentQuota(
+                sessionPercent: max(0, min(reported, 100)),
+                weeklyPercent: nil,
+                sessionResetsAt: end,
+                weeklyResetsAt: nil,
+                planType: nil,
+                primaryWindowMinutes: minutes,
+                secondaryWindowMinutes: nil
+            )
+        }
+
+        let cap = config.onDemandCap?.val ?? 0
+        let used = config.onDemandUsed?.val ?? 0
+        guard cap > 0, used.isFinite else {
+            return AgentQuota(
+                sessionPercent: 0,
+                weeklyPercent: nil,
+                sessionResetsAt: end,
+                weeklyResetsAt: nil,
+                planType: nil,
+                primaryWindowMinutes: minutes,
+                secondaryWindowMinutes: nil,
+                percentUnknown: true
+            )
+        }
+        let percent = max(0, min(used / cap * 100, 100))
+        return AgentQuota(
+            sessionPercent: percent,
+            weeklyPercent: nil,
+            sessionResetsAt: end,
+            weeklyResetsAt: nil,
+            planType: nil,
+            primaryWindowMinutes: minutes,
+            secondaryWindowMinutes: nil
+        )
+    }
+
+    /// ISO8601 with microseconds and offset, e.g.
+    /// `2026-09-02T07:39:39.262344+00:00` (fractional optional in practice).
+    private static func parseDate(_ raw: String) -> Date? {
+        if let d = Self.fractionalFormatter.date(from: raw) { return d }
+        return Self.plainFormatter.date(from: raw)
+    }
+    private static let fractionalFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let plainFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    private static func windowMinutes(start: Date?, end: Date?) -> Int? {
+        if let start, let end, end > start {
+            let minutes = Int((end.timeIntervalSince(start) / 60).rounded())
+            if minutes > 0 { return minutes }
+        }
+        return fallbackWindowMinutes
     }
 }
 

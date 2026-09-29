@@ -1986,6 +1986,10 @@ private struct WorkspaceMicroIcon: View {
             if case .grok = kind { return true }
             return false
         }()
+        let isAgy: Bool = {
+            if case .agy = kind { return true }
+            return false
+        }()
         Group {
             if isClaude {
                 Image(store.claudeIconStyle == .spark ? "ClaudeSpark" : "Claude")
@@ -2009,6 +2013,11 @@ private struct WorkspaceMicroIcon: View {
                     .aspectRatio(contentMode: .fit)
             } else if isGrok {
                 Image("GrokMark")
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+            } else if isAgy {
+                Image("AgyMark")
                     .resizable()
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)

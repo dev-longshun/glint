@@ -17,6 +17,7 @@ extension PaneAgentKind {
         case .omp:      return .omp
         case .grok:     return .grok
         case .pi:       return .pi
+        case .agy:      return .agy
         }
     }
 }

@@ -912,7 +912,8 @@ final class WebRemoteServer: @unchecked Sendable {
         client.pendingSelectionOutput = WebRemoteOutputBuffer(
             byteLimit: Self.maxSelectionOutputBytes
         )
-        client.terminalSize = nil
+        // Order size ownership by request arrival, not asynchronous snapshot completion.
+        recordTerminalSizeLocked(size, for: client)
         updateSubscribedPanesLocked()
         previousPanes.forEach { reconcileTerminalSizeLocked(for: $0) }
 
@@ -929,52 +930,44 @@ final class WebRemoteServer: @unchecked Sendable {
                 }
                 return
             }
-            let result = store.webRemoteTerminalSnapshot(pane: pane)
-            self.queue.async { [weak self, weak store] in
-                guard let self,
-                      let store
-                else { return }
-                guard let client = clients[clientID],
-                      client.authenticated,
-                      Self.isCurrentPaneSelection(
-                          pendingPane: client.pendingPane,
-                          pendingGeneration: client.paneSelectionGeneration,
-                          pane: pane,
-                          generation: selectionGeneration
-                      )
-                else { return }
-                switch result {
-                case let .success(snapshot):
-                    let bufferedOutput = client.pendingSelectionOutput.take(
-                        after: snapshot.outputSequence
-                    )
-                    client.pendingPane = nil
-                    client.subscribedPane = pane
-                    recordTerminalSizeLocked(size, for: client)
-                    updateSubscribedPanesLocked()
-                    sendJSON([
-                        "type": "snapshot",
-                        "pane": pane,
-                        "data": snapshot.payload.base64EncodedString(),
-                    ], to: clientID)
-                    if !bufferedOutput.isEmpty,
-                       !client.sendTerminalOutput(bufferedOutput, pane: pane) {
-                        dropSlowClientLocked(clientID)
-                        return
-                    }
-                    DispatchQueue.main.async { [weak self, weak store] in
-                        guard let self, let store else { return }
-                        if let error = store.webRemoteSetTerminalSize(pane: pane, size: size) {
-                            self.queue.async { [weak self] in self?.sendError(error, to: clientID) }
+            store.webRemoteTerminalSnapshot(pane: pane, size: size) { [weak self] result in
+                self?.queue.async { [weak self] in
+                    guard let self else { return }
+                    guard let client = clients[clientID],
+                          client.authenticated,
+                          Self.isCurrentPaneSelection(
+                              pendingPane: client.pendingPane,
+                              pendingGeneration: client.paneSelectionGeneration,
+                              pane: pane,
+                              generation: selectionGeneration
+                          )
+                    else { return }
+                    switch result {
+                    case let .success(snapshot):
+                        let bufferedOutput = client.pendingSelectionOutput.take(
+                            after: snapshot.outputSequence
+                        )
+                        client.pendingPane = nil
+                        client.subscribedPane = pane
+                        updateSubscribedPanesLocked()
+                        sendJSON([
+                            "type": "snapshot",
+                            "pane": pane,
+                            "data": snapshot.payload.base64EncodedString(),
+                        ], to: clientID)
+                        if !bufferedOutput.isEmpty,
+                           !client.sendTerminalOutput(bufferedOutput, pane: pane) {
+                            dropSlowClientLocked(clientID)
+                            return
                         }
+                    case let .failure(error):
+                        finishSelectionFailure(
+                            error,
+                            pane: pane,
+                            generation: selectionGeneration,
+                            clientID: clientID
+                        )
                     }
-                case let .failure(error):
-                    finishSelectionFailure(
-                        error,
-                        pane: pane,
-                        generation: selectionGeneration,
-                        clientID: clientID
-                    )
                 }
             }
         }
@@ -996,6 +989,7 @@ final class WebRemoteServer: @unchecked Sendable {
         else { return }
         _ = client.pendingSelectionOutput.take()
         client.pendingPane = nil
+        client.terminalSize = nil
         updateSubscribedPanesLocked()
         reconcileTerminalSizeLocked(for: pane)
         sendError(error, to: clientID)
@@ -1091,6 +1085,7 @@ final class WebRemoteServer: @unchecked Sendable {
             }
             if client.pendingPane == pane {
                 client.pendingPane = nil
+                client.terminalSize = nil
                 _ = client.pendingSelectionOutput.take()
             }
         }
@@ -1171,7 +1166,11 @@ final class WebRemoteServer: @unchecked Sendable {
 
     private func reconcileTerminalSizeLocked(for pane: String) {
         let size = clients.values
-            .filter { $0.authenticated && $0.subscribedPane == pane && $0.terminalSize != nil }
+            .filter {
+                $0.authenticated
+                    && ($0.subscribedPane == pane || $0.pendingPane == pane)
+                    && $0.terminalSize != nil
+            }
             .max { $0.terminalSizeRevision < $1.terminalSizeRevision }?
             .terminalSize
         DispatchQueue.main.async {
