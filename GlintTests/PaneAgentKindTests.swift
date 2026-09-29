@@ -152,6 +152,102 @@ final class PaneAgentKindTests: XCTestCase {
                        "claude --resume abc-123\n")
     }
 
+    // MARK: permissionFlags(fromArguments:)
+
+    func testPermissionFlagsFromShellAliases() {
+        // cc / cx / gk as they arrive in argv (argv[0] already dropped). The
+        // npm codex shim puts its bin path first; it must be skipped.
+        XCTAssertEqual(PaneAgentKind.claude.permissionFlags(fromArguments: ["--dangerously-skip-permissions"]),
+                       ["--dangerously-skip-permissions"])
+        XCTAssertEqual(PaneAgentKind.codex.permissionFlags(fromArguments: [
+            "/Users/x/.npm-global/bin/codex", "--dangerously-bypass-approvals-and-sandbox",
+        ]), ["--dangerously-bypass-approvals-and-sandbox"])
+        XCTAssertEqual(PaneAgentKind.grok.permissionFlags(fromArguments: ["--always-approve"]),
+                       ["--always-approve"])
+    }
+
+    func testPermissionFlagsCanonicalizesValuedAndShortForms() {
+        XCTAssertEqual(PaneAgentKind.claude.permissionFlags(fromArguments: ["--permission-mode=bypassPermissions"]),
+                       ["--permission-mode", "bypassPermissions"])
+        XCTAssertEqual(PaneAgentKind.codex.permissionFlags(fromArguments: ["-a", "never", "-s", "danger-full-access"]),
+                       ["--ask-for-approval", "never", "--sandbox", "danger-full-access"])
+        XCTAssertEqual(PaneAgentKind.grok.permissionFlags(fromArguments: ["--sandbox", "strict", "--permission-mode", "auto"]),
+                       ["--sandbox", "strict", "--permission-mode", "auto"])
+    }
+
+    func testPermissionFlagsIgnoresNonWhitelistedArgs() {
+        // A restored pane's argv carries its resume args, and users pass
+        // models / prompts / config overrides — none of that may be captured.
+        XCTAssertEqual(PaneAgentKind.claude.permissionFlags(fromArguments: [
+            "--model", "opus", "--dangerously-skip-permissions", "--resume", "abc-123", "fix the bug",
+        ]), ["--dangerously-skip-permissions"])
+        XCTAssertEqual(PaneAgentKind.codex.permissionFlags(fromArguments: [
+            "resume", "--dangerously-bypass-approvals-and-sandbox", "abc-123", "-c", "model=\"o3\"", "--full-auto",
+        ]), ["--dangerously-bypass-approvals-and-sandbox"])
+    }
+
+    func testPermissionFlagsDropsInvalidOrMissingValues() {
+        XCTAssertEqual(PaneAgentKind.claude.permissionFlags(fromArguments: ["--permission-mode", "x;rm -rf ~"]), [])
+        XCTAssertEqual(PaneAgentKind.claude.permissionFlags(fromArguments: ["--permission-mode"]), [])
+        // A missing value must not swallow the next flag.
+        XCTAssertEqual(PaneAgentKind.grok.permissionFlags(fromArguments: ["--sandbox", "--always-approve"]),
+                       ["--always-approve"])
+        // Boolean flags don't take an inline value.
+        XCTAssertEqual(PaneAgentKind.claude.permissionFlags(fromArguments: ["--dangerously-skip-permissions=1"]), [])
+    }
+
+    func testPermissionFlagsStopsAtDoubleDashAndDedupes() {
+        XCTAssertEqual(PaneAgentKind.claude.permissionFlags(fromArguments: [
+            "--dangerously-skip-permissions", "--dangerously-skip-permissions", "--", "--permission-mode", "plan",
+        ]), ["--dangerously-skip-permissions"])
+    }
+
+    func testPermissionFlagsStayWithinEachAgentsWhitelist() {
+        XCTAssertEqual(PaneAgentKind.claude.permissionFlags(fromArguments: ["--always-approve"]), [])
+        XCTAssertEqual(PaneAgentKind.grok.permissionFlags(fromArguments: ["--dangerously-skip-permissions"]), [])
+        XCTAssertEqual(PaneAgentKind.opencode.permissionFlags(fromArguments: ["--dangerously-skip-permissions"]), [])
+    }
+
+    func testPermissionFlagsIsIdempotent() {
+        // restoreCommand re-filters persisted flags through the same function.
+        let once = PaneAgentKind.codex.permissionFlags(fromArguments: ["-s", "workspace-write", "--approve-for-me"])
+        XCTAssertEqual(PaneAgentKind.codex.permissionFlags(fromArguments: once), once)
+    }
+
+    // MARK: restoreCommand — launch flags
+
+    func testRestoreCommandReplaysLaunchFlags() {
+        XCTAssertEqual(PaneAgentKind.claude.restoreCommand(sessionId: "abc-123", launchFlags: ["--dangerously-skip-permissions"]),
+                       "claude --dangerously-skip-permissions --resume abc-123\n")
+        XCTAssertEqual(PaneAgentKind.claude.restoreCommand(sessionId: nil, launchFlags: ["--dangerously-skip-permissions"]),
+                       "claude --dangerously-skip-permissions --continue\n")
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: "abc-123", launchFlags: ["--dangerously-bypass-approvals-and-sandbox"]),
+                       "codex resume --dangerously-bypass-approvals-and-sandbox abc-123\n")
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: nil, launchFlags: ["--dangerously-bypass-approvals-and-sandbox"]),
+                       "codex resume --dangerously-bypass-approvals-and-sandbox --last\n")
+        XCTAssertEqual(PaneAgentKind.grok.restoreCommand(sessionId: "abc-123", launchFlags: ["--always-approve"]),
+                       "grok --always-approve --resume abc-123\n")
+        XCTAssertEqual(PaneAgentKind.grok.restoreCommand(sessionId: nil, launchFlags: ["--always-approve"]),
+                       "grok --always-approve --continue\n")
+    }
+
+    func testRestoreCommandCodexHomeAndFlagsCompose() {
+        let home = "/Users/test/codex-secondary"
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: "abc-123", codexHome: home,
+                                                          launchFlags: ["--sandbox", "danger-full-access"]),
+                       "CODEX_HOME='\(home)' codex resume --sandbox danger-full-access abc-123\n")
+    }
+
+    func testRestoreCommandDropsTamperedLaunchFlags() {
+        // A hand-edited or corrupt state.json must not get arbitrary text onto
+        // the shell; kinds without a whitelist ignore flags entirely.
+        let tampered = ["--dangerously-skip-permissions; rm -rf ~", "--permission-mode", "plan\nrm", "--evil"]
+        XCTAssertEqual(PaneAgentKind.claude.restoreCommand(sessionId: "abc-123", launchFlags: tampered),
+                       "claude --resume abc-123\n")
+        XCTAssertEqual(PaneAgentKind.opencode.restoreCommand(sessionId: "abc-123", launchFlags: ["--dangerously-skip-permissions"]),
+                       "opencode --session abc-123\n")
+    }
+
     // MARK: helpers
 
     /// WorkspaceIconKind isn't Equatable, so compare by matching the expected

@@ -112,4 +112,31 @@ final class PaneSessionIdMigrationTests: XCTestCase {
         let decoded = try JSONDecoder().decode(Pane.self, from: data)
         XCTAssertEqual(decoded.sessionIds, pane.sessionIds)
     }
+
+    // MARK: launchFlags
+
+    func testPaneWithoutLaunchFlagsDecodesEmpty() throws {
+        // state.json written before launch flags existed must still load.
+        let json = """
+        { "id": {"value": 8}, "title": "pane", "lastAgent": "claude",
+          "sessionIds": {"claude": "abc-123"} }
+        """
+        let pane = try decode(json)
+        XCTAssertTrue(pane.launchFlags.isEmpty)
+        XCTAssertEqual(pane.sessionIds, ["claude": "abc-123"])
+    }
+
+    func testEncodingOmitsEmptyLaunchFlags() throws {
+        let dict = try encode(Pane(id: PaneID(value: 1), title: "t"))
+        XCTAssertNil(dict["launchFlags"])
+    }
+
+    func testRoundTripPreservesLaunchFlags() throws {
+        var pane = Pane(id: PaneID(value: 4), title: "flags")
+        pane.launchFlags = ["claude": ["--dangerously-skip-permissions"],
+                            "codex": ["--sandbox", "danger-full-access"]]
+        let data = try JSONEncoder().encode(pane)
+        let decoded = try JSONDecoder().decode(Pane.self, from: data)
+        XCTAssertEqual(decoded.launchFlags, pane.launchFlags)
+    }
 }

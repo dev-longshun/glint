@@ -205,9 +205,16 @@ struct Pane: Identifiable, Codable {
     /// `captureCwdsFromLiveSurfaces` once the foreground stops being Codex, so
     /// a later default-Codex launch on the same pane can't inherit a stale home.
     var codexHome: String?
+    /// Permission flags the pane's agent was launched with (e.g.
+    /// `--dangerously-skip-permissions` from a `cc` alias), keyed like
+    /// `sessionIds` and read from the live argv by `captureSurfaceState`.
+    /// Replayed by restore-on-launch so the session comes back in the same
+    /// mode. Only whitelisted flags (see `PaneAgentKind.permissionFlags`);
+    /// same drop-on-agent-exit lifecycle as `sessionIds`.
+    var launchFlags: [String: [String]]
 
     private enum CodingKeys: String, CodingKey {
-        case id, title, workingDirectory, lastAgent, sessionIds, codexHome
+        case id, title, workingDirectory, lastAgent, sessionIds, codexHome, launchFlags
     }
 
     /// Field shape from the first cut of #45 (one Optional per agent). Read
@@ -227,6 +234,7 @@ struct Pane: Identifiable, Codable {
         self.lastAgent = lastAgent
         self.sessionIds = [:]
         self.codexHome = nil
+        self.launchFlags = [:]
     }
 
     init(from decoder: Decoder) throws {
@@ -236,6 +244,7 @@ struct Pane: Identifiable, Codable {
         self.workingDirectory = try c.decodeIfPresent(String.self, forKey: .workingDirectory)
         self.lastAgent = try c.decodeIfPresent(String.self, forKey: .lastAgent)
         self.codexHome = try c.decodeIfPresent(String.self, forKey: .codexHome)
+        self.launchFlags = try c.decodeIfPresent([String: [String]].self, forKey: .launchFlags) ?? [:]
         if let map = try c.decodeIfPresent([String: String].self, forKey: .sessionIds) {
             self.sessionIds = map
         } else {
@@ -269,6 +278,9 @@ struct Pane: Identifiable, Codable {
         // be persistent noise in the autosave file.
         if !sessionIds.isEmpty {
             try c.encode(sessionIds, forKey: .sessionIds)
+        }
+        if !launchFlags.isEmpty {
+            try c.encode(launchFlags, forKey: .launchFlags)
         }
     }
 }
@@ -1933,7 +1945,8 @@ final class WorkspaceStore: ObservableObject {
                   restoreEnabled(for: kind) else { return nil }
             let sid = pane.sessionIds[kind.rawValue]
                 .flatMap { Self.isValidSessionId($0) ? $0 : nil }
-            return kind.restoreCommand(sessionId: sid, codexHome: pane.codexHome)
+            return kind.restoreCommand(sessionId: sid, codexHome: pane.codexHome,
+                                       launchFlags: pane.launchFlags[kind.rawValue] ?? [])
         }()
         let v = GhosttySurfaceView(
             frame: .zero,
@@ -2114,6 +2127,21 @@ final class WorkspaceStore: ObservableObject {
                 if kept.count != existing.count {
                     workspaces[i].panes[key.pane]?.sessionIds = kept
                 }
+            }
+            if let existing = workspaces[i].panes[key.pane]?.launchFlags, !existing.isEmpty {
+                let kept = existing.filter { $0.key == agentToken }
+                if kept.count != existing.count {
+                    workspaces[i].panes[key.pane]?.launchFlags = kept
+                }
+            }
+        }
+        // Remember the agent's permission flags from its live argv so restore
+        // relaunches it in the same mode. An unreadable argv keeps the last
+        // capture; a relaunch without flags clears it.
+        if let agentKind, let argv = view.foregroundProcessArguments() {
+            let flags = agentKind.permissionFlags(fromArguments: Array(argv.dropFirst()))
+            if (workspaces[i].panes[key.pane]?.launchFlags[agentKind.rawValue] ?? []) != flags {
+                workspaces[i].panes[key.pane]?.launchFlags[agentKind.rawValue] = flags.isEmpty ? nil : flags
             }
         }
         if workspaces[i].panes[key.pane]?.codexHome != nil,

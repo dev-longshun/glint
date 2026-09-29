@@ -71,6 +71,13 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
 6. **协作协议**  
    - 本文件 `AGENTS.md`、技能树、本「二开」章节：上游若无对应内容，**整段保留**  
 
+7. **Agent 恢复时保留启动权限参数**  
+   - `Glint/Agent/PaneAgentState.swift`：`permissionFlags(fromArguments:)` 白名单 + `restoreCommand(launchFlags:)`  
+   - `Glint/Workspace/WorkspaceStore.swift`：`Pane.launchFlags` 持久化，`captureSurfaceState` 从前台进程参数记录  
+   - `Glint/Pane/GhosttySurfaceView.swift`：`foregroundProcessArguments()`  
+   - 作用：`cc` / `cx` / `gk` 这类带权限参数启动的 Claude / Codex / Grok，重启恢复时带上同样的参数  
+   - 上游若改 `restoreCommand` 或恢复逻辑：保留 `launchFlags` 这条链路  
+
 ### 同步操作红线
 
 - **禁止**：`git reset --hard upstream/main`、`git checkout upstream/main -- .`、无审查的 `theirs` 全收、把冲突一律选成上游。  

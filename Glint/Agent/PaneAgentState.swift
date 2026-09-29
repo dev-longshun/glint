@@ -65,17 +65,26 @@ enum PaneAgentKind: String, Codable {
     /// resumes against the default `~/.codex`, where its session doesn't
     /// exist (#45 regression for the multi-home feature). nil/default ⇒ no
     /// prefix. Ignored by every kind other than `.codex`.
-    func restoreCommand(sessionId: String?, codexHome: String? = nil) -> String {
+    ///
+    /// `launchFlags` are the permission flags captured from the pane's live
+    /// argv (see `permissionFlags(fromArguments:)`), so a pane started via an
+    /// alias like `cc` → `claude --dangerously-skip-permissions` comes back in
+    /// the same mode instead of the CLI default. Re-filtered through the
+    /// whitelist here, same defense-in-depth as the session id.
+    func restoreCommand(sessionId: String?, codexHome: String? = nil,
+                        launchFlags: [String] = []) -> String {
         let validated: String? = sessionId.flatMap {
             PaneAgentKind.isValid(sessionId: $0) ? $0 : nil
         }
+        let flags = self.permissionFlags(fromArguments: launchFlags)
+        let f = flags.isEmpty ? "" : flags.joined(separator: " ") + " "
         switch self {
         case .claude:
-            return validated.map { "claude --resume \($0)\n" } ?? "claude --continue\n"
+            return validated.map { "claude \(f)--resume \($0)\n" } ?? "claude \(f)--continue\n"
         case .codex:
             let prefix = codexHome.map { "CODEX_HOME=\(posixShellQuoted($0)) " } ?? ""
-            return validated.map { "\(prefix)codex resume \($0)\n" }
-                ?? "\(prefix)codex resume --last\n"
+            return validated.map { "\(prefix)codex resume \(f)\($0)\n" }
+                ?? "\(prefix)codex resume \(f)--last\n"
         case .opencode:
             return validated.map { "opencode --session \($0)\n" } ?? "opencode --continue\n"
         case .devin:
@@ -83,7 +92,7 @@ enum PaneAgentKind: String, Codable {
         case .omp:
             return validated.map { "omp -r \($0)\n" } ?? "omp -c\n"
         case .grok:
-            return validated.map { "grok --resume \($0)\n" } ?? "grok --continue\n"
+            return validated.map { "grok \(f)--resume \($0)\n" } ?? "grok \(f)--continue\n"
         case .pi:
             // `pi --session-id <id>` uses an exact project session id,
             // creating it if missing — so a restored pane lands back in its
@@ -92,6 +101,98 @@ enum PaneAgentKind: String, Codable {
             // (resume the most-recent) when no id was captured.
             return validated.map { "pi --session-id \($0)\n" } ?? "pi --continue\n"
         }
+    }
+
+    // MARK: Launch permission flags
+
+    /// A permission-related CLI flag worth replaying on restore. `aliases`
+    /// are extra spellings accepted on ingress (e.g. `-a`); output always
+    /// uses `name`. `takesValue` flags consume `--flag value` or `--flag=value`.
+    private struct LaunchFlagSpec {
+        let name: String
+        var aliases: [String] = []
+        var takesValue = false
+    }
+
+    /// Per-agent whitelist of flags remembered across a restart. Deliberately
+    /// narrow — only permission / approval / sandbox switches. Prompts,
+    /// models, dirs and `-c` overrides are ignored, since the result is typed
+    /// onto a live shell. Kinds returning `[]` never carry flags.
+    private var launchFlagSpecs: [LaunchFlagSpec] {
+        switch self {
+        case .claude:
+            return [
+                LaunchFlagSpec(name: "--dangerously-skip-permissions"),
+                LaunchFlagSpec(name: "--permission-mode", takesValue: true),
+            ]
+        case .codex:
+            // No `--full-auto`: Codex 0.158 renamed it `--approve-for-me` and
+            // rejects the old spelling, so replaying it would break the resume.
+            return [
+                LaunchFlagSpec(name: "--dangerously-bypass-approvals-and-sandbox"),
+                LaunchFlagSpec(name: "--approve-for-me"),
+                LaunchFlagSpec(name: "--ask-for-approval", aliases: ["-a"], takesValue: true),
+                LaunchFlagSpec(name: "--sandbox", aliases: ["-s"], takesValue: true),
+            ]
+        case .grok:
+            return [
+                LaunchFlagSpec(name: "--always-approve"),
+                LaunchFlagSpec(name: "--permission-mode", takesValue: true),
+                LaunchFlagSpec(name: "--sandbox", takesValue: true),
+            ]
+        case .opencode, .devin, .omp, .pi:
+            return []
+        }
+    }
+
+    static let launchFlagValueMaxLength = 64
+
+    /// Flag values (`bypassPermissions`, `danger-full-access`, `never`, …) use
+    /// the session-id alphabet with a shorter cap, and may not look like a flag.
+    static func isValid(launchFlagValue v: String) -> Bool {
+        !v.hasPrefix("-") && v.count <= launchFlagValueMaxLength && isValid(sessionId: v)
+    }
+
+    /// Pick the whitelisted permission flags out of an agent's argv (without
+    /// argv[0]). Output is canonical — long spelling, `--flag value` as two
+    /// tokens, argv order, first occurrence wins — so it is idempotent: the
+    /// output fed back in returns itself, which is how `restoreCommand`
+    /// re-validates persisted flags. A flag with a missing or invalid value is
+    /// dropped whole; scanning stops at `--` (the rest is positional).
+    func permissionFlags(fromArguments args: [String]) -> [String] {
+        let specs = launchFlagSpecs
+        guard !specs.isEmpty else { return [] }
+        var out: [String] = []
+        var seen: Set<String> = []
+        var i = 0
+        while i < args.count {
+            let arg = args[i]
+            i += 1
+            if arg == "--" { break }
+            guard arg.hasPrefix("-") else { continue }
+            var flag = arg
+            var inlineValue: String?
+            if arg.hasPrefix("--"), let eq = arg.firstIndex(of: "=") {
+                flag = String(arg[..<eq])
+                inlineValue = String(arg[arg.index(after: eq)...])
+            }
+            guard let spec = specs.first(where: { $0.name == flag || $0.aliases.contains(flag) }),
+                  !seen.contains(spec.name) else { continue }
+            if spec.takesValue {
+                var value = inlineValue
+                if value == nil, i < args.count, !args[i].hasPrefix("-") {
+                    value = args[i]
+                    i += 1
+                }
+                guard let value, Self.isValid(launchFlagValue: value) else { continue }
+                out += [spec.name, value]
+            } else {
+                guard inlineValue == nil else { continue }
+                out.append(spec.name)
+            }
+            seen.insert(spec.name)
+        }
+        return out
     }
 }
 

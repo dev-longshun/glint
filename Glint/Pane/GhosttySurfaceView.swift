@@ -1285,6 +1285,17 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         return comm
     }
 
+    /// Full argv (argv[0] included) of the PTY's foreground process, or nil
+    /// when there is none / it can't be read. Lets the store remember a CLI
+    /// agent's permission flags whatever alias launched it (`cc` arrives here
+    /// as `claude --dangerously-skip-permissions`).
+    func foregroundProcessArguments() -> [String]? {
+        guard let s = surface else { return nil }
+        let pid = ghostty_surface_foreground_pid(s)
+        guard pid > 0 else { return nil }
+        return Self.processArgv(pid: Int32(pid), limit: 64)
+    }
+
     /// Anything matching `^\d+(\.\d+)+` — covers "2.1.169" and friends.
     private static func looksLikeVersion(_ s: String) -> Bool {
         var sawDigit = false
