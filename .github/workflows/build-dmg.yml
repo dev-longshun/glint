@@ -3,8 +3,11 @@
 #   2. 在 GitHub 托管的 macOS runner 上 Archive + 打 DMG
 #   3. 创建 GitHub Release，挂上 DMG，可直接下载
 #
-# 不依赖 Apple Developer / Sparkle 密钥：使用 ad-hoc 签名。
-# 首次打开若被隔离，在本机执行：
+# 不依赖 Apple Developer / Sparkle 密钥。
+# 签名：配置了 secrets GLINT_SIGNING_CERT_P12 / GLINT_SIGNING_CERT_PASSWORD 时
+# 用固定的自签名证书签名（指定要求 = bundle id + 证书指纹，跨版本不变，
+# 更新后系统隐私权限不用重新授权）；未配置时退回 ad-hoc。
+# 两种都没有 Apple 公证，首次打开若被隔离，在本机执行：
 #   xattr -dr com.apple.quarantine /Applications/Glint.app
 #
 # 与 release.yml 分工：本工作流的 git tag 形如 dmg-0.1.27.N，
@@ -102,13 +105,44 @@ jobs:
             archive
 
       - name: Export .app
+        id: sign
+        env:
+          SIGNING_CERT_P12: ${{ secrets.GLINT_SIGNING_CERT_P12 }}
+          SIGNING_CERT_PASSWORD: ${{ secrets.GLINT_SIGNING_CERT_PASSWORD }}
         run: |
           set -euo pipefail
           mkdir -p dist
           cp -R build/Glint.xcarchive/Products/Applications/Glint.app dist/
-          # 重建 ad-hoc 签名 + CodeResources，避免 Sparkle/系统校验失败。
-          codesign --force --deep --sign - dist/Glint.app
-          codesign --verify --verbose dist/Glint.app
+          if [ -n "${SIGNING_CERT_P12:-}" ]; then
+            # 自签名证书无需系统信任，但所在钥匙串必须进搜索列表，
+            # 否则 codesign 报 no identity found。
+            KC="$RUNNER_TEMP/glint-signing.keychain-db"
+            KC_PW="$(uuidgen)"
+            P12="$RUNNER_TEMP/glint-signing.p12"
+            printf '%s' "$SIGNING_CERT_P12" | base64 --decode > "$P12"
+            security create-keychain -p "$KC_PW" "$KC"
+            security set-keychain-settings -lut 3600 "$KC"
+            security unlock-keychain -p "$KC_PW" "$KC"
+            security import "$P12" -k "$KC" -P "$SIGNING_CERT_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PW" "$KC" >/dev/null
+            security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+            IDENTITY="$(security find-identity -p codesigning "$KC" | awk '/^ *1\)/ {print $2; exit}')"
+            [ -n "$IDENTITY" ] || { echo "::error::p12 里没有可用的代码签名身份"; exit 1; }
+            codesign --force --deep --sign "$IDENTITY" dist/Glint.app
+            # 指定要求必须是证书型；若仍是 cdhash，TCC 照样每版失效，直接判失败。
+            DR="$(codesign -d -r- dist/Glint.app 2>&1)"
+            echo "$DR"
+            case "$DR" in
+              *"certificate leaf"*) ;;
+              *) echo "::error::指定要求不是证书型"; exit 1 ;;
+            esac
+            echo "signing=自签名证书（固定签名身份）" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::未配置 GLINT_SIGNING_CERT_P12，退回 ad-hoc 签名（更新后需重新授权系统权限）"
+            codesign --force --deep --sign - dist/Glint.app
+            echo "signing=ad-hoc" >> "$GITHUB_OUTPUT"
+          fi
+          codesign --verify --deep --strict --verbose=2 dist/Glint.app
 
       - name: Build DMG
         env:
@@ -119,7 +153,7 @@ jobs:
           STAGING="$(mktemp -d)"
           cp -R dist/Glint.app "$STAGING/"
           ln -s /Applications "$STAGING/Applications"
-          # ad-hoc 包：附带去隔离脚本 + 安装说明（见 scripts/dmg-extras/）
+          # 未公证包：附带去隔离脚本 + 安装说明（见 scripts/dmg-extras/）
           cp "scripts/dmg-extras/首次打开-去除隔离.command" "$STAGING/"
           cp "scripts/dmg-extras/安装说明.txt" "$STAGING/"
           chmod +x "$STAGING/首次打开-去除隔离.command"
@@ -154,7 +188,7 @@ jobs:
 
             - 版本: `${{ steps.version.outputs.version }}`
             - 提交: `${{ github.sha }}`
-            - 签名: ad-hoc（无 Apple Developer ID）
+            - 签名: ${{ steps.sign.outputs.signing }}（无 Apple 公证）
 
             **安装**
 

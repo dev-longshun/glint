@@ -1,7 +1,7 @@
 Glint（二开 fork）安装说明
 ========================
 
-本包来自 dev-longshun/glint，为 ad-hoc 签名，未做 Apple 公证。
+本包来自 dev-longshun/glint，未使用 Apple Developer ID 签名，也未做 Apple 公证。
 从浏览器下载后，macOS 可能提示「已损坏」或「无法验证开发者」——这是隔离属性，不是文件真坏了。
 
 推荐步骤

@@ -1,5 +1,5 @@
 #!/bin/bash
-# 本 fork 的 DMG 为 ad-hoc 签名（无 Apple Developer ID 公证）。
+# 本 fork 的 DMG 未使用 Apple Developer ID 签名，也未做 Apple 公证。
 # 从浏览器下载后，macOS 可能报「已损坏 / 无法打开」。
 # 双击本脚本即可去掉隔离属性；也可在终端手动执行同类命令。
 

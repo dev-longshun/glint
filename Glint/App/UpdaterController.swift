@@ -277,9 +277,18 @@ final class UpdaterController: ObservableObject {
         try? await Self.run("/usr/bin/xattr", arguments: [
             "-dr", "com.apple.quarantine", stagedApp.path,
         ])
-        try? await Self.run("/usr/bin/codesign", arguments: [
-            "--force", "--deep", "--sign", "-", stagedApp.path,
-        ])
+        // Keep CI's certificate signature: its designated requirement
+        // (bundle id + cert fingerprint) is stable across releases, so TCC
+        // grants survive the update. Re-signing ad-hoc would pin it to the
+        // cdhash again. Only fall back when the signature is actually broken,
+        // so the app still launches.
+        if (try? await Self.run("/usr/bin/codesign", arguments: [
+            "--verify", "--deep", "--strict", stagedApp.path,
+        ])) == nil {
+            try? await Self.run("/usr/bin/codesign", arguments: [
+                "--force", "--deep", "--sign", "-", stagedApp.path,
+            ])
+        }
 
         try? await Self.run("/usr/bin/hdiutil", arguments: [
             "detach", mountPoint.path, "-force",
@@ -503,7 +512,9 @@ final class UpdaterController: ObservableObject {
         fi
         /usr/bin/ditto "$SRC" "$DEST"
         /usr/bin/xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
-        /usr/bin/codesign --force --deep --sign - "$DEST" 2>/dev/null || true
+        if ! /usr/bin/codesign --verify --deep --strict "$DEST" 2>/dev/null; then
+          /usr/bin/codesign --force --deep --sign - "$DEST" 2>/dev/null || true
+        fi
         rm -rf "$BACKUP"
         /usr/bin/open "$DEST"
         ( sleep 8; rm -rf "$WORK" ) &
