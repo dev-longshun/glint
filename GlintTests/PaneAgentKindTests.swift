@@ -248,6 +248,44 @@ final class PaneAgentKindTests: XCTestCase {
                        "opencode --session abc-123\n")
     }
 
+    // MARK: always skip permission prompts on resume
+
+    func testSkipPermissionFlagsSurviveEachAgentsWhitelist() throws {
+        // restoreCommand re-filters flags; a forced flag it dropped would
+        // silently resume in the CLI's default mode.
+        for kind in [PaneAgentKind.claude, .codex, .grok] {
+            let forced = try XCTUnwrap(kind.skipPermissionFlags)
+            XCTAssertEqual(kind.permissionFlags(fromArguments: forced), forced, "\(kind)")
+        }
+        for kind in [PaneAgentKind.opencode, .devin, .omp, .pi, .agy] {
+            XCTAssertNil(kind.skipPermissionFlags, "\(kind)")
+        }
+    }
+
+    func testRestoreLaunchFlagsAlwaysSkipReplacesRecordedFlags() {
+        let recorded = ["--ask-for-approval", "on-request", "--sandbox", "workspace-write"]
+        XCTAssertEqual(WorkspaceStore.restoreLaunchFlags(for: .codex, captured: recorded, alwaysSkip: true),
+                       ["--dangerously-bypass-approvals-and-sandbox"])
+        // Nothing recorded (state saved by a build without launchFlags).
+        XCTAssertEqual(WorkspaceStore.restoreLaunchFlags(for: .claude, captured: [], alwaysSkip: true),
+                       ["--dangerously-skip-permissions"])
+        XCTAssertEqual(WorkspaceStore.restoreLaunchFlags(for: .grok, captured: [], alwaysSkip: true),
+                       ["--always-approve"])
+    }
+
+    func testRestoreLaunchFlagsKeepsRecordedFlagsWhenOffOrUnsupported() {
+        let recorded = ["--permission-mode", "plan"]
+        XCTAssertEqual(WorkspaceStore.restoreLaunchFlags(for: .claude, captured: recorded, alwaysSkip: false), recorded)
+        XCTAssertEqual(WorkspaceStore.restoreLaunchFlags(for: .claude, captured: [], alwaysSkip: false), [])
+        XCTAssertEqual(WorkspaceStore.restoreLaunchFlags(for: .opencode, captured: [], alwaysSkip: true), [])
+    }
+
+    func testAlwaysSkipYieldsSkipPermissionResumeCommand() {
+        let flags = WorkspaceStore.restoreLaunchFlags(for: .claude, captured: [], alwaysSkip: true)
+        XCTAssertEqual(PaneAgentKind.claude.restoreCommand(sessionId: "abc-123", launchFlags: flags),
+                       "claude --dangerously-skip-permissions --resume abc-123\n")
+    }
+
     // MARK: helpers
 
     /// WorkspaceIconKind isn't Equatable, so compare by matching the expected

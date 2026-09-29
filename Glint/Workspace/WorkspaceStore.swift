@@ -1136,6 +1136,24 @@ final class WorkspaceStore: ObservableObject {
         didSet { UserDefaults.standard.set(restoreAgySession, forKey: "glint.restoreAgySession") }
     }
 
+    /// When on, a resumed Claude pane always relaunches with
+    /// `--dangerously-skip-permissions`, replacing whatever flags the pane
+    /// recorded — covers panes whose flags were never captured (state saved
+    /// by an older build) or that were last started without them.
+    @Published var restoreClaudeSkipPermissions: Bool = (UserDefaults.standard.object(forKey: "glint.restoreClaudeSkipPermissions") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreClaudeSkipPermissions, forKey: "glint.restoreClaudeSkipPermissions") }
+    }
+
+    /// Same as `restoreClaudeSkipPermissions` but for Codex — feeds `--dangerously-bypass-approvals-and-sandbox`.
+    @Published var restoreCodexSkipPermissions: Bool = (UserDefaults.standard.object(forKey: "glint.restoreCodexSkipPermissions") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreCodexSkipPermissions, forKey: "glint.restoreCodexSkipPermissions") }
+    }
+
+    /// Same as `restoreClaudeSkipPermissions` but for Grok — feeds `--always-approve`.
+    @Published var restoreGrokSkipPermissions: Bool = (UserDefaults.standard.object(forKey: "glint.restoreGrokSkipPermissions") as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(restoreGrokSkipPermissions, forKey: "glint.restoreGrokSkipPermissions") }
+    }
+
     /// Maps each agent kind to the @Published toggle that gates its
     /// session-restore-on-launch. Single source of truth: adding a new
     /// agent means adding ONE entry here, not editing two parallel switches
@@ -1156,6 +1174,30 @@ final class WorkspaceStore: ObservableObject {
     private func restoreEnabled(for kind: PaneAgentKind) -> Bool {
         guard let path = Self.restoreToggleKeyPaths[kind] else { return false }
         return self[keyPath: path]
+    }
+
+    /// Per-agent "always skip permission prompts on resume" toggles. Only
+    /// kinds with `PaneAgentKind.skipPermissionFlags` belong here.
+    private static let restoreSkipPermissionsKeyPaths: [PaneAgentKind: ReferenceWritableKeyPath<WorkspaceStore, Bool>] = [
+        .claude: \.restoreClaudeSkipPermissions,
+        .codex:  \.restoreCodexSkipPermissions,
+        .grok:   \.restoreGrokSkipPermissions,
+    ]
+
+    private func alwaysSkipPermissionsOnRestore(for kind: PaneAgentKind) -> Bool {
+        guard let path = Self.restoreSkipPermissionsKeyPaths[kind] else { return false }
+        return self[keyPath: path]
+    }
+
+    /// Launch flags for a resumed pane. With the per-agent toggle on, the
+    /// skip-permission flag REPLACES the recorded ones rather than merging —
+    /// the toggle means exactly that mode, and pairing Codex's bypass flag
+    /// with a recorded `-a` / `--sandbox` risks a conflicting-args error.
+    /// Otherwise the recorded flags are replayed as-is.
+    nonisolated static func restoreLaunchFlags(for kind: PaneAgentKind, captured: [String],
+                                               alwaysSkip: Bool) -> [String] {
+        if alwaysSkip, let forced = kind.skipPermissionFlags { return forced }
+        return captured
     }
 
     /// Master switch for the external control socket (control.sock). Off by
@@ -1973,8 +2015,12 @@ final class WorkspaceStore: ObservableObject {
                   restoreEnabled(for: kind) else { return nil }
             let sid = pane.sessionIds[kind.rawValue]
                 .flatMap { Self.isValidSessionId($0) ? $0 : nil }
+            let flags = Self.restoreLaunchFlags(
+                for: kind,
+                captured: pane.launchFlags[kind.rawValue] ?? [],
+                alwaysSkip: alwaysSkipPermissionsOnRestore(for: kind))
             return kind.restoreCommand(sessionId: sid, codexHome: pane.codexHome,
-                                       launchFlags: pane.launchFlags[kind.rawValue] ?? [])
+                                       launchFlags: flags)
         }()
         let v = GhosttySurfaceView(
             frame: .zero,

@@ -1548,6 +1548,13 @@ private struct AgentsPane: View {
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()
+            SettingsRow("Always skip permission prompts on resume",
+                        subtitle: "Resumed Claude panes relaunch with `--dangerously-skip-permissions`, even if the pane was started without it or its flags weren't recorded (e.g. right after upgrading).") {
+                Toggle("", isOn: $store.restoreClaudeSkipPermissions)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            .disabled(!store.restoreClaudeSession)
+            SettingsDivider()
             SettingsRow("Icon style",
                         subtitle: "How Claude panes are drawn in the sidebar and tabs.") {
                 HStack(spacing: 8) {
@@ -1617,6 +1624,13 @@ private struct AgentsPane: View {
                 Toggle("", isOn: $store.restoreCodexSession)
                     .toggleStyle(.switch).labelsHidden()
             }
+            SettingsDivider()
+            SettingsRow("Always skip permission prompts on resume",
+                        subtitle: "Resumed Codex panes relaunch with `--dangerously-bypass-approvals-and-sandbox`, even if the pane was started without it or its flags weren't recorded (e.g. right after upgrading).") {
+                Toggle("", isOn: $store.restoreCodexSkipPermissions)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            .disabled(!store.restoreCodexSession)
         }
 
         SettingsCard("OpenCode",
@@ -1802,6 +1816,13 @@ private struct AgentsPane: View {
                 Toggle("", isOn: $store.restoreGrokSession)
                     .toggleStyle(.switch).labelsHidden()
             }
+            SettingsDivider()
+            SettingsRow("Always skip permission prompts on resume",
+                        subtitle: "Resumed Grok panes relaunch with `--always-approve`, even if the pane was started without it or its flags weren't recorded (e.g. right after upgrading).") {
+                Toggle("", isOn: $store.restoreGrokSkipPermissions)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            .disabled(!store.restoreGrokSession)
             SettingsDivider()
             SettingsRow("Hook config",
                         subtitle: "Dedicated Glint hook file under Grok's global hooks directory; only reports when Glint's pane environment variables are present.") {

@@ -443,6 +443,17 @@
         }
       }
     },
+    "Always skip permission prompts on resume": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复时总是跳过权限确认"
+          }
+        }
+      }
+    },
     "Antigravity CLI detected — install the hook entry to show its status.": {
       "extractionState": "manual",
       "localizations": {
@@ -4640,6 +4651,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "启动时恢复会话"
+          }
+        }
+      }
+    },
+    "Resumed Claude panes relaunch with `--dangerously-skip-permissions`, even if the pane was started without it or its flags weren't recorded (e.g. right after upgrading).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复的 Claude 窗格一律带 `--dangerously-skip-permissions` 启动，即使该窗格当初没带这个参数，或参数没被记录下来（例如刚升级完）。"
+          }
+        }
+      }
+    },
+    "Resumed Codex panes relaunch with `--dangerously-bypass-approvals-and-sandbox`, even if the pane was started without it or its flags weren't recorded (e.g. right after upgrading).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复的 Codex 窗格一律带 `--dangerously-bypass-approvals-and-sandbox` 启动，即使该窗格当初没带这个参数，或参数没被记录下来（例如刚升级完）。"
+          }
+        }
+      }
+    },
+    "Resumed Grok panes relaunch with `--always-approve`, even if the pane was started without it or its flags weren't recorded (e.g. right after upgrading).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复的 Grok 窗格一律带 `--always-approve` 启动，即使该窗格当初没带这个参数，或参数没被记录下来（例如刚升级完）。"
           }
         }
       }

@@ -154,6 +154,19 @@ enum PaneAgentKind: String, Codable {
         }
     }
 
+    /// The flag each CLI uses to skip every permission prompt — replayed on
+    /// restore when the user opts into "always skip permission prompts".
+    /// Each one is in `launchFlagSpecs`, so `restoreCommand` keeps it.
+    /// nil ⇒ Glint knows no such switch for this agent.
+    var skipPermissionFlags: [String]? {
+        switch self {
+        case .claude: return ["--dangerously-skip-permissions"]
+        case .codex:  return ["--dangerously-bypass-approvals-and-sandbox"]
+        case .grok:   return ["--always-approve"]
+        case .opencode, .devin, .omp, .pi, .agy: return nil
+        }
+    }
+
     static let launchFlagValueMaxLength = 64
 
     /// Flag values (`bypassPermissions`, `danger-full-access`, `never`, …) use
