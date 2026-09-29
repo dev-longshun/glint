@@ -96,10 +96,16 @@ struct SidebarView: View {
                     QuotaSection(claude: usage.claude,
                                  grok: usage.grok,
                                  codexHomes: usage.codexSidebarQuotas)
-                    newWorkspaceCard
-                        .padding(.horizontal, 10)
-                        .padding(.top, 10)
-                        .padding(.bottom, 10)
+                    HStack(spacing: 6) {
+                        newWorkspaceCard
+                        // Outside the card's button so a pill click never
+                        // also opens a new workspace.
+                        SidebarUpdateBadges()
+                            .fixedSize()
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.top, 10)
+                    .padding(.bottom, 10)
                 }
                 .overlay(alignment: .top) {
                     Rectangle().fill(Theme.divider).frame(height: 1)
@@ -228,7 +234,11 @@ struct SidebarView: View {
                 Text("New Workspace")
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(newWorkspaceHovered ? Theme.text1 : Theme.text2)
-                Spacer()
+                    // The update pills share this row: keep the label on one
+                    // line and give it first claim on the width.
+                    .lineLimit(1)
+                    .layoutPriority(1)
+                Spacer(minLength: 0)
             }
             .padding(8)
             // Bare row like the workspace list above: the accent "+" well

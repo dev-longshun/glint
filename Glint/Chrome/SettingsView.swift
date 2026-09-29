@@ -456,6 +456,7 @@ private struct GeneralPane: View {
 
 private struct UpdatesCard: View {
     @EnvironmentObject var updater: UpdaterController
+    @EnvironmentObject var upstream: UpstreamTracker
     @EnvironmentObject var store: WorkspaceStore
 
     var body: some View {
@@ -470,6 +471,12 @@ private struct UpdatesCard: View {
             SettingsRow("Include pre-release builds",
                         subtitle: "Our CI currently ships every DMG as a pre-release (0.1.27-dev.N). Keep this on to receive them.") {
                 Toggle("", isOn: $updater.receiveBetaUpdates)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            SettingsDivider()
+            SettingsRow("Show upstream commits",
+                        subtitle: "Shows how many commits chenbstack/glint has that this fork hasn't merged yet, next to New Workspace.") {
+                Toggle("", isOn: $upstream.enabled)
                     .toggleStyle(.switch).labelsHidden()
             }
             SettingsDivider()

@@ -87,6 +87,13 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - 原因：macOS 15 的 plutil 提取失败时把报错写到 stdout，`|| true` 会把报错文本当成值，导致 `GROK_SESSION_ID` 等兜底逻辑失效  
    - 上游在脚本里新增 plutil 读取时（如 agy 的 `conversationId`），合并时逐行改成这种写法  
 
+9. **应用内更新：退出流程、更新红点与上游提醒**  
+   - `Glint/App/AppDelegate.swift`：`terminateAfterDismissingSheets()`，配合 `WorkspaceStore.dismissSheetsForQuit()` 在退出前关闭所有 sheet（sheet 挂着时 AppKit 会在询问 delegate 前直接拒绝 terminate）  
+   - `Glint/App/UpdaterController.swift`：退出被取消时进入 `readyToInstall`（「退出并安装」）；replace.sh 不设超时、等进程退出，先复制到 `.Glint-update-staging` 再改名替换；`showsUpdateBadge`、每小时后台检查且不清空已知结果  
+   - `Glint/App/UpstreamTracker.swift`：compare 接口统计上游 `chenbstack:main` 未合并提交数  
+   - `Glint/Chrome/SidebarUpdateBadges.swift`：「新建工作区」右侧的更新 / 上游胶囊与弹窗；`ContentView` 齿轮红点；`SettingsView`「显示上游新提交」开关  
+   - 上游若改更新流程、`installAndRelaunch` 或侧边栏底部布局：保留以上入口与退出流程，不得退回直接 `NSApp.terminate(nil)`  
+
 ### 同步操作红线
 
 - **禁止**：`git reset --hard upstream/main`、`git checkout upstream/main -- .`、无审查的 `theirs` 全收、把冲突一律选成上游。  

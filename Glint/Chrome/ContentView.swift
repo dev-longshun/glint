@@ -381,6 +381,7 @@ private struct SidebarEdgeDivider: View {
 
 struct ToolbarHeader: View {
     @EnvironmentObject var store: WorkspaceStore
+    @EnvironmentObject var updater: UpdaterController
     /// Traffic lights disappear in full screen, so the 78pt gutter we
     /// reserve for them (when the sidebar is collapsed) must collapse too
     /// or the toolbar starts with a dead zone.
@@ -460,6 +461,18 @@ struct ToolbarHeader: View {
                 }
                 ToolbarIconButton(symbol: "gearshape", help: "Settings (⌘,)") {
                     store.settingsOpen = true
+                }
+                // Same signal as the sidebar update pill, for when the
+                // sidebar is collapsed.
+                .overlay(alignment: .topTrailing) {
+                    if updater.showsUpdateBadge {
+                        Circle()
+                            .fill(Color.red)
+                            .frame(width: 7, height: 7)
+                            .padding(.top, 9)
+                            .padding(.trailing, 9)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
             // Tahoe-style grouped toolbar cluster: the two trailing buttons

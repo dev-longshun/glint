@@ -78,6 +78,7 @@ struct GlintApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var workspaceStore = WorkspaceStore()
     @StateObject private var updater = UpdaterController()
+    @StateObject private var upstream = UpstreamTracker()
     @StateObject private var usage = UsageStore()
     @StateObject private var codexHomes = CodexHomeStore()
     @StateObject private var shortcuts = ShortcutStore()
@@ -134,12 +135,16 @@ struct GlintApp: App {
                 .environmentObject(workspaceStore)
                 .environmentObject(workspaceStore.activity)
                 .environmentObject(updater)
+                .environmentObject(upstream)
                 .environmentObject(usage)
                 .environmentObject(codexHomes)
                 .environmentObject(shortcuts)
                 .frame(minWidth: 980, minHeight: 600)
                 .preferredColorScheme(Theme.colorScheme)
-                .onAppear { updater.startDeferred() }
+                .onAppear {
+                    updater.startDeferred()
+                    upstream.start()
+                }
                 // Live language switching: AppleLanguages (set in init) only
                 // applies on the next launch; this env value re-resolves
                 // LocalizedStringKey lookups immediately when the user picks

@@ -18,6 +18,7 @@
 		164C6F51683CE7942393E816 /* GitDiff.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7039488F4C2F75498E461311 /* GitDiff.swift */; };
 		175E069EE844FB32C6EE51BB /* Persistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8EDE0D7C434B8E9C76C4A297 /* Persistence.swift */; };
 		180444BD20493AE4822BD372 /* GhosttyTickSchedulerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D751E30DFF2EFA6F705A374 /* GhosttyTickSchedulerTests.swift */; };
+		19BAAFDB90870AA8F1E77E19 /* UpstreamTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4B58231D1CDD3A39FAEE761 /* UpstreamTracker.swift */; };
 		21C03B3AE912F4D30FA6F92C /* PaneAgentState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */; };
 		2218BACA355875F975446783 /* GhosttySurfaceAccessibility.swift in Sources */ = {isa = PBXBuildFile; fileRef = 454D414FF362C09886EA963F /* GhosttySurfaceAccessibility.swift */; };
 		262CB25BEB2B28B12C162F66 /* ghostty in Resources */ = {isa = PBXBuildFile; fileRef = 1CD90B7C77381E05E8A2BA8C /* ghostty */; };
@@ -49,6 +50,7 @@
 		6290F26DFE2D0D5E1FEB9FA9 /* GitRefreshCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBB695363FAF3A996EF0C9FF /* GitRefreshCoordinator.swift */; };
 		632C9446752A79B9C95A5D0D /* addon-fit-LICENSE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 677808A57BE53607DA391FC8 /* addon-fit-LICENSE.txt */; };
 		692D1A7D490E07D796535EAA /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4408F9761E584DE2AB6630E2 /* UpdaterController.swift */; };
+		698E706DF962CD27D42E3CF3 /* SidebarUpdateBadges.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C6F1A21D981840DA18EFFE /* SidebarUpdateBadges.swift */; };
 		6B6B183329BCCDE5474D88AF /* web-remote.css in Resources */ = {isa = PBXBuildFile; fileRef = ABF0871355239B5D7C80B719 /* web-remote.css */; };
 		6BE78104E4CC97417ED400B4 /* xterm.mjs in Resources */ = {isa = PBXBuildFile; fileRef = 36D0A3B6CB143C412B8EDA7B /* xterm.mjs */; };
 		6D74FE6545631EB8193C82E1 /* PaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08FC2FBC9E8729A5ECBF857C /* PaneView.swift */; };
@@ -140,6 +142,7 @@
 		0FBF22AEC81DBE92987A8CB4 /* CodexUsageReaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageReaderTests.swift; sourceTree = "<group>"; };
 		150EEF32284061D527E51866 /* GlintTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintTheme.swift; sourceTree = "<group>"; };
 		16137B405E48DBE262A15B6D /* PaneSurfaceRepresentable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSurfaceRepresentable.swift; sourceTree = "<group>"; };
+		16C6F1A21D981840DA18EFFE /* SidebarUpdateBadges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarUpdateBadges.swift; sourceTree = "<group>"; };
 		1CD90B7C77381E05E8A2BA8C /* ghostty */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ghostty; path = GhosttyResources/ghostty; sourceTree = SOURCE_ROOT; };
 		1E646AABA8ADCE8A2A5C6F55 /* PaneTreeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneTreeView.swift; sourceTree = "<group>"; };
 		21868C7211897C87A6CAD7C3 /* ControlBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlBridge.swift; sourceTree = "<group>"; };
@@ -214,6 +217,7 @@
 		C9E2B9ADF809766CE4278047 /* SafeJSON.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafeJSON.swift; sourceTree = "<group>"; };
 		D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */ = {isa = PBXFileReference; path = "zsh-autosuggestions.zsh"; sourceTree = "<group>"; };
 		D36068DE0F0DDDECA779C743 /* AgentElapsedTimerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentElapsedTimerTests.swift; sourceTree = "<group>"; };
+		D4B58231D1CDD3A39FAEE761 /* UpstreamTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpstreamTracker.swift; sourceTree = "<group>"; };
 		D5E915CEF581085DF7D1B9D1 /* UpdaterVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdaterVersionTests.swift; sourceTree = "<group>"; };
 		D7F8C1899F93B387843907FF /* ReviewScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReviewScopeTests.swift; sourceTree = "<group>"; };
 		DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSafety.swift; sourceTree = "<group>"; };
@@ -367,6 +371,7 @@
 				C11B3335E47DDAF77A883064 /* ModalOverlay.swift */,
 				0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */,
 				6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */,
+				16C6F1A21D981840DA18EFFE /* SidebarUpdateBadges.swift */,
 				A8C269A6E9AE87961C3356DC /* SidebarView.swift */,
 				050E267AE14712D4D6633B4F /* Theme.swift */,
 				C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */,
@@ -466,6 +471,7 @@
 				DB20921E3CAC1006A8FBD3AE /* SettingsSafety.swift */,
 				0149644D9C66D1E2D27B0850 /* ShortcutStore.swift */,
 				4408F9761E584DE2AB6630E2 /* UpdaterController.swift */,
+				D4B58231D1CDD3A39FAEE761 /* UpstreamTracker.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -689,10 +695,12 @@
 				EF3ACBA990526130228FAD0B /* SettingsView.swift in Sources */,
 				F584D3237E44E7444086E011 /* ShellRcBlock.swift in Sources */,
 				315A37A793978029ECA337C0 /* ShortcutStore.swift in Sources */,
+				698E706DF962CD27D42E3CF3 /* SidebarUpdateBadges.swift in Sources */,
 				CD30F5E1B78B3C46C9990FD6 /* SidebarView.swift in Sources */,
 				456D76955277C3299291BF60 /* SyntaxHighlighter.swift in Sources */,
 				7FC12666816053BEB64079CB /* Theme.swift in Sources */,
 				692D1A7D490E07D796535EAA /* UpdaterController.swift in Sources */,
+				19BAAFDB90870AA8F1E77E19 /* UpstreamTracker.swift in Sources */,
 				D3D6CF13B67D30E9DA557F83 /* UsageStore.swift in Sources */,
 				AB89FA6EF5785EC4026F4402 /* VisualEffectBackground.swift in Sources */,
 				EAC3EE05466931E8AAF620D2 /* WebRemoteProtocol.swift in Sources */,

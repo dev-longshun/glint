@@ -97,6 +97,7 @@ final class UpdaterController: ObservableObject {
     private var checkTask: Task<Void, Never>?
     private var installTask: Task<Void, Never>?
     private var autoCheckScheduled = false
+    private var periodicTimer: Timer?
     /// Set once the replace helper is running and waiting for us to exit.
     /// Blocks any further check / install in this process — a second helper
     /// would race the first to swap the bundle.
@@ -119,19 +120,36 @@ final class UpdaterController: ObservableObject {
 
     // MARK: Lifecycle
 
-    /// Called once from the main window `onAppear`. Schedules a quiet background
-    /// check when automatic checks are enabled (throttled to once per hour).
+    /// Called once from the main window `onAppear`. Schedules quiet background
+    /// checks while automatic checks are enabled: one shortly after launch
+    /// (so the sidebar update badge is current right away), then hourly.
     func startDeferred() {
         guard !autoCheckScheduled else { return }
         autoCheckScheduled = true
-        guard automaticallyChecksForUpdates else { return }
 
-        let last = UserDefaults.standard.object(forKey: Self.lastCheckKey) as? Date
-        if let last, Date().timeIntervalSince(last) < 3600 { return }
-
+        periodicTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.automaticallyChecksForUpdates else { return }
+                self.checkForUpdates(userInitiated: false)
+            }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
             guard let self, self.automaticallyChecksForUpdates else { return }
             self.checkForUpdates(userInitiated: false)
+        }
+    }
+
+    /// Drives the red dot on the sidebar update pill and the Settings gear:
+    /// there's a newer build to act on (or one mid-install / waiting on quit).
+    var showsUpdateBadge: Bool {
+        switch phase {
+        case .available, .downloading, .installing, .readyToInstall:
+            return true
+        case .failed:
+            // Install failed but the release is still there to retry.
+            return availableVersion != nil
+        case .idle, .checking, .upToDate:
+            return false
         }
     }
 
@@ -196,19 +214,26 @@ final class UpdaterController: ObservableObject {
         }
     }
 
+    /// Background (non-user) checks keep the last result on screen until the
+    /// new one lands — and keep it on failure — so the sidebar badge doesn't
+    /// blink away every hour or vanish while offline.
     private func performCheck(userInitiated: Bool) async throws {
-        phase = .checking
-        statusMessage = String(localized: "Checking for updates…")
+        if userInitiated {
+            phase = .checking
+            statusMessage = String(localized: "Checking for updates…")
+            availableVersion = nil
+            availableAsset = nil
+            downloadProgress = 0
+        }
         canCheckForUpdates = false
-        availableVersion = nil
-        availableAsset = nil
-        downloadProgress = 0
 
         let releases = try await Self.fetchReleases()
         UserDefaults.standard.set(Date(), forKey: Self.lastCheckKey)
 
         let local = Self.currentVersionString()
         guard let asset = Self.pickAsset(from: releases, includePrerelease: receiveBetaUpdates) else {
+            availableVersion = nil
+            availableAsset = nil
             phase = .upToDate
             statusMessage = String(localized: "No update packages found on GitHub Releases.")
             canCheckForUpdates = true
@@ -216,10 +241,11 @@ final class UpdaterController: ObservableObject {
         }
 
         if !Self.isRemoteVersion(asset.version, newerThan: local) {
+            availableVersion = nil
+            availableAsset = nil
             phase = .upToDate
             statusMessage = String(localized: "You're up to date.")
             canCheckForUpdates = true
-            _ = userInitiated
             return
         }
 

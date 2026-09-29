@@ -91,6 +91,17 @@
         }
       }
     },
+    "%lld new upstream commits": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上游有 %lld 个新提交"
+          }
+        }
+      }
+    },
     "+%@": {},
     "1 file": {
       "extractionState": "manual",
@@ -121,6 +132,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "1 分钟"
+          }
+        }
+      }
+    },
+    "1 new upstream commit": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上游有 1 个新提交"
           }
         }
       }
@@ -971,6 +993,17 @@
         }
       }
     },
+    "Checked %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检查于 %@"
+          }
+        }
+      }
+    },
     "Checking for updates…": {
       "extractionState": "manual",
       "localizations": {
@@ -1645,6 +1678,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "当前"
+          }
+        }
+      }
+    },
+    "Current version: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前版本：%@"
           }
         }
       }
@@ -5115,6 +5159,17 @@
         }
       }
     },
+    "Show upstream commits": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示上游新提交"
+          }
+        }
+      }
+    },
     "Show usage in sidebar": {
       "extractionState": "manual",
       "localizations": {
@@ -5133,6 +5188,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "输入时在光标后用浅色显示最近一条匹配的历史命令。按 → 或 End 接受。"
+          }
+        }
+      }
+    },
+    "Shows how many commits chenbstack/glint has that this fork hasn't merged yet, next to New Workspace.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在「新建工作区」旁显示上游 chenbstack/glint 有多少个本 fork 尚未合并的提交。"
           }
         }
       }
@@ -6014,6 +6080,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "树状显示"
+          }
+        }
+      }
+    },
+    "View on GitHub": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 GitHub 上查看"
           }
         }
       }
