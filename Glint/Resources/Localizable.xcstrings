@@ -4292,6 +4292,17 @@
         }
       }
     },
+    "Quit & Install": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出并安装"
+          }
+        }
+      }
+    },
     "Quit Glint": {
       "extractionState": "stale",
       "localizations": {
@@ -4310,6 +4321,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "退出 Glint?"
+          }
+        }
+      }
+    },
+    "Quits Glint, installs the downloaded update, and reopens it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "退出 Glint，安装已下载的更新并重新打开。"
           }
         }
       }
@@ -5596,6 +5618,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "钩子配置无法编码为 JSON。"
+          }
+        }
+      }
+    },
+    "The new version is ready. Quit Glint to finish installing.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新版本已就绪，请退出 Glint 完成安装。"
           }
         }
       }

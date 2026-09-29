@@ -658,6 +658,18 @@ final class WorkspaceStore: ObservableObject {
         newWorkspaceSheetOpen = true
     }
 
+    /// Dismiss every sheet / dialog hosted on the main window. AppKit refuses
+    /// `NSApp.terminate` while a sheet is attached (it never even reaches
+    /// `applicationShouldTerminate`), so programmatic quits — the in-app
+    /// updater — clear them first. Sheets nested inside Settings (theme
+    /// browser, its dialogs) go away with Settings itself.
+    func dismissSheetsForQuit() {
+        settingsOpen = false
+        newWorkspaceSheetOpen = false
+        pendingWorktreeDelete = nil
+        worktreeCarryFailed = false
+    }
+
     /// Lightweight git status per workspace, keyed by workspace id. Refreshed by
     /// filesystem/command events plus a slow fallback. NON-persistent — it's live
     /// state, recomputed each launch, never written to state.json.

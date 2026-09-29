@@ -67,6 +67,9 @@ final class UpdaterController: ObservableObject {
         case available
         case downloading
         case installing
+        /// Update staged and the replace helper is waiting, but our quit was
+        /// cancelled — the user has to quit Glint to finish.
+        case readyToInstall
         case failed
     }
 
@@ -94,6 +97,10 @@ final class UpdaterController: ObservableObject {
     private var checkTask: Task<Void, Never>?
     private var installTask: Task<Void, Never>?
     private var autoCheckScheduled = false
+    /// Set once the replace helper is running and waiting for us to exit.
+    /// Blocks any further check / install in this process — a second helper
+    /// would race the first to swap the bundle.
+    private var replaceHelperLaunched = false
 
     // MARK: Init
 
@@ -137,7 +144,7 @@ final class UpdaterController: ObservableObject {
     /// One-click install: if no remote asset known yet, check first, then
     /// download → unquarantine → replace → relaunch.
     func installAndRelaunch() {
-        guard installTask == nil else { return }
+        guard installTask == nil, !replaceHelperLaunched else { return }
         installTask = Task { [weak self] in
             guard let self else { return }
             defer { self.installTask = nil }
@@ -157,10 +164,21 @@ final class UpdaterController: ObservableObject {
         }
     }
 
+    /// "Quit & Install" from `.readyToInstall`: retry the quit so the waiting
+    /// replace helper can swap the bundle and reopen Glint.
+    func quitToFinishInstall() {
+        guard replaceHelperLaunched, phase == .readyToInstall else { return }
+        phase = .installing
+        statusMessage = String(localized: "Restarting…")
+        Task { [weak self] in
+            await self?.quitForPendingInstall()
+        }
+    }
+
     // MARK: Check
 
     private func checkForUpdates(userInitiated: Bool) {
-        guard checkTask == nil, installTask == nil else { return }
+        guard checkTask == nil, installTask == nil, !replaceHelperLaunched else { return }
         checkTask = Task { [weak self] in
             guard let self else { return }
             defer { self.checkTask = nil }
@@ -300,11 +318,26 @@ final class UpdaterController: ObservableObject {
             destApp: destApp,
             workDir: workDir
         )
+        replaceHelperLaunched = true
 
         phase = .installing
         statusMessage = String(localized: "Restarting…")
         try await Task.sleep(nanoseconds: 300_000_000)
-        NSApp.terminate(nil)
+        await quitForPendingInstall()
+    }
+
+    /// Quit so the waiting replace helper can swap the bundle. If the quit is
+    /// cancelled (busy-work confirmation declined, a sheet that wouldn't
+    /// close), park in `.readyToInstall` and ask the user to quit instead of
+    /// sitting on "Restarting…" forever. The helper keeps waiting either way.
+    private func quitForPendingInstall() async {
+        quitDebugLog("updater quitting to finish install \(AppDelegate.quitDebugState())")
+        await AppDelegate.terminateAfterDismissingSheets()
+        // Only reached when termination was cancelled.
+        quitDebugLog("updater quit cancelled → readyToInstall")
+        phase = .readyToInstall
+        statusMessage = String(localized: "The new version is ready. Quit Glint to finish installing.")
+        canCheckForUpdates = false
     }
 
     // MARK: Network
@@ -477,6 +510,12 @@ final class UpdaterController: ObservableObject {
 
     /// Spawns a detached shell helper that waits for this process to exit,
     /// swaps the app bundle, strips quarantine, and reopens Glint.
+    ///
+    /// Never touches the bundle while we're still running: it waits with no
+    /// timeout (PID + start time, so a recycled PID can't fool it). The new
+    /// app is copied next to the destination up front, so once we exit the
+    /// swap is two same-volume renames — a quit during logout / shutdown
+    /// can't leave a half-copied Glint.app behind.
     nonisolated private static func writeAndLaunchReplaceHelper(
         stagedApp: URL,
         destApp: URL,
@@ -494,23 +533,32 @@ final class UpdaterController: ObservableObject {
         LOG="$WORK/replace.log"
         exec >>"$LOG" 2>&1
         echo "Glint replace helper starting pid=$$ waiting for $TARGET_PID"
-        for i in $(seq 1 150); do
-          if ! kill -0 "$TARGET_PID" 2>/dev/null; then
-            break
-          fi
-          sleep 0.2
-        done
-        sleep 0.5
+        TARGET_START="$(ps -p "$TARGET_PID" -o lstart= 2>/dev/null || true)"
         if [ ! -d "$SRC" ]; then
           echo "staged app missing: $SRC"
           exit 1
         fi
+        # No .app suffix: Launch Services must not register the staging copy.
+        STAGING="$(dirname "$DEST")/.Glint-update-staging"
+        rm -rf "$STAGING"
+        /usr/bin/ditto "$SRC" "$STAGING"
+        echo "staged at $STAGING"
+        while [ -n "$TARGET_START" ] && \\
+          [ "$(ps -p "$TARGET_PID" -o lstart= 2>/dev/null || true)" = "$TARGET_START" ]; do
+          sleep 0.5
+        done
+        echo "Glint exited, swapping"
+        sleep 0.5
         BACKUP="${DEST}.glint-update-backup"
         rm -rf "$BACKUP"
         if [ -d "$DEST" ]; then
           mv "$DEST" "$BACKUP"
         fi
-        /usr/bin/ditto "$SRC" "$DEST"
+        if ! mv "$STAGING" "$DEST"; then
+          echo "swap failed, restoring previous app"
+          if [ -d "$BACKUP" ]; then mv "$BACKUP" "$DEST"; fi
+          exit 1
+        fi
         /usr/bin/xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
         if ! /usr/bin/codesign --verify --deep --strict "$DEST" 2>/dev/null; then
           /usr/bin/codesign --force --deep --sign - "$DEST" 2>/dev/null || true

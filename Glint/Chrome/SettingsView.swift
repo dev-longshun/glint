@@ -492,20 +492,29 @@ private struct UpdatesCard: View {
                 }
                 .disabled(!updater.canCheckForUpdates
                           || updater.phase == .downloading
-                          || updater.phase == .installing)
+                          || updater.phase == .installing
+                          || updater.phase == .readyToInstall)
             }
             SettingsDivider()
             SettingsRow("Install update",
                         subtitle: oneClickSubtitle) {
-                Button("Download & Install") {
-                    // Install may quit the app; close Settings first so the
-                    // sheet does not race termination.
-                    store.settingsOpen = false
-                    DispatchQueue.main.async {
-                        updater.installAndRelaunch()
+                if updater.phase == .readyToInstall {
+                    // Staged update waiting on our exit. The updater closes
+                    // Settings itself before quitting (a sheet blocks quit).
+                    Button("Quit & Install") {
+                        updater.quitToFinishInstall()
                     }
+                } else {
+                    Button("Download & Install") {
+                        // Install may quit the app; close Settings first so the
+                        // sheet does not race termination.
+                        store.settingsOpen = false
+                        DispatchQueue.main.async {
+                            updater.installAndRelaunch()
+                        }
+                    }
+                    .disabled(!canInstall)
                 }
-                .disabled(!canInstall)
             }
         }
     }
@@ -525,6 +534,8 @@ private struct UpdatesCard: View {
                 return String(localized: "Update available")
             case .downloading: return String(localized: "Downloading update…")
             case .installing: return String(localized: "Installing update…")
+            case .readyToInstall:
+                return String(localized: "The new version is ready. Quit Glint to finish installing.")
             case .failed: return String(localized: "Update failed")
             }
         }()
@@ -540,7 +551,7 @@ private struct UpdatesCard: View {
         switch updater.phase {
         case .available, .failed, .upToDate, .idle:
             return updater.canCheckForUpdates
-        case .checking, .downloading, .installing:
+        case .checking, .downloading, .installing, .readyToInstall:
             return false
         }
     }
@@ -548,6 +559,9 @@ private struct UpdatesCard: View {
     private var oneClickSubtitle: String {
         // SettingsRow wraps subtitle in LocalizedStringKey — pass English keys
         // for static copy; pre-format only the versioned line (verbatim after).
+        if updater.phase == .readyToInstall {
+            return "Quits Glint, installs the downloaded update, and reopens it."
+        }
         if let v = updater.availableVersion, updater.phase == .available {
             return String(
                 format: String(localized: "Install %@, remove quarantine, replace this app, and restart."),

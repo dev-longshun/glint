@@ -49,6 +49,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 FontCatalog.warmCache()
             }
         }
+        #if DEBUG
+        // 📖 [quit-debug] 临时：按需原样复现更新器的退出路径
+        // （MainActor Task → sleep 0.3s → NSApp.terminate），终端发分布式通知触发。
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("app.glint.debug.terminate"),
+            object: nil, queue: .main
+        ) { _ in
+            Task { @MainActor in
+                quitDebugLog("debug trigger received \(AppDelegate.quitDebugState())")
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                await AppDelegate.terminateAfterDismissingSheets()
+                quitDebugLog("debug trigger terminate cancelled")
+            }
+        }
+        #endif
     }
 
     /// Intercept folder / file / `glint://` opens at the raw Apple-Event level,
@@ -159,11 +174,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        quitDebugLog("applicationShouldTerminate enter didConfirmViaWindowClose=\(didConfirmViaWindowClose) busy=\(WorkspaceStore.current?.panesNeedingQuitConfirmation ?? -1) \(Self.quitDebugState())")
         // Closing the window already ran this confirmation (and the window
         // is gone by now) — don't ask twice on the way out.
-        if didConfirmViaWindowClose { return .terminateNow }
-        if Self.confirmTerminationIfBusy() { return .terminateNow }
-        return .terminateCancel
+        let reply: NSApplication.TerminateReply
+        if didConfirmViaWindowClose {
+            reply = .terminateNow
+        } else if Self.confirmTerminationIfBusy() {
+            reply = .terminateNow
+        } else {
+            reply = .terminateCancel
+        }
+        quitDebugLog("applicationShouldTerminate reply=\(reply == .terminateNow ? "now" : "cancel")")
+        return reply
+    }
+
+    /// Quit on behalf of the in-app updater. AppKit silently refuses
+    /// `terminate` while any window has a sheet attached — it bails before
+    /// asking `applicationShouldTerminate` — so clear the sheets first and
+    /// wait out their close animation. Returns only when termination was
+    /// cancelled (e.g. the busy-work confirmation was declined); a successful
+    /// terminate ends the process and never comes back.
+    static func terminateAfterDismissingSheets() async {
+        WorkspaceStore.current?.dismissSheetsForQuit()
+        var waited = 0
+        while waited < 20, NSApp.windows.contains(where: { $0.attachedSheet != nil }) {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+            waited += 1
+        }
+        // Sheets our state doesn't drive: end them innermost first (a sheet
+        // can carry its own sheet). Bounded in case one refuses to go.
+        for _ in 0..<8 {
+            let parents = NSApp.windows.filter { $0.attachedSheet != nil }
+            guard !parents.isEmpty else { break }
+            for parent in parents {
+                if let sheet = parent.attachedSheet, sheet.attachedSheet == nil {
+                    parent.endSheet(sheet)
+                }
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        quitDebugLog("terminateAfterDismissingSheets waited=\(waited * 100)ms calling NSApp.terminate \(quitDebugState())")
+        NSApp.terminate(nil)
+        quitDebugLog("terminateAfterDismissingSheets NSApp.terminate returned → cancelled")
+    }
+
+    /// 📖 [quit-debug] 临时：记录可能拦住退出的界面状态（sheet / 模态窗）。
+    static func quitDebugState() -> String {
+        let store = WorkspaceStore.current
+        let sheets = NSApp.windows.compactMap { window -> String? in
+            guard let sheet = window.attachedSheet else { return nil }
+            return "\(type(of: window))→\(type(of: sheet))"
+        }
+        let modal = NSApp.modalWindow.map { "\(type(of: $0))" } ?? "nil"
+        let key = NSApp.keyWindow.map { "\(type(of: $0))" } ?? "nil"
+        return "settingsOpen=\(store?.settingsOpen ?? false) newWorkspaceSheetOpen=\(store?.newWorkspaceSheetOpen ?? false) modalWindow=\(modal) attachedSheets=\(sheets) keyWindow=\(key)"
     }
 
     /// Shared by ⌘Q and the window close button: if any pane still has real
@@ -183,6 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        quitDebugLog("applicationWillTerminate enter")
         // Belt-and-suspenders: save the frame at quit even if didMove /
         // didEndLiveResize never fired this session (e.g. user opens, never
         // touches the window, quits).
@@ -286,6 +352,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let window = mainWindow else { return }
         UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: Self.frameDefaultsKey)
     }
+}
+
+/// 📖 [quit-debug] 临时排查「更新卡在正在重启…」的统一日志出口。
+func quitDebugLog(_ message: String) {
+    NSLog("📖 [quit-debug] %@", message)
 }
 
 /// NSWindowDelegate proxy: answers `windowShouldClose` itself (running the
