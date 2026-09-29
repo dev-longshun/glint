@@ -707,6 +707,32 @@ final class WorkspaceStore: ObservableObject {
         sidebarSearchFocusTick &+= 1
     }
 
+    /// Workspace whose sidebar card should enter its inline rename field.
+    /// Set by ⌘R (`requestRenameSelectedWorkspace`); the matching
+    /// `WorkspaceCard` consumes it (resets to nil) on change or on appear,
+    /// and `SidebarView` clears a search filter hiding the card and scrolls
+    /// it into view.
+    @Published var pendingWorkspaceRenameID: UUID?
+    func requestRenameSelectedWorkspace() {
+        guard !modalOwnsFocus,
+              let id = selectedWorkspaceID,
+              let ws = workspaces.first(where: { $0.id == id }),
+              !ws.archived else {
+            NSSound.beep()
+            return
+        }
+        if sidebarCollapsed {
+            sidebarCollapsed = false
+            // Post on the next runloop so the freshly expanded sidebar is
+            // mounted and its onChange observers see the request.
+            DispatchQueue.main.async { [weak self] in
+                self?.pendingWorkspaceRenameID = id
+            }
+        } else {
+            pendingWorkspaceRenameID = id
+        }
+    }
+
     /// One-shot: stays false until a launch focus claim actually succeeds, so
     /// a claim that bailed (e.g. a modal was already up) isn't marked done.
     /// The only call site is launch-time, so this flips at most once.

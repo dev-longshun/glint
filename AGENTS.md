@@ -94,6 +94,12 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - `Glint/Chrome/SidebarUpdateBadges.swift`：「新建工作区」右侧的更新 / 上游胶囊与弹窗；`ContentView` 齿轮红点；`SettingsView`「显示上游新提交」开关  
    - 上游若改更新流程、`installAndRelaunch` 或侧边栏底部布局：保留以上入口与退出流程，不得退回直接 `NSApp.terminate(nil)`  
 
+10. **⌘R 重命名工作区快捷键**  
+   - `Glint/App/ShortcutStore.swift`：`ShortcutID.renameWorkspace`（workspace 组，默认 ⌘R，可在设置里改键）；`Glint/App/GlintApp.swift`：菜单「Rename Workspace」  
+   - `Glint/Workspace/WorkspaceStore.swift`：`pendingWorkspaceRenameID` + `requestRenameSelectedWorkspace()`（弹层打开或无选中时提示音，侧栏收起时先展开）  
+   - `Glint/Chrome/SidebarView.swift`：`WorkspaceCard.consumeRenameRequest()` 在 onAppear / onChange 时进入改名；`SidebarView` 外层包 `ScrollViewReader`，`revealWorkspaceForRename` 负责清空过滤搜索词并滚到卡片  
+   - 上游若给 `ShortcutID` 加新快捷键：默认键不得与 ⌘R 冲突（`ShortcutStoreTests.testDefaultChordsAreUnique` 会拦）；上游若重写侧栏列表或卡片改名逻辑：保留这条外部触发改名的链路  
+
 ### 同步操作红线
 
 - **禁止**：`git reset --hard upstream/main`、`git checkout upstream/main -- .`、无审查的 `theirs` 全收、把冲突一律选成上游。  

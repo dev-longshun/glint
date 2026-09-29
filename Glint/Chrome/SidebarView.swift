@@ -56,40 +56,46 @@ struct SidebarView: View {
                         searchFocused = true
                     }
 
-                ScrollView {
-                    VStack(spacing: 0) {
-                        workspacesSectionHeader(activeCount: filteredActiveWorkspaces.count)
-                        VStack(spacing: 6) {
-                            ForEach(filteredActiveWorkspaces) { ws in
-                                WorkspaceCard(ws: ws,
-                                              isDragging: draggingWorkspaceID == ws.id,
-                                              shortcutBadge: cmdKey.commandHeld ? shortcutNumber(for: ws) : nil,
-                                              onReorderChange: { pointerY in handleReorderDrag(id: ws.id, pointerY: pointerY) },
-                                              onReorderEnd: { handleReorderEnd() })
-                                    .background(
-                                        GeometryReader { gp in
-                                            Color.clear.preference(
-                                                key: CardFrameKey.self,
-                                                value: [ws.id: gp.frame(in: .named(kSidebarReorderSpace))])
-                                        }
-                                    )
-                                    .zIndex(draggingWorkspaceID == ws.id ? 1 : 0)
+                ScrollViewReader { scrollProxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            workspacesSectionHeader(activeCount: filteredActiveWorkspaces.count)
+                            VStack(spacing: 6) {
+                                ForEach(filteredActiveWorkspaces) { ws in
+                                    WorkspaceCard(ws: ws,
+                                                  isDragging: draggingWorkspaceID == ws.id,
+                                                  shortcutBadge: cmdKey.commandHeld ? shortcutNumber(for: ws) : nil,
+                                                  onReorderChange: { pointerY in handleReorderDrag(id: ws.id, pointerY: pointerY) },
+                                                  onReorderEnd: { handleReorderEnd() })
+                                        .id(ws.id)
+                                        .background(
+                                            GeometryReader { gp in
+                                                Color.clear.preference(
+                                                    key: CardFrameKey.self,
+                                                    value: [ws.id: gp.frame(in: .named(kSidebarReorderSpace))])
+                                            }
+                                        )
+                                        .zIndex(draggingWorkspaceID == ws.id ? 1 : 0)
+                                }
                             }
+                            .coordinateSpace(name: kSidebarReorderSpace)
+                            .onPreferenceChange(CardFrameKey.self) { cardFrames = $0 }
+                            .padding(.horizontal, 10)
+                            .padding(.top, 2)
+                            .animation(.spring(response: 0.32, dampingFraction: 0.85),
+                                       value: filteredActiveWorkspaces.map(\.id))
                         }
-                        .coordinateSpace(name: kSidebarReorderSpace)
-                        .onPreferenceChange(CardFrameKey.self) { cardFrames = $0 }
-                        .padding(.horizontal, 10)
-                        .padding(.top, 2)
-                        .animation(.spring(response: 0.32, dampingFraction: 0.85),
-                                   value: filteredActiveWorkspaces.map(\.id))
+                        .padding(.bottom, 12)
                     }
-                    .padding(.bottom, 12)
-                }
-                .scrollContentBackground(.hidden)
-                .onAppear { syncWorkspaceJumpModifiers() }
-                .onReceive(shortcuts.objectWillChange) { _ in
-                    // Defer so chord map has finished mutating.
-                    DispatchQueue.main.async { syncWorkspaceJumpModifiers() }
+                    .scrollContentBackground(.hidden)
+                    .onAppear { syncWorkspaceJumpModifiers() }
+                    .onReceive(shortcuts.objectWillChange) { _ in
+                        // Defer so chord map has finished mutating.
+                        DispatchQueue.main.async { syncWorkspaceJumpModifiers() }
+                    }
+                    .onChange(of: store.pendingWorkspaceRenameID) { _, id in
+                        if let id { revealWorkspaceForRename(id, proxy: scrollProxy) }
+                    }
                 }
 
                 VStack(spacing: 0) {
@@ -181,6 +187,18 @@ struct SidebarView: View {
         guard let idx = store.activeWorkspaces.firstIndex(where: { $0.id == ws.id }),
               idx < 9 else { return nil }
         return idx + 1
+    }
+
+    /// ⌘R rename: make sure the target card is on screen. A search filter
+    /// hiding it is cleared (the card then consumes the request on appear),
+    /// and the list scrolls to it on the next runloop, once it's laid out.
+    private func revealWorkspaceForRename(_ id: UUID, proxy: ScrollViewProxy) {
+        if !filteredActiveWorkspaces.contains(where: { $0.id == id }) {
+            searchText = ""
+        }
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(id) }
+        }
     }
 
     private var filteredActiveWorkspaces: [Workspace] {
@@ -751,6 +769,10 @@ private struct WorkspaceCard: View {
                 }
             }
         }
+        // ⌘R rename request. onAppear covers a card that only mounts after
+        // the request was posted (search cleared, sidebar just expanded).
+        .onAppear { consumeRenameRequest() }
+        .onChange(of: store.pendingWorkspaceRenameID) { _, _ in consumeRenameRequest() }
         .contentShape(Rectangle())
         .onTapGesture {
             // Single-tap only — double-tap-to-rename used to live here but
@@ -830,6 +852,18 @@ private struct WorkspaceCard: View {
     private func startEditing() {
         draftName = ws.userNamed ? ws.name : ""
         isEditing = true
+    }
+
+    /// Enter rename mode if the store's ⌘R request targets this card. A
+    /// repeat press mid-edit only refocuses the field, keeping the draft.
+    private func consumeRenameRequest() {
+        guard !archived, store.pendingWorkspaceRenameID == ws.id else { return }
+        store.pendingWorkspaceRenameID = nil
+        if isEditing {
+            nameFieldFocused = true
+        } else {
+            startEditing()
+        }
     }
 
     /// Repo to pre-fill the New Worktree sheet with when launched from this card.

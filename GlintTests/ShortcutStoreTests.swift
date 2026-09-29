@@ -24,6 +24,22 @@ final class ShortcutStoreTests: XCTestCase {
     }
 
     @MainActor
+    func testRenameWorkspaceDefaultsToCommandR() {
+        let store = ShortcutStore()
+        XCTAssertEqual(store.chord(for: .renameWorkspace), KeyChord(key: "r", command: true))
+        XCTAssertEqual(ShortcutID.renameWorkspace.group, .workspace)
+    }
+
+    func testDefaultChordsAreUnique() {
+        var seen: [KeyChord: ShortcutID] = [:]
+        for id in ShortcutID.allCases {
+            let chord = ShortcutStore.defaultChord(for: id)
+            XCTAssertNil(seen[chord], "\(id) default collides with \(seen[chord]!)")
+            seen[chord] = id
+        }
+    }
+
+    @MainActor
     func testSetAndConflict() {
         let store = ShortcutStore()
         let chord = KeyChord(key: "n", command: true) // default new workspace

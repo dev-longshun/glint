@@ -159,6 +159,8 @@ struct GlintApp: App {
             CommandGroup(replacing: .newItem) {
                 Button("New Workspace") { workspaceStore.requestNewWorkspace() }
                     .keyboardShortcut(shortcuts.chord(for: .newWorkspace))
+                Button("Rename Workspace") { workspaceStore.requestRenameSelectedWorkspace() }
+                    .keyboardShortcut(shortcuts.chord(for: .renameWorkspace))
                 Button("Next Workspace") { workspaceStore.selectNextWorkspace() }
                     .keyboardShortcut(shortcuts.chord(for: .nextWorkspace))
                 Button("Previous Workspace") { workspaceStore.selectPreviousWorkspace() }

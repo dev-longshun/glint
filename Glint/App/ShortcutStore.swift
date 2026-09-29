@@ -157,6 +157,7 @@ struct KeyChord: Codable, Equatable, Hashable, Sendable {
 enum ShortcutID: String, Codable, CaseIterable, Identifiable, Sendable {
     // Workspace
     case newWorkspace
+    case renameWorkspace
     case nextWorkspace
     case previousWorkspace
     case deleteWorkspace
@@ -199,7 +200,7 @@ enum ShortcutID: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var group: Group {
         switch self {
-        case .newWorkspace, .nextWorkspace, .previousWorkspace,
+        case .newWorkspace, .renameWorkspace, .nextWorkspace, .previousWorkspace,
              .deleteWorkspace, .archiveWorkspace,
              .workspace1, .workspace2, .workspace3, .workspace4, .workspace5,
              .workspace6, .workspace7, .workspace8, .workspace9:
@@ -218,6 +219,7 @@ enum ShortcutID: String, Codable, CaseIterable, Identifiable, Sendable {
     var title: String {
         switch self {
         case .newWorkspace: return "New Workspace"
+        case .renameWorkspace: return "Rename Workspace"
         case .nextWorkspace: return "Next Workspace"
         case .previousWorkspace: return "Previous Workspace"
         case .deleteWorkspace: return "Delete Workspace"
@@ -337,6 +339,8 @@ final class ShortcutStore: ObservableObject {
         switch id {
         case .newWorkspace:
             return KeyChord(key: "n", command: true)
+        case .renameWorkspace:
+            return KeyChord(key: "r", command: true)
         case .nextWorkspace:
             return KeyChord(key: "]", command: true, shift: true)
         case .previousWorkspace:
