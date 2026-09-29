@@ -51,7 +51,7 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - 测试：`GlintTests/*Grok*`、`AgentHookRoutingTests` 等  
 
 2. **Typeless / 无障碍粘贴（终端 AX）**  
-   - `Glint/Pane/GhosttySurfaceView.swift`：`textArea` 角色、value/selectedText 读取、插入后 `AXValueChanged` 等（对标 MUX0，保证「复制最后的转录」类工具可用）  
+   - `Glint/Pane/GhosttySurfaceAccessibility.swift`：`textArea` 角色、value/selectedText 读取；`GhosttySurfaceView.swift`：插入后 `AXValueChanged`（对标 MUX0，保证「复制最后的转录」类工具可用）  
    - 上游若改 surface 嵌入，**保留我们的 AX 行为**，再合入对方无关修复  
 
 3. **终端默认观感（对标 Kaku / MUX0）**  
@@ -62,6 +62,8 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
 4. **本 fork 的 CI / 发版**  
    - `.github/workflows/build-dmg.yml`：push `main` → 自动打 DMG + GitHub Release  
    - 不要被上游只保留 `release.yml`（仅 `v*` tag）的结构删掉或覆盖  
+   - 签名：secrets `GLINT_SIGNING_CERT_P12` / `GLINT_SIGNING_CERT_PASSWORD` 提供固定自签名证书「Glint Fork Code Signing」（证书与密码备份在本机 `~/.glint-signing/`），指定要求 = bundle id + 证书指纹，系统隐私权限跨版本保留；未配置时退回 ad-hoc 并告警  
+   - `Glint/App/UpdaterController.swift`：应用内更新只在 `codesign --verify` 失败时才 ad-hoc 兜底重签。上游若改签名 / 更新流程，**不得恢复无条件 ad-hoc 重签**（否则每次更新都要重新授权系统权限）  
 
 5. **应用图标（AppIcon.icon）**  
    - 必须是 **单个** `lastKnownFileType = wrapper.icon` 资源；禁止把 `icon.json` / `background.png` / `foreground.png` 拆成 Copy Bundle Resources  
@@ -77,6 +79,13 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - `Glint/Pane/GhosttySurfaceView.swift`：`foregroundProcessArguments()`  
    - 作用：`cc` / `cx` / `gk` 这类带权限参数启动的 Claude / Codex / Grok，重启恢复时带上同样的参数  
    - 上游若改 `restoreCommand` 或恢复逻辑：保留 `launchFlags` 这条链路  
+   - 设置 → 代理：Claude / Codex / Grok 的「恢复时总是跳过权限确认」（`restore*SkipPermissions` + `PaneAgentKind.skipPermissionFlags` + `WorkspaceStore.restoreLaunchFlags`），开启时用固定跳过参数替换记录值，兜住升级后没记到参数、裸命令启动等情况  
+   - 上游给 `PaneAgentKind` 新增 case 时，`launchFlagSpecs` / `skipPermissionFlags` 这两个穷举 switch 要补分支，否则编译失败（同步 agy 时踩过）  
+
+8. **hook 上报脚本的 plutil 读取写法**  
+   - `Glint/Agent/AgentHookInstaller.swift` 的 reporter 脚本：一律写成 `X=$(plutil -extract … 2>/dev/null) || X=""`，禁止上游的 `|| true` 写法  
+   - 原因：macOS 15 的 plutil 提取失败时把报错写到 stdout，`|| true` 会把报错文本当成值，导致 `GROK_SESSION_ID` 等兜底逻辑失效  
+   - 上游在脚本里新增 plutil 读取时（如 agy 的 `conversationId`），合并时逐行改成这种写法  
 
 ### 同步操作红线
 
