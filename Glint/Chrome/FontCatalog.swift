@@ -29,13 +29,15 @@ enum FontCatalog {
 
     /// 推荐等宽列表:Kaku/MUX0 默认 JetBrains Mono 置顶,其余常用等宽随后。
     /// 下拉只展示本机已装项(`installedRecommendedMono`)。
+    /// Maple Mono 不随 App 打包,需自行安装(`brew install --cask font-maple-mono`)。
     static let recommendedMono: [String] = [
-        "JetBrains Mono", "SF Mono", "Menlo", "Monaco", "Courier New",
+        "JetBrains Mono", "Maple Mono", "SF Mono", "Menlo", "Monaco", "Courier New",
         "Fira Code", "IBM Plex Mono",
     ]
 
+    /// Maple Mono CN 同样需自行安装(`brew install --cask font-maple-mono-cn`)。
     static let recommendedCJK: [String] = [
-        "LXGW WenKai Mono",
+        "LXGW WenKai Mono", "Maple Mono CN",
         "PingFang SC", "PingFang TC", "PingFang HK",
         "Hiragino Sans GB", "Heiti SC", "Songti SC", "STSong",
         "Source Han Sans CN", "Source Han Serif CN",
