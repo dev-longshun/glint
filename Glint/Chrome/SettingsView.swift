@@ -1558,7 +1558,7 @@ private struct AgentsPane: View {
             }
             SettingsDivider()
             SettingsRow("Show usage in sidebar",
-                        subtitle: "Display Claude's 5-hour and weekly limits in the sidebar. Requires reading the login keychain (macOS asks once).") {
+                        subtitle: "Display Claude's 5-hour and weekly limits in the sidebar. Reads Claude Code's login token from the keychain.") {
                 Toggle("", isOn: $usage.claudeEnabled)
                     .toggleStyle(.switch).labelsHidden()
             }

@@ -100,6 +100,11 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - `Glint/Chrome/SidebarView.swift`：`WorkspaceCard.consumeRenameRequest()` 在 onAppear / onChange 时进入改名；`SidebarView` 外层包 `ScrollViewReader`，`revealWorkspaceForRename` 负责清空过滤搜索词并滚到卡片  
    - 上游若给 `ShortcutID` 加新快捷键：默认键不得与 ⌘R 冲突（`ShortcutStoreTests.testDefaultChordsAreUnique` 会拦）；上游若重写侧栏列表或卡片改名逻辑：保留这条外部触发改名的链路  
 
+11. **Claude 用量读钥匙串走 /usr/bin/security**  
+   - `Glint/Agent/UsageStore.swift`：`ClaudeUsageReader.readKeychainViaSecurityTool` 用 `security find-generic-password -w` 读 `Claude Code-credentials`，禁止改回进程内 `SecItemCopyMatching`  
+   - 原因：本 fork 没有 Team ID，进程内读取需要钥匙串分区列表里有 Glint 的 `cdhash:`；但 Claude Code 每次换 token 重写条目时都会把分区列表重置成只剩 `apple-tool:`，再加上每次更新 cdhash 都会变，「始终允许」只能撑到下次换 token（几小时）；`security` 本来就在该条目的 ACL 和 `apple-tool:` 分区里，读取不弹窗  
+   - 上游若改 Claude 用量读取：保留这条读取路径  
+
 ### 同步操作红线
 
 - **禁止**：`git reset --hard upstream/main`、`git checkout upstream/main -- .`、无审查的 `theirs` 全收、把冲突一律选成上游。  

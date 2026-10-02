@@ -160,7 +160,7 @@ final class UsageStore: ObservableObject {
     }
 
     /// Per-agent switches, persisted, default off — opt-in, since Claude's
-    /// poll needs login-keychain access (a system prompt on first read).
+    /// poll reads Claude Code's login-keychain item.
     @Published var claudeEnabled: Bool {
         didSet {
             guard claudeEnabled != oldValue else { return }
@@ -759,9 +759,9 @@ enum GrokUsageReader {
 /// only `decode`/`endpoint` here need updating; the sidebar handles absence.
 enum ClaudeUsageReader {
     /// Keychain generic-password service used by Claude Code's CLI login — the
-    /// token's source of truth, owned by Claude Code. Reading it can pop a macOS
-    /// authorization prompt (its ACL is bound to Claude Code's signature, not
-    /// ours), so we touch it as little as possible: once on first launch to seed
+    /// token's source of truth, owned by Claude Code. Read ONLY through
+    /// `/usr/bin/security`, never in-process (see `readKeychainViaSecurityTool`).
+    /// We still touch it as little as possible: once on first launch to seed
     /// our own copy, then again ONLY when the seeded copy is rejected (token
     /// rotated). See `tokenCacheURL`.
     private static let keychainService = "Claude Code-credentials"
@@ -889,7 +889,7 @@ enum ClaudeUsageReader {
     /// Pull the OAuth access token out of Claude Code's login keychain item.
     /// Reads only the item Claude Code itself created; nothing is written here.
     private static func readClaudeToken() -> String? {
-        guard let data = readKeychainData(service: keychainService, account: nil) else { return nil }
+        guard let data = readKeychainViaSecurityTool(service: keychainService) else { return nil }
         // The stored blob is the credentials JSON; tolerate a bare token too.
         if let stored = try? JSONDecoder().decode(Stored.self, from: data),
            let tok = stored.claudeAiOauth?.accessToken {
@@ -1012,19 +1012,50 @@ enum ClaudeUsageReader {
         ] as CFDictionary)
     }
 
-    /// Shared generic-password read. `account == nil` matches by service only.
-    private static func readKeychainData(service: String, account: String?) -> Data? {
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        if let account { query[kSecAttrAccount as String] = account }
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return data
+    /// Apple's keychain CLI — the tool Claude Code itself uses to write its
+    /// credentials item.
+    private static let securityToolURL = URL(fileURLWithPath: "/usr/bin/security")
+    /// Upper bound on one `security` read. It normally returns in milliseconds;
+    /// the bound only matters if an item's ACL doesn't trust the tool and the
+    /// resulting prompt goes unanswered — the token actor must not wedge.
+    private static let securityToolTimeout: TimeInterval = 30
+
+    /// Generic-password read via `security find-generic-password -w` instead of
+    /// in-process `SecItemCopyMatching`.
+    ///
+    /// Claude Code creates and rotates its item with `/usr/bin/security`, so the
+    /// item's ACL lists that tool and its partition list carries `apple-tool:` —
+    /// the read is silent. An in-process read instead needs Glint in the
+    /// partition list as `cdhash:…` (we have no Team ID), and that entry never
+    /// survives: each token rotation rewrites the item and resets the partition
+    /// list to just `apple-tool:`, and each build changes our cdhash anyway. So
+    /// "Always Allow" lasted only until Claude Code's next rotation (every few
+    /// hours), then the password prompt popped again.
+    ///
+    /// The secret travels over the stdout pipe, never argv.
+    private static func readKeychainViaSecurityTool(service: String) -> Data? {
+        let proc = Process()
+        proc.executableURL = securityToolURL
+        proc.arguments = ["find-generic-password", "-s", service, "-w"]
+        let out = Pipe()
+        proc.standardInput = FileHandle.nullDevice
+        proc.standardOutput = out
+        proc.standardError = FileHandle.nullDevice
+        do { try proc.run() } catch { return nil }
+
+        let pid = proc.processIdentifier
+        let watchdog = DispatchWorkItem { if proc.isRunning { kill(pid, SIGKILL) } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + securityToolTimeout, execute: watchdog)
+        var data = out.fileHandleForReading.readDataToEndOfFile()
+        proc.waitUntilExit()
+        watchdog.cancel()
+        guard proc.terminationReason == .exit, proc.terminationStatus == 0 else { return nil }
+
+        // `-w` prints the secret followed by a newline.
+        while let last = data.last, last == UInt8(ascii: "\n") || last == UInt8(ascii: "\r") {
+            data.removeLast()
+        }
+        return data.isEmpty ? nil : data
     }
 
     private static let isoFractional: ISO8601DateFormatter = {

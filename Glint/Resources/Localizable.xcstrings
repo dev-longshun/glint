@@ -1955,13 +1955,13 @@
         }
       }
     },
-    "Display Claude's 5-hour and weekly limits in the sidebar. Requires reading the login keychain (macOS asks once).": {
+    "Display Claude's 5-hour and weekly limits in the sidebar. Reads Claude Code's login token from the keychain.": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在侧边栏显示 Claude 的 5 小时和每周额度。需要读取登录钥匙串(macOS 会询问一次)。"
+            "value": "在侧边栏显示 Claude 的 5 小时和每周额度。会从钥匙串读取 Claude Code 的登录凭据。"
           }
         }
       }
