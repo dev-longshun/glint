@@ -58,6 +58,12 @@ final class UpdaterController: ObservableObject {
     nonisolated private static let receiveBetaKey = "GlintReceiveBetaUpdates"
     nonisolated private static let lastCheckKey = "GlintLastUpdateCheckAt"
 
+    /// Background re-check cadence while Glint stays open.
+    nonisolated private static let periodicCheckInterval: TimeInterval = 30 * 60
+    /// Minimum gap since the last check before switching back to Glint
+    /// triggers another one — ⌘Tab-ing in and out must not hammer the API.
+    nonisolated private static let activationCheckMinInterval: TimeInterval = 10 * 60
+
     // MARK: Published UI state
 
     enum Phase: Equatable {
@@ -98,6 +104,10 @@ final class UpdaterController: ObservableObject {
     private var installTask: Task<Void, Never>?
     private var autoCheckScheduled = false
     private var periodicTimer: Timer?
+    private var activationObserver: NSObjectProtocol?
+    /// When the last check (background or user-initiated) started. Gates the
+    /// on-activation check; in-memory only, so each launch starts fresh.
+    private var lastCheckStartedAt: Date?
     /// Set once the replace helper is running and waiting for us to exit.
     /// Blocks any further check / install in this process — a second helper
     /// would race the first to swap the bundle.
@@ -122,21 +132,44 @@ final class UpdaterController: ObservableObject {
 
     /// Called once from the main window `onAppear`. Schedules quiet background
     /// checks while automatic checks are enabled: one shortly after launch
-    /// (so the sidebar update badge is current right away), then hourly.
+    /// (so the sidebar update badge is current right away), then every 30
+    /// minutes — plus one whenever Glint becomes active again at least 10
+    /// minutes after the last check, so a build published while you were in
+    /// another app shows up as soon as you switch back.
     func startDeferred() {
         guard !autoCheckScheduled else { return }
         autoCheckScheduled = true
+        // Covers the launch check below, so the activation that accompanies
+        // launch doesn't fire a duplicate request.
+        lastCheckStartedAt = Date()
 
-        periodicTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
+        periodicTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.periodicCheckInterval, repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor in self?.backgroundCheck() }
+        }
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
             Task { @MainActor in
-                guard let self, self.automaticallyChecksForUpdates else { return }
-                self.checkForUpdates(userInitiated: false)
+                guard let self else { return }
+                if let last = self.lastCheckStartedAt,
+                   Date().timeIntervalSince(last) < Self.activationCheckMinInterval {
+                    return
+                }
+                self.backgroundCheck()
             }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-            guard let self, self.automaticallyChecksForUpdates else { return }
-            self.checkForUpdates(userInitiated: false)
+            self?.backgroundCheck()
         }
+    }
+
+    private func backgroundCheck() {
+        guard automaticallyChecksForUpdates else { return }
+        checkForUpdates(userInitiated: false)
     }
 
     /// Drives the red dot on the sidebar update pill and the Settings gear:
@@ -197,6 +230,7 @@ final class UpdaterController: ObservableObject {
 
     private func checkForUpdates(userInitiated: Bool) {
         guard checkTask == nil, installTask == nil, !replaceHelperLaunched else { return }
+        lastCheckStartedAt = Date()
         checkTask = Task { [weak self] in
             guard let self else { return }
             defer { self.checkTask = nil }

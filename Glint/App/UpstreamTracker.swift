@@ -35,7 +35,8 @@ private struct GitHubCompareCommit: Decodable, Sendable {
 /// a local merge clears the count once it's pushed and the next poll runs.
 ///
 /// Uses the cross-fork compare API unauthenticated (60 requests / hour per
-/// IP); we poll hourly, alongside the updater's own hourly release check.
+/// IP); we poll hourly, alongside the updater's own release checks (every 30
+/// minutes plus on app activation, at most every 10 minutes).
 @MainActor
 final class UpstreamTracker: ObservableObject {
 
