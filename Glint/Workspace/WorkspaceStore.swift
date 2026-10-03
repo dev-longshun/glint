@@ -1228,13 +1228,16 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Launch flags for a resumed pane. With the per-agent toggle on, the
-    /// skip-permission flag REPLACES the recorded ones rather than merging —
-    /// the toggle means exactly that mode, and pairing Codex's bypass flag
-    /// with a recorded `-a` / `--sandbox` risks a conflicting-args error.
+    /// skip-permission flag REPLACES the recorded permission flags rather
+    /// than merging — the toggle means exactly that mode, and pairing Codex's
+    /// bypass flag with a recorded `-a` / `--sandbox` risks a conflicting-args
+    /// error. Recorded non-permission flags (Codex's `--no-daemon`) are kept.
     /// Otherwise the recorded flags are replayed as-is.
     nonisolated static func restoreLaunchFlags(for kind: PaneAgentKind, captured: [String],
                                                alwaysSkip: Bool) -> [String] {
-        if alwaysSkip, let forced = kind.skipPermissionFlags { return forced }
+        if alwaysSkip, let forced = kind.skipPermissionFlags {
+            return forced + kind.nonPermissionFlags(fromArguments: captured)
+        }
         return captured
     }
 

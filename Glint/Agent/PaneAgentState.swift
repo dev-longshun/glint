@@ -114,19 +114,23 @@ enum PaneAgentKind: String, Codable {
 
     // MARK: Launch permission flags
 
-    /// A permission-related CLI flag worth replaying on restore. `aliases`
-    /// are extra spellings accepted on ingress (e.g. `-a`); output always
-    /// uses `name`. `takesValue` flags consume `--flag value` or `--flag=value`.
+    /// A CLI flag worth replaying on restore. `aliases` are extra spellings
+    /// accepted on ingress (e.g. `-a`); output always uses `name`.
+    /// `takesValue` flags consume `--flag value` or `--flag=value`.
+    /// `isPermission` is false for the few non-permission switches the
+    /// "always skip permission prompts" toggle must not swap out.
     private struct LaunchFlagSpec {
         let name: String
         var aliases: [String] = []
         var takesValue = false
+        var isPermission = true
     }
 
     /// Per-agent whitelist of flags remembered across a restart. Deliberately
-    /// narrow — only permission / approval / sandbox switches. Prompts,
-    /// models, dirs and `-c` overrides are ignored, since the result is typed
-    /// onto a live shell. Kinds returning `[]` never carry flags.
+    /// narrow — permission / approval / sandbox switches, plus Codex's
+    /// `--no-daemon`. Prompts, models, dirs and `-c` overrides are ignored,
+    /// since the result is typed onto a live shell. Kinds returning `[]`
+    /// never carry flags.
     private var launchFlagSpecs: [LaunchFlagSpec] {
         switch self {
         case .claude:
@@ -142,6 +146,11 @@ enum PaneAgentKind: String, Codable {
                 LaunchFlagSpec(name: "--approve-for-me"),
                 LaunchFlagSpec(name: "--ask-for-approval", aliases: ["-a"], takesValue: true),
                 LaunchFlagSpec(name: "--sandbox", aliases: ["-s"], takesValue: true),
+                // Codex 0.157+ runs the TUI against a shared app-server daemon
+                // that executes hooks with the env of whichever pane started
+                // it, so this pane's status never reaches Glint. Replayed only
+                // when the pane was launched with it — older Codex rejects it.
+                LaunchFlagSpec(name: "--no-daemon", isPermission: false),
             ]
         case .grok:
             return [
@@ -175,8 +184,8 @@ enum PaneAgentKind: String, Codable {
         !v.hasPrefix("-") && v.count <= launchFlagValueMaxLength && isValid(sessionId: v)
     }
 
-    /// Pick the whitelisted permission flags out of an agent's argv (without
-    /// argv[0]). Output is canonical — long spelling, `--flag value` as two
+    /// Pick the whitelisted launch flags (`launchFlagSpecs`) out of an agent's
+    /// argv (without argv[0]). Output is canonical — long spelling, `--flag value` as two
     /// tokens, argv order, first occurrence wins — so it is idempotent: the
     /// output fed back in returns itself, which is how `restoreCommand`
     /// re-validates persisted flags. A flag with a missing or invalid value is
@@ -213,6 +222,24 @@ enum PaneAgentKind: String, Codable {
                 out.append(spec.name)
             }
             seen.insert(spec.name)
+        }
+        return out
+    }
+
+    /// The non-permission flags (Codex's `--no-daemon`) out of `args`, in the
+    /// same canonical form as `permissionFlags(fromArguments:)`. The "always
+    /// skip permission prompts" toggle swaps only the permission flags, so
+    /// these ride along with the forced ones.
+    func nonPermissionFlags(fromArguments args: [String]) -> [String] {
+        let specs = launchFlagSpecs
+        let canonical = permissionFlags(fromArguments: args)
+        var out: [String] = []
+        var i = 0
+        while i < canonical.count {
+            guard let spec = specs.first(where: { $0.name == canonical[i] }) else { i += 1; continue }
+            let end = min(i + (spec.takesValue ? 2 : 1), canonical.count)
+            if !spec.isPermission { out += canonical[i..<end] }
+            i = end
         }
         return out
     }

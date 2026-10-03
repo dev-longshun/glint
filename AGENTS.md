@@ -81,6 +81,7 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - 上游若改 `restoreCommand` 或恢复逻辑：保留 `launchFlags` 这条链路  
    - 设置 → 代理：Claude / Codex / Grok 的「恢复时总是跳过权限确认」（`restore*SkipPermissions` + `PaneAgentKind.skipPermissionFlags` + `WorkspaceStore.restoreLaunchFlags`），开启时用固定跳过参数替换记录值，兜住升级后没记到参数、裸命令启动等情况  
    - 上游给 `PaneAgentKind` 新增 case 时，`launchFlagSpecs` / `skipPermissionFlags` 这两个穷举 switch 要补分支，否则编译失败（同步 agy 时踩过）  
+   - Codex 白名单里还有非权限参数 `--no-daemon`（`isPermission: false`）：Codex 0.157+ 默认让 TUI 连共享后台进程，hook 在后台进程里带着第一个启动它的窗格的 `GLINT_PANE_ID` / `GLINT_AGENT_SOCK` 执行，Codex 状态会全部丢失。「总是跳过权限确认」只替换权限参数，`--no-daemon` 经 `nonPermissionFlags` 保留  
 
 8. **hook 上报脚本的 plutil 读取写法**  
    - `Glint/Agent/AgentHookInstaller.swift` 的 reporter 脚本：一律写成 `X=$(plutil -extract … 2>/dev/null) || X=""`，禁止上游的 `|| true` 写法  

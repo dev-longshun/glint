@@ -214,6 +214,23 @@ final class PaneAgentKindTests: XCTestCase {
         XCTAssertEqual(PaneAgentKind.codex.permissionFlags(fromArguments: once), once)
     }
 
+    func testPermissionFlagsCapturesCodexNoDaemon() {
+        // `cx` → `codex --no-daemon --dangerously-bypass-approvals-and-sandbox`.
+        XCTAssertEqual(PaneAgentKind.codex.permissionFlags(fromArguments: [
+            "/Users/x/.npm-global/bin/codex", "--no-daemon", "--dangerously-bypass-approvals-and-sandbox",
+        ]), ["--no-daemon", "--dangerously-bypass-approvals-and-sandbox"])
+        XCTAssertEqual(PaneAgentKind.codex.permissionFlags(fromArguments: ["--no-daemon=1"]), [])
+        XCTAssertEqual(PaneAgentKind.claude.permissionFlags(fromArguments: ["--no-daemon"]), [])
+    }
+
+    func testNonPermissionFlagsPicksOnlyCodexNoDaemon() {
+        XCTAssertEqual(PaneAgentKind.codex.nonPermissionFlags(fromArguments: [
+            "--sandbox", "workspace-write", "--no-daemon", "--approve-for-me",
+        ]), ["--no-daemon"])
+        XCTAssertEqual(PaneAgentKind.codex.nonPermissionFlags(fromArguments: ["--dangerously-bypass-approvals-and-sandbox"]), [])
+        XCTAssertEqual(PaneAgentKind.claude.nonPermissionFlags(fromArguments: ["--dangerously-skip-permissions"]), [])
+    }
+
     // MARK: restoreCommand — launch flags
 
     func testRestoreCommandReplaysLaunchFlags() {
@@ -284,6 +301,18 @@ final class PaneAgentKindTests: XCTestCase {
         let flags = WorkspaceStore.restoreLaunchFlags(for: .claude, captured: [], alwaysSkip: true)
         XCTAssertEqual(PaneAgentKind.claude.restoreCommand(sessionId: "abc-123", launchFlags: flags),
                        "claude --dangerously-skip-permissions --resume abc-123\n")
+    }
+
+    func testRestoreLaunchFlagsAlwaysSkipKeepsCodexNoDaemon() {
+        // The toggle swaps the permission flags only — dropping `--no-daemon`
+        // would put the resumed pane back on the shared daemon (no status).
+        let recorded = ["--no-daemon", "--sandbox", "workspace-write"]
+        let flags = WorkspaceStore.restoreLaunchFlags(for: .codex, captured: recorded, alwaysSkip: true)
+        XCTAssertEqual(flags, ["--dangerously-bypass-approvals-and-sandbox", "--no-daemon"])
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: "abc-123", launchFlags: flags),
+                       "codex resume --dangerously-bypass-approvals-and-sandbox --no-daemon abc-123\n")
+        XCTAssertEqual(PaneAgentKind.codex.restoreCommand(sessionId: nil, launchFlags: recorded),
+                       "codex resume --no-daemon --sandbox workspace-write --last\n")
     }
 
     // MARK: helpers
