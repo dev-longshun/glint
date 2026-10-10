@@ -1360,8 +1360,7 @@ final class WorkspaceStore: ObservableObject {
     }
 
     /// Bind targets currently available on this Mac, for the "Listen on" menu.
-    /// Snapshotted at init; call `refreshWebRemoteInterfaces()` to rescan after
-    /// networks change (e.g. joining a different Wi-Fi).
+    /// Refreshed on server status changes and when opening network settings.
     @Published private(set) var webRemoteInterfaceOptions: [WebRemoteInterface] = WebRemoteAddressResolver.interfaces()
 
     func refreshWebRemoteInterfaces() {
@@ -2040,6 +2039,7 @@ final class WorkspaceStore: ObservableObject {
         else { ControlBridge.shared.reapStale() }
         WebRemoteServer.shared.setStatusHandler { [weak self] status in
             self?.webRemoteStatus = status
+            self?.refreshWebRemoteInterfaces()
         }
         WebRemoteServer.shared.setListenInterface(webRemoteListenInterface)
         if webRemoteEnabled { WebRemoteServer.shared.start() }
@@ -2426,11 +2426,13 @@ final class WorkspaceStore: ObservableObject {
         NSLog("[glint] pane process changed: ws=\(key.workspace.uuidString.prefix(8)) pane=\(key.pane.value) -> \(name)")
     }
 
-    private func reconcileAgentState(key: WorkspacePaneKey, processName: String) {
+    func reconcileAgentState(key: WorkspacePaneKey, processName: String) {
         guard var state = paneAgentState[key] else { return }
         guard let runningKind = Self.agentKind(named: processName) else {
-            if state.status == .idle, Self.isBenignShellProcessName(processName) {
+            if Self.isBenignShellProcessName(processName),
+               state.status == .idle || Self.isBusyStatus(state.status) {
                 paneAgentState.removeValue(forKey: key)
+                clearDockBadge(for: key)
             }
             return
         }
@@ -2444,6 +2446,57 @@ final class WorkspaceStore: ObservableObject {
     }
 
     // MARK: agent hook events
+
+    /// Codex's shared app-server can keep the pane environment of the client
+    /// that first started it. Verify against attached CLIs before allowing an
+    /// event to mutate status or persisted resume IDs. A known session wins;
+    /// otherwise only a unique active pane with the event's cwd is safe.
+    private func codexHookTarget(addressedKey: WorkspacePaneKey,
+                                 session: String?, cwd: String?) -> WorkspacePaneKey? {
+        var attached: [(key: WorkspacePaneKey, pane: Pane, cwd: String?)] = []
+        for workspace in workspaces {
+            for pane in workspace.panes.values {
+                let key = WorkspacePaneKey(workspace: workspace.id, pane: pane.id)
+                let view = surfaceViews[key]
+                let process = view?.foregroundProcessName() ?? paneProcesses[key]
+                guard process.flatMap(Self.agentKind(named:)) == .codex else { continue }
+                attached.append((key, pane, view?.currentCwd() ?? pane.workingDirectory))
+            }
+        }
+        if let session, Self.isValidSessionId(session) {
+            let matches = attached.filter { $0.pane.sessionIds[PaneAgentKind.codex.rawValue] == session }
+            if !matches.isEmpty { return matches.count == 1 ? matches[0].key : nil }
+        }
+        // Fork: a Codex TUI started with `--no-daemon` runs its hooks
+        // in-process with its own GLINT_PANE_ID, so the address is
+        // authoritative. Without this, two Codex panes in one cwd drop every
+        // event of a not-yet-bound session (the cwd tie-break can't win).
+        if let addressed = attached.first(where: { $0.key == addressedKey }),
+           codexRunsInProcess(key: addressedKey, pane: addressed.pane) {
+            return addressedKey
+        }
+        if let cwd, !cwd.isEmpty {
+            // Never treat a missing/relative cwd as the current directory.
+            guard cwd.hasPrefix("/") else { return nil }
+            let eventPath = URL(fileURLWithPath: cwd).standardizedFileURL.resolvingSymlinksInPath().path
+            let matches = attached.filter {
+                guard let path = $0.cwd, path.hasPrefix("/"), $0.pane.remoteTarget == nil else { return false }
+                return URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path == eventPath
+            }
+            return matches.count == 1 ? matches[0].key : nil
+        }
+        // Compatibility with older reporters: accept the supplied address
+        // only while a Codex CLI is actually attached there.
+        return attached.first(where: { $0.key == addressedKey })?.key
+    }
+
+    /// Whether the Codex CLI in `key` was launched with `--no-daemon`: the
+    /// live argv first, the last captured launch flags when it can't be read.
+    private func codexRunsInProcess(key: WorkspacePaneKey, pane: Pane) -> Bool {
+        let args = surfaceViews[key]?.foregroundProcessArguments().map { Array($0.dropFirst()) }
+            ?? pane.launchFlags[PaneAgentKind.codex.rawValue] ?? []
+        return PaneAgentKind.codex.nonPermissionFlags(fromArguments: args).contains("--no-daemon")
+    }
 
     static func permissionRequestStatus(
         kind: PaneAgentKind,
@@ -2465,9 +2518,21 @@ final class WorkspaceStore: ObservableObject {
         guard let info,
               let paneStr = info["pane"] as? String,
               let hook = info["hook"] as? String,
-              let key = Self.parsePaneKey(paneStr) else { return }
+              let addressedKey = Self.parsePaneKey(paneStr) else { return }
 
         let explicitKind = (info["agent"] as? String).flatMap(Self.agentKind(named:))
+        let key: WorkspacePaneKey
+        if explicitKind == .codex {
+            guard let target = codexHookTarget(
+                addressedKey: addressedKey,
+                session: info["session"] as? String,
+                cwd: info["cwd"] as? String
+            ) else { return }
+            key = target
+        } else {
+            key = addressedKey
+        }
+        guard paneExists(key) else { return }
         let foregroundKind = surfaceViews[key]?.foregroundProcessName()
             .flatMap(Self.agentKind(named:))
         let polledKind = paneProcesses[key].flatMap(Self.agentKind(named:))
@@ -3262,6 +3327,23 @@ final class WorkspaceStore: ObservableObject {
                 "panes": panes,
             ]
         }
+    }
+
+    /// Resolve the selected terminal's current local cwd, not its workspace
+    /// anchor. SSH panes report a local launch cwd as well, so exclude them.
+    func webRemoteFileRoot(workspace id: UUID, pane: String) -> String? {
+        guard let key = Self.parsePaneKey(pane), key.workspace == id,
+              let workspace = workspaces.first(where: { $0.id == id }),
+              !workspace.source.isRemote,
+              let model = workspace.panes[key.pane], model.remoteTarget == nil,
+              workspace.tabs.contains(where: { $0.root.leaves.contains(key.pane) }),
+              surfaceViews[key]?.remoteReviewContext == nil,
+              let cwd = surfaceViews[key]?.currentCwd() ?? model.workingDirectory else { return nil }
+        // SSH does not always publish a remote cwd/title (notably one-shot
+        // commands). Reject its actual PTY process before exposing local cwd.
+        let process = surfaceViews[key]?.foregroundProcessName() ?? paneProcesses[key]
+        guard process?.lowercased() != "ssh" else { return nil }
+        return WebRemoteProjectPath.resolveExistingDirectory(cwd)
     }
 
     func webRemoteThemePayload() -> [String: Any] {

@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import ImageIO
 import Security
 import os
 
@@ -154,6 +155,225 @@ enum WebRemoteProjectPath {
               isDirectory.boolValue
         else { return nil }
         return standardized
+    }
+}
+
+/// Read-only, workspace-scoped file access for the browser. Paths on the wire
+/// are relative to the workspace root; links are never followed.
+enum WebRemoteFiles {
+    static let maxPreviewBytes = 128 * 1024
+    static let maxImageBytes = 40 * 1024 * 1024
+    static let maxImagePreviewBytes = 5 * 1024 * 1024
+    static let maxEntries = 200
+    private static let imageExtensions: Set<String> = [
+        "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp", "ico", "avif"
+    ]
+
+    static func isImage(_ path: String) -> Bool {
+        imageExtensions.contains((path as NSString).pathExtension.lowercased())
+    }
+
+    static func isHTML(_ path: String) -> Bool {
+        ["html", "htm", "xhtml"].contains((path as NSString).pathExtension.lowercased())
+    }
+
+    /// Keep traversal and I/O on descriptors. Re-opening a validated pathname
+    /// would let a concurrent rename/symlink swap escape the selected root.
+    final class Directory {
+        private let descriptor: Int32
+
+        init(root: String) throws {
+            guard root.hasPrefix("/"), !root.contains("\0") else { throw ErrorCode.invalidPath }
+            // Foundation can shorten /private/var back to the /var symlink.
+            // realpath gives the physical components needed by O_NOFOLLOW.
+            guard let resolved = realpath(root, nil) else { throw ErrorCode.unavailable }
+            defer { free(resolved) }
+            let canonical = String(cString: resolved)
+            var fd = Darwin.open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC)
+            guard fd >= 0 else { throw ErrorCode.unavailable }
+            for component in canonical.split(separator: "/") {
+                let next = openat(fd, String(component), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+                Darwin.close(fd)
+                guard next >= 0 else { throw ErrorCode.invalidPath }
+                fd = next
+            }
+            descriptor = fd
+        }
+
+        deinit { Darwin.close(descriptor) }
+
+        private func openPath(_ path: String, directory: Bool) throws -> Int32 {
+            guard path.utf8.count <= 4096 else { throw ErrorCode.invalidPath }
+            let components = path.isEmpty ? [] : path.split(separator: "/", omittingEmptySubsequences: false)
+            guard components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\0") }) else {
+                throw ErrorCode.invalidPath
+            }
+            var fd = openat(descriptor, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard fd >= 0 else { throw ErrorCode.unavailable }
+            for (index, component) in components.enumerated() {
+                // O_NONBLOCK prevents a replaced FIFO/device from blocking before fstat.
+                let flags = O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK
+                    | (directory || index < components.count - 1 ? O_DIRECTORY : 0)
+                let next = openat(fd, String(component), flags)
+                Darwin.close(fd)
+                guard next >= 0 else { throw ErrorCode.invalidPath }
+                fd = next
+            }
+            return fd
+        }
+
+        func list(path: String) throws -> [[String: Any]] {
+            let fd = try openPath(path, directory: true)
+            guard let directory = fdopendir(fd) else {
+                Darwin.close(fd)
+                throw ErrorCode.unavailable
+            }
+            defer { closedir(directory) }
+            var entries: [(name: String, kind: String)] = []
+            while true {
+                errno = 0
+                guard let entry = readdir(directory) else {
+                    guard errno == 0 else { throw ErrorCode.unavailable }
+                    break
+                }
+                let name = withUnsafePointer(to: &entry.pointee.d_name) {
+                    $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+                }
+                guard name != ".", name != ".." else { continue }
+                var info = stat()
+                guard fstatat(fd, name, &info, AT_SYMLINK_NOFOLLOW) == 0 else { continue }
+                let type = info.st_mode & S_IFMT
+                let kind = type == S_IFLNK ? "link" : type == S_IFDIR ? "directory"
+                    : (isImage(name) ? "image" : "file")
+                entries.append((name, kind))
+            }
+            entries.sort {
+                if ($0.kind == "directory") != ($1.kind == "directory") { return $0.kind == "directory" }
+                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
+            return entries.prefix(maxEntries).map { ["name": $0.name, "kind": $0.kind] }
+        }
+
+        func read(path: String, limit: Int, tooLarge: ErrorCode) throws -> Data {
+            guard !path.isEmpty else { throw ErrorCode.invalidPath }
+            let fd = try openPath(path, directory: false)
+            defer { Darwin.close(fd) }
+            var info = stat()
+            guard fstat(fd, &info) == 0, info.st_mode & S_IFMT == S_IFREG else {
+                throw ErrorCode.unavailable
+            }
+            guard info.st_size <= limit else { throw tooLarge }
+            var data = Data()
+            var buffer = [UInt8](repeating: 0, count: 16 * 1024)
+            while true {
+                let count = buffer.withUnsafeMutableBytes {
+                    Darwin.read(fd, $0.baseAddress, min($0.count, limit + 1 - data.count))
+                }
+                if count < 0 {
+                    if errno == EINTR { continue }
+                    throw ErrorCode.unavailable
+                }
+                if count == 0 { return data }
+                data.append(contentsOf: buffer.prefix(count))
+                // Also bound a file that grows after fstat; never read it unbounded.
+                guard data.count <= limit else { throw tooLarge }
+            }
+        }
+    }
+
+    static func list(root: String, path: String) -> Result<[[String: Any]], ErrorCode> {
+        do { return .success(try Directory(root: root).list(path: path)) }
+        catch { return .failure(error as? ErrorCode ?? .unavailable) }
+    }
+
+    static func read(root: String, path: String) -> Result<String, ErrorCode> {
+        do {
+            let data = try Directory(root: root).read(path: path, limit: maxPreviewBytes, tooLarge: .tooLarge)
+            guard !data.contains(where: { $0 < 32 && $0 != 9 && $0 != 10 && $0 != 13 }),
+                  let text = String(data: data, encoding: .utf8) else { return .failure(.notText) }
+            return .success(text)
+        } catch { return .failure(error as? ErrorCode ?? .unavailable) }
+    }
+
+    /// ImageIO decodes only the first frame and bounds the image sent over the
+    /// encrypted socket. The browser receives PNG pixels, never source bytes.
+    static func readImage(root: String, path: String) -> Result<Data, ErrorCode> {
+        guard isImage(path) else { return .failure(.invalidPath) }
+        let input: Data
+        do {
+            input = try Directory(root: root).read(path: path, limit: maxImageBytes, tooLarge: .imageTooLarge)
+        } catch { return .failure(error as? ErrorCode ?? .unavailable) }
+        let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+        guard let source = CGImageSourceCreateWithData(input as CFData, sourceOptions),
+              CGImageSourceGetCount(source) > 0 else { return .failure(.imageUnavailable) }
+        let thumbnailOptions = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 1024,
+        ] as CFDictionary
+        guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbnailOptions) else {
+            return .failure(.imageUnavailable)
+        }
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            output, "public.png" as CFString, 1, nil
+        ) else { return .failure(.imageUnavailable) }
+        CGImageDestinationAddImage(destination, thumbnail, nil)
+        guard CGImageDestinationFinalize(destination) else { return .failure(.imageUnavailable) }
+        let data = output as Data
+        guard data.count <= maxImagePreviewBytes else { return .failure(.imageTooLarge) }
+        return .success(data)
+    }
+
+    enum ErrorCode: String, Error {
+        case rootChanged = "file-root-changed"
+        case rootUnavailable = "files-unavailable"
+        case invalidPath = "invalid-file-path"
+        case unavailable = "file-unavailable"
+        case tooLarge = "file-too-large"
+        case notText = "file-not-text"
+        case imageTooLarge = "image-too-large"
+        case imageUnavailable = "image-unavailable"
+    }
+}
+
+/// A file response belongs to one browser operation and one cwd snapshot.
+/// Only an initial root listing may discover the cwd; all later operations
+/// must echo it, so a local `cd` cannot silently rebase relative filenames.
+struct WebRemoteFileRequest {
+    let workspace: UUID
+    let pane: String
+    let path: String
+    let root: String
+    let requestID: String
+    let read: Bool
+
+    init?(_ object: [String: Any]) {
+        guard let type = object["type"] as? String, ["listFiles", "readFile"].contains(type),
+              let workspace = object["workspace"] as? String, workspace.count <= 36,
+              let workspaceID = UUID(uuidString: workspace),
+              let pane = object["pane"] as? String, pane.count <= 128,
+              let path = object["path"] as? String, path.utf8.count <= 4096,
+              let root = object["root"] as? String, root.utf8.count <= 4096,
+              let request = object["request"] as? String, !request.isEmpty, request.count <= 64,
+              !root.isEmpty || (type == "listFiles" && path.isEmpty) else { return nil }
+        self.workspace = workspaceID
+        self.pane = pane
+        self.path = path
+        self.root = root
+        self.requestID = request
+        self.read = type == "readFile"
+    }
+
+    func validatedRoot(current: String?) -> Result<String, WebRemoteFiles.ErrorCode> {
+        guard let current else { return .failure(.rootUnavailable) }
+        guard root.isEmpty || root == current else { return .failure(.rootChanged) }
+        return .success(current)
+    }
+
+    func error(_ code: WebRemoteFiles.ErrorCode) -> [String: Any] {
+        ["type": "fileError", "workspace": workspace.uuidString, "pane": pane,
+         "path": path, "root": root, "request": requestID, "code": code.rawValue]
     }
 }
 
