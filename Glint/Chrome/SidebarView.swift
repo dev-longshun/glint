@@ -1062,8 +1062,33 @@ private struct WorkspaceCard: View {
                 }
                 metadataBadge(paneCountText, active: active)
             }
+            if store.workspaceHasHibernatedAgent(ws.id) {
+                hibernatedBadge(active: active)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Idle-agent hibernation marker: same chip language as `metadataBadge`,
+    /// plus a moon so it reads as "asleep", not as another count.
+    private func hibernatedBadge(active: Bool) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: "moon.zzz.fill")
+                .font(.system(size: 8, weight: .semibold))
+            Text("Hibernated")
+                .font(.system(size: 9.5, weight: .semibold))
+        }
+        .foregroundStyle(active ? AnyShapeStyle(store.accent) : AnyShapeStyle(Theme.text3))
+        .lineLimit(1)
+        .fixedSize(horizontal: true, vertical: false)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(
+            Capsule(style: .continuous)
+                .fill(active ? AnyShapeStyle(store.accent.opacity(0.14))
+                             : AnyShapeStyle(Theme.overlay(0.05)))
+        )
+        .help("Idle agent hibernated to save memory. It resumes when you open this workspace.")
     }
 
     private func tintedBadge(_ text: String, fg: Color, bg: Color) -> some View {

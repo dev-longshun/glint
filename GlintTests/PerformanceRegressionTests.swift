@@ -124,6 +124,66 @@ final class PerformanceRegressionTests: XCTestCase {
         ))
     }
 
+    private func hibernationDecision(enabled: Bool = true,
+                                     workspaceIsSelected: Bool = false,
+                                     foregroundKind: PaneAgentKind? = .claude,
+                                     status: PaneAgentStatus = .idle,
+                                     stateKind: PaneAgentKind = .claude,
+                                     hasState: Bool = true,
+                                     hasSessionId: Bool = true,
+                                     inactiveFor: TimeInterval? = 4_000,
+                                     quietFor: TimeInterval = 4_000,
+                                     typedAgo: TimeInterval? = nil) -> Bool {
+        let now = Date(timeIntervalSinceReferenceDate: 100_000)
+        let state = PaneAgentState(kind: stateKind, status: status,
+                                   updatedAt: now.addingTimeInterval(-quietFor))
+        return AgentHibernationPolicy.shouldHibernate(
+            enabled: enabled,
+            workspaceIsSelected: workspaceIsSelected,
+            foregroundKind: foregroundKind,
+            state: hasState ? state : nil,
+            hasSessionId: hasSessionId,
+            inactiveSince: inactiveFor.map { now.addingTimeInterval(-$0) },
+            lastUserInputAt: typedAgo.map { now.addingTimeInterval(-$0) },
+            now: now,
+            timeout: 3_600
+        )
+    }
+
+    func testAgentHibernationAllowsIdleBackgroundAgentPastTimeout() {
+        XCTAssertTrue(hibernationDecision())
+        XCTAssertTrue(hibernationDecision(status: .justCompleted))
+        XCTAssertTrue(hibernationDecision(status: .failed))
+        XCTAssertTrue(hibernationDecision(foregroundKind: .codex, stateKind: .codex))
+        // Typing before the turn's last hook event was submitted, not a draft.
+        XCTAssertTrue(hibernationDecision(quietFor: 4_000, typedAgo: 5_000))
+    }
+
+    func testAgentHibernationNeverInterruptsActiveOrBlockedTurns() {
+        for status: PaneAgentStatus in [.thinking, .tool, .needsPermission, .compacting, .needsReply] {
+            XCTAssertFalse(hibernationDecision(status: status), "\(status) must stay live")
+        }
+    }
+
+    func testAgentHibernationKeepsCurrentWorkspaceAndRecentActivityLive() {
+        XCTAssertFalse(hibernationDecision(enabled: false))
+        XCTAssertFalse(hibernationDecision(workspaceIsSelected: true))
+        XCTAssertFalse(hibernationDecision(inactiveFor: nil))
+        XCTAssertFalse(hibernationDecision(inactiveFor: 3_599))
+        XCTAssertFalse(hibernationDecision(quietFor: 3_599))
+    }
+
+    func testAgentHibernationRequiresMatchingAgentWithSavedSession() {
+        XCTAssertFalse(hibernationDecision(hasSessionId: false))
+        XCTAssertFalse(hibernationDecision(hasState: false))
+        XCTAssertFalse(hibernationDecision(foregroundKind: nil))
+        XCTAssertFalse(hibernationDecision(foregroundKind: .codex, stateKind: .claude))
+    }
+
+    func testAgentHibernationKeepsUnsentDraftLive() {
+        XCTAssertFalse(hibernationDecision(quietFor: 4_000, typedAgo: 3_900))
+    }
+
     func testConfirmCloseSurfaceEnumTagsUseGhosttyStringABI() {
         XCTAssertFalse(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: nil))
         XCTAssertFalse(GhosttyManager.promptDetectionIsReliable(confirmCloseSurfaceTag: "false"))

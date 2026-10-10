@@ -169,7 +169,13 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// the fail-closed superset. Cleared when a command finishes (the shell
     /// consumed the line) or a fresh surface spawns.
     private var typedSinceCommandEnd = false
+    /// Last time user input reached the pty. Idle-agent hibernation compares
+    /// it to the agent's last hook event to spot an unsent prompt draft.
+    private(set) var lastUserInputAt: Date?
     private(set) var isTakenOffline = false
+    /// Released by idle-agent hibernation: `pendingInitialInput` holds the
+    /// resume command for the next surface generation.
+    private(set) var isHibernatedAgent = false
 
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
@@ -529,6 +535,11 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         pendingInitialInput = nil
         isTakenOffline = false
         typedSinceCommandEnd = false
+        lastUserInputAt = nil
+        if isHibernatedAgent {
+            isHibernatedAgent = false
+            NotificationCenter.default.post(name: .glintHibernatedAgentResumed, object: self)
+        }
         removeOfflinePlaceholder()
         // ghostty just swapped in its IOSurfaceLayer — re-stamp the
         // opaque/clear backing onto the NEW layer (init's settings were on the
@@ -1019,17 +1030,23 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     private func showOfflinePlaceholder() {
         guard offlinePlaceholderStack == nil else { return }
 
-        let title = NSTextField(labelWithString: String(localized: "Idle terminal released"))
+        let title = NSTextField(labelWithString: isHibernatedAgent
+                                ? String(localized: "Idle agent hibernated")
+                                : String(localized: "Idle terminal released"))
         title.font = NSFont.systemFont(ofSize: 13, weight: .medium)
         title.textColor = NSColor(red: 0.925, green: 0.929, blue: 0.949, alpha: 1.0)
         title.alignment = .center
 
-        let detail = NSTextField(labelWithString: String(localized: "Reopens in the same folder."))
+        let detail = NSTextField(labelWithString: isHibernatedAgent
+                                 ? String(localized: "Resumes the same session when you return.")
+                                 : String(localized: "Reopens in the same folder."))
         detail.font = NSFont.systemFont(ofSize: 11)
         detail.textColor = NSColor(red: 0.60, green: 0.62, blue: 0.69, alpha: 1.0)
         detail.alignment = .center
 
-        let wake = NSButton(title: String(localized: "Reopen Terminal"),
+        let wake = NSButton(title: isHibernatedAgent
+                            ? String(localized: "Resume Session")
+                            : String(localized: "Reopen Terminal"),
                             target: self,
                             action: #selector(wakeOfflineTerminal(_:)))
         wake.bezelStyle = .rounded
@@ -1132,7 +1149,26 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
             hasUserOrJobState: hasUserOrJobState
         )
         guard shouldTakeOffline else { return false }
+        releaseSurface(s)
+        return true
+    }
 
+    /// Idle-agent hibernation, decided by the store (`AgentHibernationPolicy`
+    /// plus `agentProcessTreeIsDisposable`). Released like an idle shell —
+    /// closing the PTY hangs up the shell and the agent with it — but the next
+    /// surface generation types `resumeInput` to reopen the same session.
+    @discardableResult
+    func hibernateAgent(resumeInput: String) -> Bool {
+        guard let s = surface else { return false }
+        pendingInitialInput = resumeInput
+        isHibernatedAgent = true
+        releaseSurface(s)
+        return true
+    }
+
+    /// Free the live surface and show the lightweight placeholder. The view
+    /// stays in the tree; `createSurface` brings it back in `launchCwd`.
+    private func releaseSurface(_ s: ghostty_surface_t) {
         if let cwd = currentCwd(), !cwd.isEmpty { launchCwd = cwd }
         if scrollbackEnabled {
             // Force the final capture: flushScrollbackToDisk early-outs on a
@@ -1159,7 +1195,6 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         wantsLayer = true
         refreshAppearanceBacking()
         showOfflinePlaceholder()
-        return true
     }
 
     /// An idle-looking shell can still own typed input or background/stopped
@@ -1202,6 +1237,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// pastes, control-socket injections. See `typedSinceCommandEnd`.
     fileprivate func noteUserInputForIdleTracking() {
         typedSinceCommandEnd = true
+        lastUserInputAt = Date()
     }
 
     /// The grid export's cursor `visible` flag is mode-visible AND
@@ -1239,6 +1275,93 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         }
         guard count >= 0 else { return nil }
         return count > 0
+    }
+
+    /// Start of the current unfocused stretch (nil while protected), refreshed
+    /// for this sweep. Read by the store's idle-agent hibernation check.
+    func idleClock(now: Date = Date(), workspaceIsSelected: Bool) -> Date? {
+        refreshIdleClock(now: now, workspaceIsSelected: workspaceIsSelected)
+        return inactiveSince
+    }
+
+    /// Hibernation must not take anything the user still relies on down with
+    /// the agent. Safe only when the agent is the shell's sole job (no other
+    /// background or stopped jobs) and nothing under it is a shell (a Bash
+    /// tool still running) or holds a listening TCP socket (a dev server the
+    /// agent started). MCP stdio servers are neither and exit with the agent.
+    func agentProcessTreeIsDisposable() -> Bool {
+        guard let s = surface else { return false }
+        let rawPID = ghostty_surface_foreground_pid(s)
+        guard rawPID > 0, rawPID <= UInt64(Int32.max) else { return false }
+        let agentPID = pid_t(rawPID)
+        guard let shellPID = Self.parentPID(of: agentPID),
+              Self.childPIDs(of: shellPID) == [agentPID] else { return false }
+        var queue = Self.childPIDs(of: agentPID) ?? []
+        var visited = 0
+        while let pid = queue.popLast() {
+            visited += 1
+            // A tree this large is not an idle agent; don't walk it.
+            guard visited <= 256 else { return false }
+            if let name = Self.processName(of: pid),
+               TerminalOfflinePolicy.isIdleShell(name) { return false }
+            if Self.hasListeningTCPSocket(pid: pid) { return false }
+            queue.append(contentsOf: Self.childPIDs(of: pid) ?? [])
+        }
+        return true
+    }
+
+    private static func bsdInfo(of pid: pid_t) -> proc_bsdinfo? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, $0, size)
+        }
+        return result == size ? info : nil
+    }
+
+    private static func parentPID(of pid: pid_t) -> pid_t? {
+        bsdInfo(of: pid).map { pid_t($0.pbi_ppid) }
+    }
+
+    private static func processName(of pid: pid_t) -> String? {
+        guard var info = bsdInfo(of: pid) else { return nil }
+        return withUnsafePointer(to: &info.pbi_comm) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: Int(MAXCOMLEN) + 1) {
+                String(cString: $0)
+            }
+        }
+    }
+
+    private static func childPIDs(of pid: pid_t) -> [pid_t]? {
+        var buffer = [pid_t](repeating: 0, count: 256)
+        let count = buffer.withUnsafeMutableBytes {
+            proc_listchildpids(pid, $0.baseAddress, Int32($0.count))
+        }
+        guard count >= 0 else { return nil }
+        return Array(buffer.prefix(min(Int(count), buffer.count)))
+    }
+
+    private static func hasListeningTCPSocket(pid: pid_t) -> Bool {
+        let needed = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, nil, 0)
+        guard needed > 0 else { return false }
+        let stride = MemoryLayout<proc_fdinfo>.stride
+        var fds = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(needed) / stride + 8)
+        let used = fds.withUnsafeMutableBytes {
+            proc_pidinfo(pid, PROC_PIDLISTFDS, 0, $0.baseAddress, Int32($0.count))
+        }
+        guard used > 0 else { return false }
+        for fd in fds.prefix(Int(used) / stride)
+        where fd.proc_fdtype == UInt32(PROX_FDTYPE_SOCKET) {
+            var info = socket_fdinfo()
+            let size = Int32(MemoryLayout<socket_fdinfo>.size)
+            guard proc_pidfdinfo(pid, fd.proc_fd, PROC_PIDFDSOCKETINFO, &info, size) == size
+            else { continue }
+            if info.psi.soi_kind == Int32(SOCKINFO_TCP),
+               info.psi.soi_proto.pri_tcp.tcpsi_state == Int32(TSI_S_LISTEN) {
+                return true
+            }
+        }
+        return false
     }
 
     private func refreshIdleClock(now: Date = Date(), workspaceIsSelected: Bool = true) {

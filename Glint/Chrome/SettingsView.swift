@@ -1164,6 +1164,26 @@ private struct TerminalPane: View {
             }
         }
 
+        SettingsCard("Idle agents", footer: "Ends idle agent sessions in background workspaces to free memory, and resumes the same session when you return. Agents that are working or waiting for approval, panes with background jobs or dev servers, and the current workspace are never touched.") {
+            SettingsRow("Hibernate idle agents",
+                        subtitle: store.hibernateIdleAgentsEnabled
+                        ? "Only agents that finished their turn and have a saved session."
+                        : "Off — agent sessions stay live.") {
+                Toggle("", isOn: $store.hibernateIdleAgentsEnabled)
+                    .toggleStyle(.switch).labelsHidden()
+            }
+            if store.hibernateIdleAgentsEnabled {
+                SettingsDivider()
+                SettingsRow("Hibernate after", subtitle: "Time since the agent's last activity.") {
+                    GlintDropdown(selection: $store.idleAgentTimeoutSeconds,
+                                  items: WorkspaceStore.idleAgentTimeoutChoices.map {
+                                      (value: $0, label: idleAgentTimeoutLabel(for: $0))
+                                  },
+                                  listWidth: 150)
+                }
+            }
+        }
+
         SettingsCard("Paste") {
             SettingsRow("Warn before pasting multi-line text",
                         subtitle: "Ask first when the clipboard contains newlines or control characters — a multi-line paste into a shell prompt runs each line immediately.") {
@@ -1468,6 +1488,17 @@ private struct TerminalPane: View {
         case 1_800: return "30 minutes"
         case 3_600: return "1 hour"
         default: return "5 minutes"
+        }
+    }
+
+    private func idleAgentTimeoutLabel(for seconds: Int) -> String {
+        switch seconds {
+        case 900: return "15 minutes"
+        case 1_800: return "30 minutes"
+        case 3_600: return "1 hour"
+        case 7_200: return "2 hours"
+        case 14_400: return "4 hours"
+        default: return "1 hour"
         }
     }
 

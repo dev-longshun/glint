@@ -106,6 +106,12 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - 原因：本 fork 没有 Team ID，进程内读取需要钥匙串分区列表里有 Glint 的 `cdhash:`；但 Claude Code 每次换 token 重写条目时都会把分区列表重置成只剩 `apple-tool:`，再加上每次更新 cdhash 都会变，「始终允许」只能撑到下次换 token（几小时）；`security` 本来就在该条目的 ACL 和 `apple-tool:` 分区里，读取不弹窗  
    - 上游若改 Claude 用量读取：保留这条读取路径  
 
+12. **空闲 agent 自动休眠**  
+   - `Glint/Workspace/WorkspaceStore.swift`：`AgentHibernationPolicy`、`hibernateIdleAgentIfEligible`（挂在 `offlineIdleTerminals` 30 秒巡检上）、`agentResumeCommand`（与启动恢复共用）、设置 `hibernateIdleAgentsEnabled` / `idleAgentTimeoutSeconds`  
+   - `Glint/Pane/GhosttySurfaceView.swift`：`hibernateAgent(resumeInput:)`、`agentProcessTreeIsDisposable()`、`releaseSurface(_:)`（shell 离线与 agent 休眠共用）  
+   - `SettingsView`「空闲 Agent」卡片；`SidebarView`「已休眠」胶囊  
+   - 上游若改 idle-offline / `createSurface` / 恢复命令：保留休眠分支与 `pendingInitialInput` 唤醒链路  
+
 ### 同步操作红线
 
 - **禁止**：`git reset --hard upstream/main`、`git checkout upstream/main -- .`、无审查的 `theirs` 全收、把冲突一律选成上游。  

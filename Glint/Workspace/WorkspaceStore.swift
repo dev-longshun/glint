@@ -54,6 +54,50 @@ enum TerminalFocusPolicy {
     }
 }
 
+/// Idle-agent hibernation: an agent pane in a background workspace whose turn
+/// ended long ago is released (shell + agent exit, memory freed) and resumes
+/// the same session when it is shown again. This is the model-side decision;
+/// the process-tree probes live on `GhosttySurfaceView`.
+enum AgentHibernationPolicy {
+    /// Turn-over statuses. A working turn, a pending approval and OMP's
+    /// mid-turn `needsReply` question are never interrupted. Exhaustive, so a
+    /// new status has to pick a side here.
+    static func isHibernatable(_ status: PaneAgentStatus) -> Bool {
+        switch status {
+        case .idle, .justCompleted, .failed:
+            return true
+        case .thinking, .tool, .needsPermission, .compacting, .needsReply:
+            return false
+        }
+    }
+
+    static func shouldHibernate(enabled: Bool,
+                                workspaceIsSelected: Bool,
+                                foregroundKind: PaneAgentKind?,
+                                state: PaneAgentState?,
+                                hasSessionId: Bool,
+                                inactiveSince: Date?,
+                                lastUserInputAt: Date?,
+                                now: Date,
+                                timeout: TimeInterval) -> Bool {
+        guard enabled,
+              !workspaceIsSelected,
+              let foregroundKind,
+              let state,
+              state.kind == foregroundKind,
+              isHibernatable(state.status),
+              // Without the exact id the resume falls back to "most recent",
+              // which can land on another pane's session.
+              hasSessionId,
+              let inactiveSince,
+              now.timeIntervalSince(inactiveSince) >= timeout,
+              now.timeIntervalSince(state.updatedAt) >= timeout else { return false }
+        // Keys typed after the agent's last hook event are an unsent draft.
+        if let lastUserInputAt, lastUserInputAt > state.updatedAt { return false }
+        return true
+    }
+}
+
 // MARK: - Domain types
 
 enum SplitDirection: String, Codable, Hashable {
@@ -602,6 +646,16 @@ final class WorkspaceStore: ObservableObject {
         get { activity.paneAgentState }
         set { activity.paneAgentState = newValue }
     }
+    /// Agent panes released by idle hibernation, waiting to resume when shown.
+    /// Drives the sidebar's "Hibernated" badge. Non-persistent.
+    var hibernatedAgentPanes: Set<WorkspacePaneKey> {
+        get { activity.hibernatedAgentPanes }
+        set { activity.hibernatedAgentPanes = newValue }
+    }
+
+    func workspaceHasHibernatedAgent(_ workspaceID: UUID) -> Bool {
+        hibernatedAgentPanes.contains { $0.workspace == workspaceID }
+    }
 
     /// Drives the command-palette overlay. Toggled by the toolbar's ⌘
     /// button and the ⌘⇧P global shortcut. Mutually exclusive with the agent
@@ -941,6 +995,33 @@ final class WorkspaceStore: ObservableObject {
             UserDefaults.standard.set(idleTerminalTimeoutSeconds,
                                       forKey: "glint.idleTerminalTimeoutSeconds")
             resetIdleTerminalTimeouts()
+        }
+    }
+
+    static let idleAgentTimeoutChoices = [900, 1_800, 3_600, 7_200, 14_400]
+
+    /// Memory saving for agent panes: an agent in a background workspace that
+    /// finished its turn long ago is ended and resumed with the same session
+    /// id when the pane is shown again. See `AgentHibernationPolicy`.
+    @Published var hibernateIdleAgentsEnabled: Bool =
+        (UserDefaults.standard.object(forKey: "glint.hibernateIdleAgentsEnabled") as? Bool) ?? true {
+        didSet {
+            UserDefaults.standard.set(hibernateIdleAgentsEnabled,
+                                      forKey: "glint.hibernateIdleAgentsEnabled")
+        }
+    }
+
+    @Published var idleAgentTimeoutSeconds: Int = {
+        let saved = UserDefaults.standard.integer(forKey: "glint.idleAgentTimeoutSeconds")
+        return WorkspaceStore.idleAgentTimeoutChoices.contains(saved) ? saved : 3_600
+    }() {
+        didSet {
+            guard Self.idleAgentTimeoutChoices.contains(idleAgentTimeoutSeconds) else {
+                idleAgentTimeoutSeconds = 3_600
+                return
+            }
+            UserDefaults.standard.set(idleAgentTimeoutSeconds,
+                                      forKey: "glint.idleAgentTimeoutSeconds")
         }
     }
 
@@ -1701,7 +1782,15 @@ final class WorkspaceStore: ObservableObject {
 
     /// Persistent NSView per global pane identity. Surfaces are keyed by
     /// (workspaceID, paneID) so switching workspaces doesn't destroy them.
-    private var surfaceViews: [WorkspacePaneKey: GhosttySurfaceView] = [:]
+    private var surfaceViews: [WorkspacePaneKey: GhosttySurfaceView] = [:] {
+        didSet {
+            // Closed panes and deleted workspaces drop their hibernation badge.
+            if !hibernatedAgentPanes.isEmpty,
+               !hibernatedAgentPanes.allSatisfy({ surfaceViews[$0] != nil }) {
+                hibernatedAgentPanes = hibernatedAgentPanes.filter { surfaceViews[$0] != nil }
+            }
+        }
+    }
     private var dockBadgePaneStatuses: [WorkspacePaneKey: PaneAgentStatus] = [:]
 
     private var saveCancellable: AnyCancellable?
@@ -1888,6 +1977,19 @@ final class WorkspaceStore: ObservableObject {
             }
         })
 
+        observerTokens.append(NotificationCenter.default.addObserver(
+            forName: .glintHibernatedAgentResumed,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            Task { @MainActor in
+                guard let self, let view = note.object as? GhosttySurfaceView,
+                      let key = self.surfaceViews.first(where: { $0.value === view })?.key
+                else { return }
+                self.hibernatedAgentPanes.remove(key)
+            }
+        })
+
         // Start the idle grace period at the moment the app loses focus rather
         // than at the next 30-second fallback tick.
         observerTokens.append(NotificationCenter.default.addObserver(
@@ -2002,17 +2104,76 @@ final class WorkspaceStore: ObservableObject {
     }
 
     private func offlineIdleTerminals(now: Date = Date()) {
-        guard freeIdleTerminalsEnabled else { return }
+        guard freeIdleTerminalsEnabled || hibernateIdleAgentsEnabled else { return }
         let timeout = TimeInterval(idleTerminalTimeoutSeconds)
         for (key, view) in surfaceViews {
             guard !webRemoteControlledPanes.contains(key) else { continue }
+            let workspaceIsSelected = key.workspace == selectedWorkspaceID
+            if hibernateIdleAgentsEnabled,
+               hibernateIdleAgentIfEligible(key: key, view: view,
+                                            workspaceIsSelected: workspaceIsSelected,
+                                            now: now) {
+                continue
+            }
+            guard freeIdleTerminalsEnabled else { continue }
             view.takeOfflineIfEligible(
                 enabled: true,
                 timeout: timeout,
                 now: now,
-                workspaceIsSelected: key.workspace == selectedWorkspaceID
+                workspaceIsSelected: workspaceIsSelected
             )
         }
+    }
+
+    /// Release one idle agent pane of a background workspace; the surface's
+    /// next generation types the resume command (same path as app restart).
+    private func hibernateIdleAgentIfEligible(key: WorkspacePaneKey,
+                                              view: GhosttySurfaceView,
+                                              workspaceIsSelected: Bool,
+                                              now: Date) -> Bool {
+        // Model-side guards first; the process probes below cost syscalls.
+        guard !workspaceIsSelected,
+              !view.isTakenOffline,
+              let state = paneAgentState[key],
+              AgentHibernationPolicy.isHibernatable(state.status),
+              let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
+              let pane = workspaces[wsIdx].panes[key.pane] else { return false }
+        let sessionId = pane.sessionIds[state.kind.rawValue]
+            .flatMap { Self.isValidSessionId($0) ? $0 : nil }
+        guard AgentHibernationPolicy.shouldHibernate(
+                enabled: true,
+                workspaceIsSelected: workspaceIsSelected,
+                foregroundKind: view.foregroundProcessName().flatMap(Self.agentKind(named:)),
+                state: state,
+                hasSessionId: sessionId != nil,
+                inactiveSince: view.idleClock(now: now, workspaceIsSelected: workspaceIsSelected),
+                lastUserInputAt: view.lastUserInputAt,
+                now: now,
+                timeout: TimeInterval(idleAgentTimeoutSeconds)),
+              view.agentProcessTreeIsDisposable() else { return false }
+
+        // Refresh cwd and launch flags from the live argv before the agent exits.
+        _ = captureSurfaceState(for: key, view: view)
+        guard let fresh = workspaces[wsIdx].panes[key.pane] else { return false }
+        let command = agentResumeCommand(kind: state.kind, pane: fresh, sessionId: sessionId)
+        guard view.hibernateAgent(resumeInput: command) else { return false }
+        hibernatedAgentPanes.insert(key)
+        // Nothing runs there now; a stale "claude" here would make close/quit
+        // confirmation count the pane as busy until the next capture.
+        paneProcesses.removeValue(forKey: key)
+        NSLog("[glint] hibernated idle agent: ws=\(key.workspace.uuidString.prefix(8)) pane=\(key.pane.value) kind=\(state.kind.rawValue)")
+        return true
+    }
+
+    /// Shell command that brings `kind` back in `pane` — shared by launch
+    /// restore and idle-agent hibernation so both replay the same flags.
+    private func agentResumeCommand(kind: PaneAgentKind, pane: Pane, sessionId: String?) -> String {
+        let flags = Self.restoreLaunchFlags(
+            for: kind,
+            captured: pane.launchFlags[kind.rawValue] ?? [],
+            alwaysSkip: alwaysSkipPermissionsOnRestore(for: kind))
+        return kind.restoreCommand(sessionId: sessionId, codexHome: pane.codexHome,
+                                   launchFlags: flags)
     }
 
     func surfaceView(workspaceID: UUID, paneID: PaneID, cwd: String?) -> GhosttySurfaceView {
@@ -2056,12 +2217,7 @@ final class WorkspaceStore: ObservableObject {
                   restoreEnabled(for: kind) else { return nil }
             let sid = pane.sessionIds[kind.rawValue]
                 .flatMap { Self.isValidSessionId($0) ? $0 : nil }
-            let flags = Self.restoreLaunchFlags(
-                for: kind,
-                captured: pane.launchFlags[kind.rawValue] ?? [],
-                alwaysSkip: alwaysSkipPermissionsOnRestore(for: kind))
-            return kind.restoreCommand(sessionId: sid, codexHome: pane.codexHome,
-                                       launchFlags: flags)
+            return agentResumeCommand(kind: kind, pane: pane, sessionId: sid)
         }()
         let v = GhosttySurfaceView(
             frame: .zero,
@@ -4487,6 +4643,7 @@ enum WebRemoteBrandIcon {
 final class PaneActivityStore: ObservableObject {
     @Published var paneProcesses: [WorkspaceStore.WorkspacePaneKey: String] = [:]
     @Published var paneAgentState: [WorkspaceStore.WorkspacePaneKey: PaneAgentState] = [:]
+    @Published var hibernatedAgentPanes: Set<WorkspaceStore.WorkspacePaneKey> = []
 }
 
 extension WorkspaceStore {
@@ -4732,6 +4889,9 @@ extension Notification.Name {
     /// Posted when shell integration reports that a command completed on a
     /// specific surface. Consumers can refresh only that pane/repository.
     static let ghosttyCommandFinished = Notification.Name("ghostty.command.finished")
+    /// Posted by a hibernated agent pane's surface once it is recreated (its
+    /// resume command is on the way), so the store clears the sidebar badge.
+    static let glintHibernatedAgentResumed = Notification.Name("glint.agent.hibernation.resumed")
 }
 
 // MARK: - Color hex helpers

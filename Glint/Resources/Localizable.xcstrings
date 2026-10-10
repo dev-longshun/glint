@@ -180,6 +180,17 @@
         }
       }
     },
+    "2 hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 小时"
+          }
+        }
+      }
+    },
     "30 minutes": {
       "extractionState": "manual",
       "localizations": {
@@ -187,6 +198,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "30 分钟"
+          }
+        }
+      }
+    },
+    "4 hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4 小时"
           }
         }
       }
@@ -2097,6 +2119,17 @@
         }
       }
     },
+    "Ends idle agent sessions in background workspaces to free memory, and resumes the same session when you return. Agents that are working or waiting for approval, panes with background jobs or dev servers, and the current workspace are never touched.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "结束后台工作区里空闲的 Agent 会话以释放内存，回到该工作区时自动恢复同一会话。正在工作或等待确认的 Agent、有后台任务或开发服务器的窗格，以及当前工作区都不会受到影响。"
+          }
+        }
+      }
+    },
     "Enter a Codex Home path.": {
       "extractionState": "manual",
       "localizations": {
@@ -2643,6 +2676,39 @@
         }
       }
     },
+    "Hibernate after": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "多久后休眠"
+          }
+        }
+      }
+    },
+    "Hibernate idle agents": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动休眠空闲 Agent"
+          }
+        }
+      }
+    },
+    "Hibernated": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已休眠"
+          }
+        }
+      }
+    },
     "Hide Glint": {
       "extractionState": "stale",
       "localizations": {
@@ -2824,6 +2890,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "图标样式"
+          }
+        }
+      }
+    },
+    "Idle agent hibernated": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空闲 Agent 已休眠"
+          }
+        }
+      }
+    },
+    "Idle agent hibernated to save memory. It resumes when you open this workspace.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空闲 Agent 已休眠以节省内存，打开此工作区时会自动恢复。"
+          }
+        }
+      }
+    },
+    "Idle agents": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空闲 Agent"
           }
         }
       }
@@ -3779,6 +3878,17 @@
       },
       "extractionState": "manual"
     },
+    "Off — agent sessions stay live.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关闭——Agent 会话会保持运行。"
+          }
+        }
+      }
+    },
     "Off — no network ports are bound.": {
       "extractionState": "manual",
       "localizations": {
@@ -3808,6 +3918,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "已关闭——终端会话会保持运行。"
+          }
+        }
+      }
+    },
+    "Only agents that finished their turn and have a saved session.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅限已结束本轮、且记录了会话的 Agent。"
           }
         }
       }
@@ -4732,6 +4853,17 @@
         }
       }
     },
+    "Resume Session": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复会话"
+          }
+        }
+      }
+    },
     "Resume session on launch": {
       "extractionState": "manual",
       "localizations": {
@@ -4772,6 +4904,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "恢复的 Grok 窗格一律带 `--always-approve` 启动，即使该窗格当初没带这个参数，或参数没被记录下来（例如刚升级完）。"
+          }
+        }
+      }
+    },
+    "Resumes the same session when you return.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "返回时将恢复同一会话。"
           }
         }
       }
@@ -5761,6 +5904,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "主题、强调色、毛玻璃"
+          }
+        }
+      }
+    },
+    "Time since the agent's last activity.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "距 Agent 最后一次活动的时间。"
           }
         }
       }
