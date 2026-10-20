@@ -2044,6 +2044,10 @@ final class WorkspaceStore: ObservableObject {
         WebRemoteServer.shared.setListenInterface(webRemoteListenInterface)
         if webRemoteEnabled { WebRemoteServer.shared.start() }
         else { WebRemoteServer.shared.stop() }
+        // Fork: Telegram remote confirm (see ConfirmationRelay).
+        ConfirmationRelay.shared.host = self
+        TelegramBridge.shared.relay = ConfirmationRelay.shared
+        TelegramBridge.shared.start()
         Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
         self.codexHooksInstalled = CodexHookInstaller.isInstalled()
@@ -2134,6 +2138,8 @@ final class WorkspaceStore: ObservableObject {
         // Model-side guards first; the process probes below cost syscalls.
         guard !workspaceIsSelected,
               !view.isTakenOffline,
+              // Fork: the phone may still answer this pane from Telegram.
+              !ConfirmationRelay.shared.hasLivePush(pane: Self.paneHandle(key)),
               let state = paneAgentState[key],
               AgentHibernationPolicy.isHibernatable(state.status),
               let wsIdx = workspaces.firstIndex(where: { $0.id == key.workspace }),
@@ -2674,6 +2680,9 @@ final class WorkspaceStore: ObservableObject {
             postAttentionNotification(status: state.status, key: key)
         }
         syncDockBadge(for: key, oldStatus: oldStatus, newStatus: state.status, userIsWatching: userIsWatching)
+        ConfirmationRelay.shared.agentEvent(hook: hook, kind: kind, pane: Self.paneHandle(key),
+                                            message: info["message"] as? String,
+                                            userIsWatching: userIsWatching)
     }
 
     /// User pressed plain Esc in a pane whose agent is mid-turn. Neither
@@ -2857,6 +2866,11 @@ final class WorkspaceStore: ObservableObject {
         guard selectedWorkspaceID == key.workspace,
               let tab = selectedWorkspace?.selectedTab else { return false }
         return tab.root.leaves.contains(key.pane)
+    }
+
+    /// Inverse of `parsePaneKey`: the "uuid:seq" handle hooks report.
+    static func paneHandle(_ key: WorkspacePaneKey) -> String {
+        "\(key.workspace.uuidString):\(key.pane.value)"
     }
 
     private static func parsePaneKey(_ s: String) -> WorkspacePaneKey? {
@@ -3263,6 +3277,41 @@ final class WorkspaceStore: ObservableObject {
         view.injectText(text)
         if enter { view.injectKey(.special(keycode: 36)) }
         return nil
+    }
+
+    // MARK: - Telegram remote confirm (fork)
+
+    func confirmationTitle(forPane pane: String) -> String? {
+        guard let key = Self.parsePaneKey(pane),
+              let ws = workspaces.first(where: { $0.id == key.workspace }),
+              let tab = ws.tabs.first(where: { $0.root.leaves.contains(key.pane) }) else { return nil }
+        // Same label the pane's tab chip shows; numbered like the agent popover
+        // when the tab is split.
+        let tabName = ws.tabDisplayName(tab)
+        var title = tabName == ws.displayName ? tabName : "\(ws.displayName) · \(tabName)"
+        let leaves = tab.root.leaves
+        if leaves.count > 1, let index = leaves.firstIndex(of: key.pane) {
+            title += " #\(index + 1)"
+        }
+        return title
+    }
+
+    /// Only into a pane still sitting at the prompt the push was about: not
+    /// working, not waiting on a permission prompt, and nobody typed since.
+    func deliverConfirmation(_ text: String, toPane pane: String,
+                             pushedAt: Date) -> ConfirmationDelivery {
+        guard let key = Self.parsePaneKey(pane), paneExists(key),
+              let view = surfaceViews[key], view.hasLiveSurface else { return .paneGone }
+        guard let status = paneAgentState[key]?.status,
+              status == .idle || status == .justCompleted else { return .busy }
+        if let typed = view.lastUserInputAt, typed > pushedAt { return .userActive }
+        view.injectText(text)
+        // Let the TUI take the bracketed paste before Return, so a multi-line
+        // reply is submitted rather than split.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak view] in
+            view?.injectKey(.special(keycode: 36))
+        }
+        return .delivered
     }
 
     func controlSendKeys(pane: String, keys: [String]) -> String? {

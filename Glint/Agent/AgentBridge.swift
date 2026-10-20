@@ -172,6 +172,7 @@ final class AgentBridge {
         let transcriptB64: String?
         let turnB64: String?
         let cwdB64: String?
+        let messageB64: String?
 
         private enum CodingKeys: String, CodingKey {
             case pane, hook, agent
@@ -179,6 +180,7 @@ final class AgentBridge {
             case transcriptB64 = "transcript_b64"
             case turnB64 = "turn_b64"
             case cwdB64 = "cwd_b64"
+            case messageB64 = "message_b64"
         }
     }
 
@@ -213,7 +215,22 @@ final class AgentBridge {
            !value.isEmpty {
             result["turn"] = value
         }
+        if let encoded = env.messageB64,
+           let data = Data(base64Encoded: encoded),
+           let value = utf8DroppingLeadingPartial(data),
+           !value.isEmpty {
+            result["message"] = value
+        }
         return result
+    }
+
+    /// The reporter cuts Claude's message with `tail -c`, which can land
+    /// inside a multi-byte sequence. Skip the orphaned continuation bytes
+    /// (10xxxxxx) at the front instead of rejecting the whole message.
+    static func utf8DroppingLeadingPartial(_ data: Data) -> String? {
+        let head = data.prefix(3)
+        let start = head.firstIndex(where: { $0 & 0xC0 != 0x80 }) ?? head.endIndex
+        return String(data: data[start...], encoding: .utf8)
     }
 
     /// Codex runs PermissionRequest hooks before routing the request to its

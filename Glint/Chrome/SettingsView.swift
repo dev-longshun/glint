@@ -2039,6 +2039,9 @@ private struct AgentsPane: View {
                 }
             }
         }
+
+        // Fork: Telegram remote confirm.
+        TelegramConfirmCard()
     }
 
     private func status(for home: CodexHome) -> CodexHomeStatus {

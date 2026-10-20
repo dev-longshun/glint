@@ -447,6 +447,69 @@ final class AgentHookRoutingTests: XCTestCase {
     /// Shared helper: spin up a Unix-domain listener, run the reporter once,
     /// return the decoded envelope (or nil when nothing was sent).
     @discardableResult
+    /// Fork (Telegram remote confirm): Claude's Stop forwards its final
+    /// message so Glint can push it to the user's phone.
+    func testReporterForwardsClaudeStopMessage() throws {
+        let message = "方案如下：\n1. 改 \"A\"\n2. 100% 完成 $HOME `x`\n\n回「执行」我就开始。"
+        let payload = try JSONSerialization.data(withJSONObject: [
+            "session_id": "claude-session",
+            "last_assistant_message": message,
+            "stop_hook_active": false,
+        ])
+        let decoded = try runReporter(
+            hook: "Stop",
+            agent: "claude",
+            pane: "12345678-1234-1234-1234-123456789ABC:3",
+            stdinJSON: String(decoding: payload, as: UTF8.self),
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        XCTAssertEqual(decoded?["hook"], "Stop")
+        XCTAssertEqual(decoded?["session"], "claude-session")
+        XCTAssertEqual(decoded?["message"], message)
+    }
+
+    /// Only the tail travels: the question sits at the end, and the socket
+    /// line stays small. The cut lands mid-character on purpose.
+    func testReporterKeepsTailOfLongClaudeStopMessage() throws {
+        let message = String(repeating: "前", count: 10_000) + "END"
+        let payload = try JSONSerialization.data(withJSONObject: ["last_assistant_message": message])
+        let decoded = try runReporter(
+            hook: "Stop",
+            agent: "claude",
+            pane: "12345678-1234-1234-1234-123456789ABC:4",
+            stdinJSON: String(decoding: payload, as: UTF8.self),
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        let forwarded = try XCTUnwrap(decoded?["message"])
+        XCTAssertTrue(forwarded.hasSuffix("前前END"))
+        XCTAssertLessThanOrEqual(forwarded.utf8.count, 16_384)
+        XCTAssertGreaterThan(forwarded.utf8.count, 16_000)
+        XCTAssertFalse(forwarded.contains("\u{FFFD}"))
+    }
+
+    func testReporterOmitsMessageOutsideClaudeStop() throws {
+        let decoded = try runReporter(
+            hook: "UserPromptSubmit",
+            agent: "claude",
+            pane: "12345678-1234-1234-1234-123456789ABC:5",
+            stdinJSON: #"{"session_id":"s","last_assistant_message":"hi"}"#,
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        XCTAssertNil(decoded?["message"])
+    }
+
+    func testUTF8TailDropsOrphanedContinuationBytes() {
+        let full = Data("前后".utf8)            // e5 89 8d e5 90 8e
+        XCTAssertEqual(AgentBridge.utf8DroppingLeadingPartial(full.dropFirst(1)), "后")
+        XCTAssertEqual(AgentBridge.utf8DroppingLeadingPartial(full.dropFirst(2)), "后")
+        XCTAssertEqual(AgentBridge.utf8DroppingLeadingPartial(full), "前后")
+        let emoji = Data("😀a".utf8)            // f0 9f 98 80 61
+        XCTAssertEqual(AgentBridge.utf8DroppingLeadingPartial(emoji.dropFirst(1)), "a")
+    }
+
     private func runReporter(
         hook: String,
         agent: String,

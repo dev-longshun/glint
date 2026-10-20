@@ -113,6 +113,13 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - `SettingsView`「空闲 Agent」卡片；`SidebarView`「已休眠」胶囊  
    - 上游若改 idle-offline / `createSurface` / 恢复命令：保留休眠分支与 `pendingInitialInput` 唤醒链路  
 
+13. **Telegram 远程确认（目前只接 Claude）**  
+   - `Glint/Agent/TelegramBridge.swift`：Bot API 长轮询、只认发过 `/start` 的那个私聊、Bot Token 存钥匙串（service = bundle id + `.telegram`，Debug 和正式版各用各的机器人，避免两边抢 `getUpdates` 报 409）  
+   - `Glint/Agent/ConfirmationRelay.swift`：推送记账与过期判断（每个 hook 事件都让该分屏进入新一轮，`Notification` 除外，旧按钮随之作废）、发送前打码、超长时保留结尾；`Glint/Chrome/TelegramConfirmSettings.swift`：设置 → Agents「Telegram 远程确认」卡片，`SettingsView` 里只有一行挂载  
+   - `Glint/Agent/AgentHookInstaller.swift` 的 reporter 脚本：Claude 的 `Stop` 额外转发 `last_assistant_message` 末尾 16KB（`message_b64`）；`AgentBridge.decodeHookLine` 解成 `message`，`utf8DroppingLeadingPartial` 丢掉被 `tail -c` 切断的半个字符  
+   - `Glint/Workspace/WorkspaceStore.swift`：`handleAgentEvent` 末尾调 `ConfirmationRelay.shared.agentEvent`；`confirmationTitle` / `deliverConfirmation`（只往停在提示符、推送后没人打过字的分屏里打字）；`hibernateIdleAgentIfEligible` 跳过还有待回复推送的分屏  
+   - 上游若改 reporter 脚本、`handleAgentEvent` 结尾或休眠条件：保留这三处挂点  
+
 ### 同步操作红线
 
 - **禁止**：`git reset --hard upstream/main`、`git checkout upstream/main -- .`、无审查的 `theirs` 全收、把冲突一律选成上游。  

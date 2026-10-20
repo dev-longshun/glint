@@ -362,6 +362,8 @@ enum AgentHookInstaller {
     /// captured" apart from "captured but empty".
     /// Codex PermissionRequest events also forward transcript_path + turn_id;
     /// AgentBridge uses that pair to resolve the effective approvals reviewer.
+    /// Fork: Claude Stop events forward the tail (last 16 KB) of
+    /// `last_assistant_message` as `message_b64` for Telegram remote confirm.
     static let scriptBody: String = """
     #!/bin/sh
     # Glint CLI-agent hook reporter. argv: event, agent kind.
@@ -400,6 +402,7 @@ enum AgentHookInstaller {
     TRANSCRIPT=""
     TURN=""
     EVENT_CWD=""
+    MESSAGE=""
     if TMP=$(/usr/bin/mktemp "${TMPDIR:-/tmp}/glint-hook.XXXXXX"); then
       trap '/bin/rm -f "$TMP"' EXIT HUP INT TERM
       cat >"$TMP"
@@ -439,6 +442,11 @@ enum AgentHookInstaller {
       if [ "$AGENT" = "codex" ]; then
         EVENT_CWD=$(/usr/bin/plutil -extract cwd raw -o - "$TMP" 2>/dev/null) || EVENT_CWD=""
       fi
+      # Claude's final reply for the turn — Glint can push it to Telegram so
+      # the user can answer from their phone.
+      if [ "$HOOK" = "Stop" ] && [ "$AGENT" = "claude" ]; then
+        MESSAGE=$(/usr/bin/plutil -extract last_assistant_message raw -o - "$TMP" 2>/dev/null) || MESSAGE=""
+      fi
       # Antigravity (agy) has no UserPromptSubmit event; the turn's first
       # PreInvocation plays that role — remap it so the turn timer starts
       # with the turn instead of the first tool call. Verified against the
@@ -471,6 +479,12 @@ enum AgentHookInstaller {
       TURN_B64=$(printf '%s' "$TURN" | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
       APPROVAL_META=$(printf '%s,"transcript_b64":"%s","turn_b64":"%s"' \\
         "$APPROVAL_META" "$TRANSCRIPT_B64" "$TURN_B64")
+    fi
+    # Keep the tail: the question the user has to answer sits at the end.
+    # The cut can split a UTF-8 sequence; AgentBridge drops the partial bytes.
+    if [ -n "$MESSAGE" ]; then
+      MESSAGE_B64=$(printf '%s' "$MESSAGE" | /usr/bin/tail -c 16384 | /usr/bin/base64 | /usr/bin/tr -d '\\r\\n')
+      APPROVAL_META=$(printf '%s,"message_b64":"%s"' "$APPROVAL_META" "$MESSAGE_B64")
     fi
 
     if [ -n "$SESSION" ]; then

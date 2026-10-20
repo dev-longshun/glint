@@ -333,6 +333,17 @@
         }
       }
     },
+    "Add a bot token below.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在下方填入 Bot Token。"
+          }
+        }
+      }
+    },
     "Adds a fenced block to ~/.zshrc that loads zsh-autosuggestions from ~/.config/glint. Only affects newly spawned zsh panes; bash / fish are untouched.": {
       "extractionState": "manual",
       "localizations": {
@@ -494,6 +505,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "恢复时总是跳过权限确认"
+          }
+        }
+      }
+    },
+    "Another program is polling this bot. Use a dedicated bot.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有别的程序在用这个机器人收消息，请换一个专用机器人。"
           }
         }
       }
@@ -795,6 +817,17 @@
         }
       }
     },
+    "Bot token": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bot Token"
+          }
+        }
+      }
+    },
     "Branch vs %@": {
       "extractionState": "manual",
       "localizations": {
@@ -912,6 +945,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "中文字体兜底"
+          }
+        }
+      }
+    },
+    "Can't reach Telegram — retrying.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连不上 Telegram，正在重试。"
           }
         }
       }
@@ -1462,6 +1506,17 @@
         }
       }
     },
+    "Connected as %@. Send /start to it in Telegram to link your chat.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接 %@。在 Telegram 里给它发 /start 完成绑定。"
+          }
+        }
+      }
+    },
     "Connected browsers will be disconnected. A new key and ports will be generated, so old links will stop working.": {
       "extractionState": "manual",
       "localizations": {
@@ -1469,6 +1524,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "已连接的浏览器将断开。系统会生成新密钥和端口，旧链接将失效。"
+          }
+        }
+      }
+    },
+    "Connecting to Telegram…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在连接 Telegram…"
           }
         }
       }
@@ -1612,6 +1678,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "下载的 DMG 中找不到 Glint.app。"
+          }
+        }
+      }
+    },
+    "Couldn't read the token from the Keychain.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "读不到钥匙串里的 Token。"
           }
         }
       }
@@ -1913,6 +1990,17 @@
         }
       }
     },
+    "Details for Claude": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要补充给 Claude 的内容"
+          }
+        }
+      }
+    },
     "Devin detected — install the reporter to show its status.": {
       "localizations": {
         "zh-Hans": {
@@ -2159,6 +2247,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "事件"
+          }
+        }
+      }
+    },
+    "Expired": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已过期"
           }
         }
       }
@@ -2544,6 +2643,17 @@
         }
       },
       "extractionState": "manual"
+    },
+    "Glint is connected. When Claude stops in a pane you're not watching, its last message shows up here.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 已连接。Claude 在你没看着的分屏里停下时，会把最后一段话发到这里。"
+          }
+        }
+      }
     },
     "Glint is dark-mode only for now.": {
       "extractionState": "stale",
@@ -3244,6 +3354,28 @@
         }
       }
     },
+    "Linked chat": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已绑定的对话"
+          }
+        }
+      }
+    },
+    "Linked to Glint. Only this chat can answer for you from now on.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已绑定到 Glint。之后只有这个对话能替你回复。"
+          }
+        }
+      }
+    },
     "Listen on": {
       "extractionState": "manual",
       "localizations": {
@@ -3801,6 +3933,17 @@
         }
       }
     },
+    "Not linked — send /start to your bot in Telegram.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未绑定：在 Telegram 里给你的机器人发 /start。"
+          }
+        }
+      }
+    },
     "Not wired": {
       "extractionState": "stale",
       "localizations": {
@@ -3911,6 +4054,17 @@
         }
       }
     },
+    "Off — nothing is sent.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关闭，不会发送任何内容。"
+          }
+        }
+      }
+    },
     "Off — terminal sessions stay live.": {
       "extractionState": "manual",
       "localizations": {
@@ -3962,6 +4116,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅本机（127.0.0.1）可连接。"
+          }
+        }
+      }
+    },
+    "Only when I'm away": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅在我离开时推送"
           }
         }
       }
@@ -4180,6 +4345,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "粘贴可能不安全的文本?"
+          }
+        }
+      }
+    },
+    "Paste the token @BotFather gave you.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "粘贴 @BotFather 给你的 Token。"
           }
         }
       }
@@ -4435,6 +4611,17 @@
         }
       }
     },
+    "Proceed": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "执行"
+          }
+        }
+      }
+    },
     "Progress": {
       "extractionState": "manual",
       "localizations": {
@@ -4442,6 +4629,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "进度"
+          }
+        }
+      }
+    },
+    "Push only while Glint is in the background or the pane is off screen. Off: push every time Claude stops.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只在 Glint 不在前台、或该分屏不在屏幕上时推送。关闭后每次 Claude 停下都推送。"
           }
         }
       }
@@ -4545,6 +4743,17 @@
         }
       }
     },
+    "Ready — %@ pushes to %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就绪：%1$@ 推送到 %2$@"
+          }
+        }
+      }
+    },
     "Ready — copy a session link to another browser.": {
       "extractionState": "manual",
       "localizations": {
@@ -4640,6 +4849,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "释放闲置的 shell 会话，并在你返回时于同一目录重新创建。正在运行的命令、SSH 会话、Agent、tmux 和当前聚焦的终端都不会受到影响。"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
           }
         }
       }
@@ -4750,6 +4970,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "将在同一目录重新打开。"
+          }
+        }
+      }
+    },
+    "Replace": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "替换"
           }
         }
       }
@@ -5040,6 +5271,28 @@
         }
       }
     },
+    "Save": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        }
+      }
+    },
+    "Saved in the Keychain.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已存入钥匙串。"
+          }
+        }
+      }
+    },
     "Scrollback": {
       "extractionState": "stale",
       "localizations": {
@@ -5124,6 +5377,149 @@
           "stringUnit": {
             "state": "translated",
             "value": "全选"
+          }
+        }
+      }
+    },
+    "Send Claude's stops to Telegram": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude 停下时推送到 Telegram"
+          }
+        }
+      }
+    },
+    "Send test message": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发一条测试消息"
+          }
+        }
+      }
+    },
+    "Sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已发送"
+          }
+        }
+      }
+    },
+    "Starting…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在启动…"
+          }
+        }
+      }
+    },
+    "Telegram rejected the token. Check it with @BotFather.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telegram 不认这个 Token，请到 @BotFather 核对。"
+          }
+        }
+      }
+    },
+    "Telegram remote confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Telegram 远程确认"
+          }
+        }
+      }
+    },
+    "Text typed by ✅": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✅ 按钮打的字"
+          }
+        }
+      }
+    },
+    "That doesn't look like a token from @BotFather (123456:ABC…).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这不像 @BotFather 给的 Token（形如 123456:ABC…）。"
+          }
+        }
+      }
+    },
+    "This chat is already linked to Glint.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个对话已经绑定到 Glint。"
+          }
+        }
+      }
+    },
+    "To answer Claude, swipe left on its message (or long-press → Reply) and send your text.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要回复 Claude，请在那条推送上左滑（或长按 → 回复）再发文字。"
+          }
+        }
+      }
+    },
+    "Typed into the pane, then Return.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打进分屏后自动回车。"
+          }
+        }
+      }
+    },
+    "Unlink": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解除绑定"
+          }
+        }
+      }
+    },
+    "Use a dedicated bot made with @BotFather that no other app polls. The token stays in the macOS Keychain. Keys, passwords, emails and IP addresses are masked before a message leaves this Mac, and only the chat that sent /start can answer.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请用 @BotFather 新建一个专用机器人，不要和别的程序共用。Token 存在 macOS 钥匙串里。消息发出前会把密钥、密码、邮箱、IP 地址打码；只有发过 /start 的那个对话能回复。"
           }
         }
       }
@@ -6786,6 +7182,17 @@
         }
       }
     },
+    "redacted": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已打码"
+          }
+        }
+      }
+    },
     "reply": {
       "extractionState": "manual",
       "localizations": {
@@ -6888,8 +7295,52 @@
     },
     "· %@": {},
     "—": {},
+    "… (earlier text omitted)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "…（前文已省略）"
+          }
+        }
+      }
+    },
     "⌘N": {},
     "⌘T": {},
+    "⌛ Expired": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌛ 已过期"
+          }
+        }
+      }
+    },
+    "⌛ Expired — nothing was typed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌛ 已过期，没有往分屏里打字。"
+          }
+        }
+      }
+    },
+    "⌛ Expired — the pane is closed or asleep": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌛ 已过期：分屏已关闭或已休眠"
+          }
+        }
+      }
+    },
     "── session restored ──": {
       "extractionState": "manual",
       "localizations": {
@@ -6897,6 +7348,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "── 已恢复会话 ──"
+          }
+        }
+      }
+    },
+    "✅ Proceed (as recommended)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✅ 执行（按推荐）"
+          }
+        }
+      }
+    },
+    "✅ Proceeded": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✅ 已执行"
+          }
+        }
+      }
+    },
+    "✏️ Add details": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✏️ 补充信息"
+          }
+        }
+      }
+    },
+    "✏️ Details sent": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✏️ 已补充"
+          }
+        }
+      }
+    },
+    "✏️ Reply to this message — your text is typed into %@ as is.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "✏️ 回复这条消息，文字会原样打进「%@」。"
           }
         }
       }
