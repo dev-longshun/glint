@@ -160,6 +160,25 @@ extension SplitNode {
         case .split(_, _, let a, let b): return a.leaves + b.leaves
         }
     }
+
+    /// Prune missing panes; validIDs contains registered pane IDs; returns the surviving tree or nil.
+    func retainingPanes(_ validIDs: Set<PaneID>) -> SplitNode? {
+        switch self {
+        case .leaf(let id):
+            return validIDs.contains(id) ? self : nil
+        case .split(let direction, let ratio, let a, let b):
+            let keptA = a.retainingPanes(validIDs)
+            let keptB = b.retainingPanes(validIDs)
+            switch (keptA, keptB) {
+            case (.some(let a), .some(let b)):
+                return .split(direction: direction, ratio: ratio, a: a, b: b)
+            case (.some(let node), .none), (.none, .some(let node)):
+                return node
+            case (.none, .none):
+                return nil
+            }
+        }
+    }
 }
 
 /// Where a workspace's shell/agent/git actually run, and what repo/branch it's
@@ -400,6 +419,7 @@ struct Workspace: Identifiable, Codable {
         self.source = source
     }
 
+    /// Decode a workspace and repair dangling pane references; decoder supplies saved data; returns a restored workspace or throws.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.id = try c.decode(UUID.self, forKey: .id)
@@ -441,6 +461,33 @@ struct Workspace: Identifiable, Codable {
                                       root: root, focusedPane: focused)]
             self.selectedTabID = TabID(value: 0)
             self.nextTabSeq = 1
+        }
+
+        let validIDs = Set(panes.keys)
+        for index in self.tabs.indices {
+            if let root = self.tabs[index].root.retainingPanes(validIDs) {
+                self.tabs[index].root = root
+                if !root.leaves.contains(self.tabs[index].focusedPane) {
+                    self.tabs[index].focusedPane = root.leaves[0]
+                }
+            } else {
+                // An entirely damaged tab still needs a registered terminal;
+                // preserve its identity/name instead of restoring a blank tab.
+                let maxID = panes.keys.map(\.value).max()
+                guard self.nextPaneSeq < UInt32.max,
+                      maxID.map({ $0 < UInt32.max - 1 }) ?? true else {
+                    throw DecodingError.dataCorruptedError(forKey: .nextPaneSeq, in: c,
+                                                          debugDescription: "Pane identifier sequence is exhausted")
+                }
+                if let maxID {
+                    self.nextPaneSeq = Swift.max(self.nextPaneSeq, maxID + 1)
+                }
+                let id = PaneID(value: self.nextPaneSeq)
+                self.nextPaneSeq += 1
+                self.panes[id] = Pane(id: id, title: "zsh")
+                self.tabs[index].root = .leaf(id)
+                self.tabs[index].focusedPane = id
+            }
         }
     }
 
@@ -489,6 +536,7 @@ struct PersistedState: Codable {
         case version, workspaces, selectedWorkspaceID, sidebarCollapsed
     }
 
+    /// Decode saved state; decoder supplies the snapshot; returns state with a valid workspace selection or throws.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         // Files written before versioning have no `version` key — they are
@@ -497,6 +545,11 @@ struct PersistedState: Codable {
         self.workspaces = try c.decode([Workspace].self, forKey: .workspaces)
         self.selectedWorkspaceID = try c.decodeIfPresent(UUID.self, forKey: .selectedWorkspaceID)
         self.sidebarCollapsed = try c.decodeIfPresent(Bool.self, forKey: .sidebarCollapsed) ?? false
+        if let selectedWorkspaceID,
+           !workspaces.contains(where: { $0.id == selectedWorkspaceID }) {
+            self.selectedWorkspaceID = workspaces.first(where: { !$0.archived })?.id
+                ?? workspaces.first?.id
+        }
     }
 
     static var fresh: PersistedState {
