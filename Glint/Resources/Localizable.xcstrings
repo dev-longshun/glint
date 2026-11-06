@@ -1,6 +1,160 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%1$@ is waiting for your answer. Your Mac sleeps if nobody replies within %2$lld minutes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ 正在等你回答。%2$lld 分钟内没有回复，Mac 就会睡眠。"
+          }
+        }
+      }
+    },
+    "%@ made no progress, so your Mac is going to sleep. Open the lid to continue.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 没有进展，Mac 即将睡眠。打开盖子后可以继续。"
+          }
+        }
+      }
+    },
+    "%lld agent(s) waiting for you. The Mac sleeps when the time limit is reached.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个 Agent 正在等你。到达时间上限后 Mac 会睡眠。"
+          }
+        }
+      }
+    },
+    "Agents keep running with the lid closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合盖后 Agent 会继续运行"
+          }
+        }
+      }
+    },
+    "Another app cleared the sleep setting %1$lld time(s) and Glint restored it. Running: %2$@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他程序改回睡眠设置 %1$lld 次，Glint 已恢复。当时在运行：%2$@。"
+          }
+        }
+      }
+    },
+    "Battery is low, so the Mac can sleep.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电量过低，已允许 Mac 睡眠。"
+          }
+        }
+      }
+    },
+    "Couldn't change the system's sleep setting.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法修改系统的睡眠设置。"
+          }
+        }
+      }
+    },
+    "Glint wants to keep agents running with the lid closed. This one-time approval only lets it switch the system's sleep setting. You can revoke it in Settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glint 想在合盖后继续运行 Agent。这次授权只允许它切换系统的睡眠设置，之后可以在设置里撤销。"
+          }
+        }
+      }
+    },
+    "Keep agents running with the lid closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合盖后继续运行 Agent"
+          }
+        }
+      }
+    },
+    "Keeping the Mac awake for %lld running agent(s).": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在为 %lld 个运行中的 Agent 保持 Mac 唤醒。"
+          }
+        }
+      }
+    },
+    "Let the Mac sleep once a running agent shows no activity for this long.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运行中的 Agent 超过这个时长没有任何活动时，允许 Mac 睡眠。"
+          }
+        }
+      }
+    },
+    "Let the Mac sleep once an agent has waited this long for your answer.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 等你回答超过这个时长后，允许 Mac 睡眠。"
+          }
+        }
+      }
+    },
+    "Lid-closed": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合盖运行中"
+          }
+        }
+      }
+    },
+    "Lid-closed running": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合盖运行"
+          }
+        }
+      }
+    },
     "Linked to another Glint": {
       "extractionState": "manual",
       "localizations": {
@@ -8,6 +162,116 @@
           "stringUnit": {
             "state": "translated",
             "value": "已链接到另一个 Glint"
+          }
+        }
+      }
+    },
+    "Lowest battery": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最低电量"
+          }
+        }
+      }
+    },
+    "No progress": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有进展"
+          }
+        }
+      }
+    },
+    "Not approved, so the Mac still sleeps when the lid closes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有获得授权，合盖后 Mac 仍会睡眠。"
+          }
+        }
+      }
+    },
+    "Off. The Mac sleeps when the lid closes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已关闭。合盖后 Mac 会睡眠。"
+          }
+        }
+      }
+    },
+    "On battery, let the Mac sleep at this level.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用电池时，电量降到这里就允许 Mac 睡眠。"
+          }
+        }
+      }
+    },
+    "Ready. Nothing needs the Mac to stay awake right now.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已就绪。目前没有需要保持唤醒的任务。"
+          }
+        }
+      }
+    },
+    "Removes the rule that lets Glint switch the sleep setting. Asks for your password.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除允许 Glint 切换睡眠设置的规则，需要输入密码。"
+          }
+        }
+      }
+    },
+    "Revoke": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "撤销"
+          }
+        }
+      }
+    },
+    "Safety watcher didn't start, so the Mac still sleeps when the lid closes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安全看门进程没有启动，合盖后 Mac 仍会睡眠。"
+          }
+        }
+      }
+    },
+    "System approval": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统授权"
           }
         }
       }
@@ -250,6 +514,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "已安装到 %@。必要时将 ~/.local/bin 加入 PATH。外部控制仍由上方开关决定。"
+          }
+        }
+      }
+    },
+    "The Mac is too hot, so it can sleep.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac 温度过高，已允许 Mac 睡眠。"
+          }
+        }
+      }
+    },
+    "The system approval is gone. Turn this off and on again to restore it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系统授权已失效。关闭再重新打开这个开关即可恢复。"
+          }
+        }
+      }
+    },
+    "unknown": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未知"
           }
         }
       }
@@ -6971,6 +7268,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "仅在命令面板打开时生效。"
+          }
+        }
+      }
+    },
+    "Waiting for system approval…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在等待系统授权…"
+          }
+        }
+      }
+    },
+    "Waiting for you": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等你回答"
+          }
+        }
+      }
+    },
+    "While it holds, closing the lid, the Apple menu and a short power-button press won't sleep the Mac. Don't leave it running in a closed bag.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生效期间，合盖、苹果菜单里的睡眠和短按电源键都不会让 Mac 睡眠。不要在密闭的包里长时间运行。"
           }
         }
       }

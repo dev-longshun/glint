@@ -120,6 +120,17 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - `Glint/Workspace/WorkspaceStore.swift`：`handleAgentEvent` 末尾调 `ConfirmationRelay.shared.agentEvent`；`confirmationTitle` / `deliverConfirmation`（只往停在提示符、推送后没人打过字的分屏里打字）；`hibernateIdleAgentIfEligible` 跳过还有待回复推送的分屏  
    - 上游若改 reporter 脚本、`handleAgentEvent` 结尾或休眠条件：保留这三处挂点  
 
+14. **合盖继续运行（Agent 在干活时 Mac 不睡）**  
+   - `Glint/Agent/LidAwakeController.swift`：`LidAwakePolicy`（纯判断：在推进不限时、等你回答默认 30 分钟、无进展默认 2 小时、结束后 5 分钟）、`LidSleepEngine`（经 `sudo -n pmset -a disablesleep` 切换，只放开自己置的值）、`LidAwakeController`（5 秒巡检，同时负责把被其他程序改回的开关重新置上）；`Glint/Chrome/LidAwakeSettings.swift`：设置 → Agents 卡片，`SettingsView` 里只有一行挂载；`SidebarUpdateBadges` 的胶囊  
+   - 为什么走 `pmset` + sudoers：`caffeinate` / `IOPMAssertion` 只挡闲置，挡不住合盖；本 fork 没有 Team ID，装不了特权 helper。规则文件 `/etc/sudoers.d/glint-lid` 只放行两条固定命令；机器上已有规则放行时（如 Amphetamine 的 PowerProtect）直接用，不弹密码  
+   - SleepDisabled 跨重启保留，塞进包里不睡是最要防的：置 1 必须同时起看门进程，起不来就放弃；标记键 `lidAwake.ownsSleepDisabled` 故意不用 `glint.` 前缀（否则会被 seed 进 Debug，开发版启动时会清掉正式版持有的开关）  
+   - 放开时盖子是合上的要主动 `pmset sleepnow`：`pmset sleep 0` 的机器不会闲置睡眠。外接显示器、近 2 分钟有输入（远程桌面）、其他程序持有开关时不睡  
+   - 进展只看 hook 事件和 Agent 子进程 CPU，不看 Agent 自身 CPU 和终端输出：转圈动画在卡死时也会刷新  
+   - `AgentHookInstaller` reporter：Claude 的 `AskUserQuestion` / `ExitPlanMode` 和 Codex 的 `request_user_input` 的 `PreToolUse` 改判 `NeedsReply`，否则等你回答会被当成在跑工具  
+   - `Glint/Pane/GhosttySurfaceView.swift`：`foregroundJobIsRunning`（包装脚本启动时前台是 `bash`，不能只看进程名）、`foregroundChildrenCPUNanoseconds`、`cpuNanoseconds`（Apple Silicon 上 `proc_taskinfo` 单位是 Mach tick，要换算）  
+   - `AppDelegate.applicationWillTerminate` 开头的 `shutdown()`；`WorkspaceStore` 的 `lidAwakePanes`、`handleAgentEvent` 结尾的 `agentActivityChanged`  
+   - 上游给 `PaneAgentStatus` 新增 case 时，`LidAwakePolicy.classify` 这个穷举 switch 要补分支；上游若改 reporter、退出流程或 `handleAgentEvent` 结尾：保留以上挂点  
+
 ### 同步操作红线
 
 - **禁止**：`git reset --hard upstream/main`、`git checkout upstream/main -- .`、无审查的 `theirs` 全收、把冲突一律选成上游。  

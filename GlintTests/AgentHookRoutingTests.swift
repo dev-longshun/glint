@@ -369,6 +369,45 @@ final class AgentHookRoutingTests: XCTestCase {
         XCTAssertEqual(decoded?["session"] as? String, "sess-plan-1")
     }
 
+    /// Fork: a Claude question reads as "waiting for you", not a running tool.
+    func testReporterRemapsClaudeQuestionToolsToNeedsReply() throws {
+        for tool in ["AskUserQuestion", "ExitPlanMode"] {
+            let decoded = try runReporter(
+                hook: "PreToolUse",
+                agent: "claude",
+                pane: "12345678-1234-1234-1234-123456789ABC:b",
+                stdinJSON: #"{"session_id":"sess-ask","tool_name":"\#(tool)"}"#,
+                extraEnv: nil,
+                expectSocketTraffic: true
+            )
+            XCTAssertEqual(decoded?["hook"] as? String, "NeedsReply", tool)
+        }
+    }
+
+    func testReporterRemapsCodexRequestUserInputToNeedsReply() throws {
+        let decoded = try runReporter(
+            hook: "PreToolUse",
+            agent: "codex",
+            pane: "12345678-1234-1234-1234-123456789ABC:c",
+            stdinJSON: #"{"session_id":"sess-ask","tool_name":"request_user_input"}"#,
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        XCTAssertEqual(decoded?["hook"] as? String, "NeedsReply")
+    }
+
+    func testReporterLeavesOrdinaryClaudeToolsAsPreToolUse() throws {
+        let decoded = try runReporter(
+            hook: "PreToolUse",
+            agent: "claude",
+            pane: "12345678-1234-1234-1234-123456789ABC:d",
+            stdinJSON: #"{"session_id":"sess-ask","tool_name":"Bash"}"#,
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        XCTAssertEqual(decoded?["hook"] as? String, "PreToolUse")
+    }
+
     /// When the payload lacks session fields, GROK_SESSION_ID still captures id.
     func testReporterFallsBackToGrokSessionIdEnv() throws {
         let decoded = try runReporter(

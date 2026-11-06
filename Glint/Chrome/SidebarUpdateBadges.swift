@@ -10,8 +10,10 @@ struct SidebarUpdateBadges: View {
     @EnvironmentObject var store: WorkspaceStore
     @EnvironmentObject var updater: UpdaterController
     @EnvironmentObject var upstream: UpstreamTracker
+    @ObservedObject private var lid = LidAwakeController.shared
     @State private var updateOpen = false
     @State private var upstreamOpen = false
+    @State private var lidOpen = false
 
     /// The 244pt sidebar can't fit "New Workspace" plus both pills with the
     /// version spelled out, so the update pill drops to a bare red dot while
@@ -22,6 +24,25 @@ struct SidebarUpdateBadges: View {
 
     var body: some View {
         HStack(spacing: 4) {
+            if lid.isKeepingAwake {
+                BadgePill(help: Text("Agents keep running with the lid closed"),
+                          isOpen: lidOpen, action: { lidOpen.toggle() }) {
+                    Image(systemName: "laptopcomputer")
+                        .font(.system(size: 9.5, weight: .semibold))
+                    // Same width limit as the version text below.
+                    if !updater.showsUpdateBadge && !showsUpstreamPill {
+                        Text("Lid-closed")
+                    }
+                }
+                .popover(isPresented: $lidOpen, arrowEdge: .top) {
+                    Text(verbatim: lid.statusText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.text1)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(width: 220, alignment: .leading)
+                        .padding(12)
+                }
+            }
             if updater.showsUpdateBadge {
                 BadgePill(help: updateHelp, isOpen: updateOpen, action: { updateOpen.toggle() }) {
                     Circle().fill(Color.red).frame(width: 6, height: 6)

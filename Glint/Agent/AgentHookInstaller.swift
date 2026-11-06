@@ -433,6 +433,15 @@ enum AgentHookInstaller {
           ask_user_question|exit_plan_mode) HOOK="NeedsReply" ;;
         esac
       fi
+      # Fork: Claude's and Codex's question tools block the same way. Without
+      # this they read as a running tool, which lid-closed running can't tell
+      # from real work.
+      if [ "$HOOK" = "PreToolUse" ] && { [ "$AGENT" = "claude" ] || [ "$AGENT" = "codex" ]; }; then
+        TOOL=$(/usr/bin/plutil -extract tool_name raw -o - "$TMP" 2>/dev/null) || TOOL=""
+        case "$TOOL" in
+          AskUserQuestion|ExitPlanMode|request_user_input) HOOK="NeedsReply" ;;
+        esac
+      fi
       if [ "$HOOK" = "PermissionRequest" ] && [ "$AGENT" = "codex" ]; then
         TRANSCRIPT=$(/usr/bin/plutil -extract transcript_path raw -o - "$TMP" 2>/dev/null) || TRANSCRIPT=""
         TURN=$(/usr/bin/plutil -extract turn_id raw -o - "$TMP" 2>/dev/null) || TURN=""

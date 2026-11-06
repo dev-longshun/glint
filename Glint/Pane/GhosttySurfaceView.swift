@@ -1320,6 +1320,47 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         return true
     }
 
+    /// False at a bare shell prompt or with no surface. A shell that still has
+    /// children counts as running: an agent started from a wrapper script shows
+    /// `bash` in the foreground for its whole life.
+    func foregroundJobIsRunning() -> Bool {
+        guard let s = surface else { return false }
+        let rawPID = ghostty_surface_foreground_pid(s)
+        guard rawPID > 0, rawPID <= UInt64(Int32.max) else { return false }
+        let pid = pid_t(rawPID)
+        guard TerminalOfflinePolicy.isIdleShell(Self.processName(of: pid)) else { return true }
+        return Self.childPIDs(of: pid)?.isEmpty == false
+    }
+
+    /// CPU used so far by everything under the foreground process, not by the
+    /// process itself: an agent's own spinner burns CPU on a stuck turn, its
+    /// tool subprocesses don't.
+    func foregroundChildrenCPUNanoseconds() -> UInt64? {
+        guard let s = surface else { return nil }
+        let rawPID = ghostty_surface_foreground_pid(s)
+        guard rawPID > 0, rawPID <= UInt64(Int32.max) else { return nil }
+        var queue = Self.childPIDs(of: pid_t(rawPID)) ?? []
+        var total: UInt64 = 0
+        var visited = 0
+        while let pid = queue.popLast(), visited < 256 {
+            visited += 1
+            total += Self.cpuNanoseconds(of: pid) ?? 0
+            queue.append(contentsOf: Self.childPIDs(of: pid) ?? [])
+        }
+        return total
+    }
+
+    /// `proc_taskinfo` counts in Mach ticks on Apple Silicon, not nanoseconds.
+    nonisolated static func cpuNanoseconds(of pid: pid_t) -> UInt64? {
+        var info = proc_taskinfo()
+        let size = Int32(MemoryLayout<proc_taskinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size) == size else { return nil }
+        var timebase = mach_timebase_info_data_t()
+        guard mach_timebase_info(&timebase) == KERN_SUCCESS, timebase.denom > 0 else { return nil }
+        return (info.pti_total_user + info.pti_total_system)
+            / UInt64(timebase.denom) * UInt64(timebase.numer)
+    }
+
     private static func bsdInfo(of pid: pid_t) -> proc_bsdinfo? {
         var info = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)

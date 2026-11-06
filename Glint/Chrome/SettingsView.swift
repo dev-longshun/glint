@@ -2118,6 +2118,9 @@ private struct AgentsPane: View {
 
         // Fork: Telegram remote confirm.
         TelegramConfirmCard()
+
+        // Fork: lid-closed running.
+        LidAwakeCard()
     }
 
     private func status(for home: CodexHome) -> CodexHomeStatus {
@@ -2333,7 +2336,7 @@ private struct CodexHomeSettingsRow: View {
 /// - Sectioned — pass `sections`. Each section gets a caption header and
 ///   sections are visually separated. Used by the font pickers which mix
 ///   a curated "Recommended" list with the full system inventory.
-private struct GlintDropdown<Value: Hashable>: View {
+struct GlintDropdown<Value: Hashable>: View {
     typealias Item = (value: Value, label: String)
     /// `header` 用 `LocalizedStringKey` 而不是 `String`,字面量调用点(如
     /// `(header: "Recommended", items: ...)`)自动进 xcstrings 目录;变量

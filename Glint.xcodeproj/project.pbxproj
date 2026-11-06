@@ -43,6 +43,7 @@
 		44C33E4DC10425D7555AC4E2 /* WebRemoteServerIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45C96BF92C4618FF97D68919 /* WebRemoteServerIntegrationTests.swift */; };
 		456D76955277C3299291BF60 /* SyntaxHighlighter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8037A4E0001A21E3224DD798 /* SyntaxHighlighter.swift */; };
 		47BB527385B84454ABF8FC40 /* themes.json in Resources */ = {isa = PBXBuildFile; fileRef = 6860F8F626EFDB9A289FC727 /* themes.json */; };
+		487328AA8DE73D20AADAAF90 /* LidAwakeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2F31716D5AC32AC157C5B6D /* LidAwakeController.swift */; };
 		4971664CE7FBF0629C8DD709 /* ReleaseNotes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */; };
 		49DF8EE59313B7CFE29DA303 /* PaneTreeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E646AABA8ADCE8A2A5C6F55 /* PaneTreeView.swift */; };
 		4E46C7DC654185D9E8A07CDF /* GrokUsageReaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCEE44600B0EBF18542EA3E7 /* GrokUsageReaderTests.swift */; };
@@ -69,6 +70,7 @@
 		80C9187503230DFF69389EFE /* InlineSuggestionInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98BBD4C70C8DC534304294C9 /* InlineSuggestionInstaller.swift */; };
 		81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */; };
 		8AC6F6DB6CB18E5D65F3042D /* TelegramConfirmSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC52789A66AF3AEBB7B57483 /* TelegramConfirmSettings.swift */; };
+		91EBD3E387ECCF8A23A410F8 /* LidAwakeSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D8FFF31B1FED3DAEB6EC8C6 /* LidAwakeSettings.swift */; };
 		930665E39CE84564CBF9D300 /* GlintTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150EEF32284061D527E51866 /* GlintTheme.swift */; };
 		A91EFEF0FEA392A0745724DE /* AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 89B8883C4456681F07B6D662 /* AppIcon.icon */; };
 		942ED7C1C1A2E823BA52F67A /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 3023490E670A10EC38870B12 /* Assets.xcassets */; };
@@ -102,6 +104,7 @@
 		D3D6CF13B67D30E9DA557F83 /* UsageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8A1F24DAA7220AD4EE961E2 /* UsageStore.swift */; };
 		D6538EB0E59B35FB96AD80E2 /* web-remote-index.html in Resources */ = {isa = PBXBuildFile; fileRef = B7CBC5C072019BC8A7C08327 /* web-remote-index.html */; };
 		DFDF7E690BD53E885484EA00 /* OmpHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDE16D678B1BC67A99EBA74F /* OmpHookInstallerTests.swift */; };
+		E3A844B9877D928C5CC247BE /* LidAwakeControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D065BAD6FCAE51C9850D9E4 /* LidAwakeControllerTests.swift */; };
 		E464D0233508CD31C1235054 /* AgentBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05F2CA2243872C8111048EF2 /* AgentBridge.swift */; };
 		E80809A987A07731FF35D01D /* PersistenceRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51DE2D7740BD03498A936B62 /* PersistenceRecoveryTests.swift */; };
 		E9DB92D63BAB21359153A525 /* AgyHookInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C82B0F532B8B13AB895CE778 /* AgyHookInstallerTests.swift */; };
@@ -210,10 +213,12 @@
 		77B544D627B99F1EAECB51DD /* ConfirmationRelayTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfirmationRelayTests.swift; sourceTree = "<group>"; };
 		797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneSessionIdMigrationTests.swift; sourceTree = "<group>"; };
 		7CB74659D174004C620D538A /* GlintApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlintApp.swift; sourceTree = "<group>"; };
+		7D8FFF31B1FED3DAEB6EC8C6 /* LidAwakeSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LidAwakeSettings.swift; sourceTree = "<group>"; };
 		8037A4E0001A21E3224DD798 /* SyntaxHighlighter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighter.swift; sourceTree = "<group>"; };
 		81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = GhosttyKit.xcframework; path = Vendor/GhosttyKit.xcframework; sourceTree = "<group>"; };
 		829D894CF747D6BC08667239 /* AgentPaneSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentPaneSummary.swift; sourceTree = "<group>"; };
 		83E4DF4C5180D50C381B4976 /* WorkspaceIconKindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceIconKindTests.swift; sourceTree = "<group>"; };
+		8D065BAD6FCAE51C9850D9E4 /* LidAwakeControllerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LidAwakeControllerTests.swift; sourceTree = "<group>"; };
 		8EDE0D7C434B8E9C76C4A297 /* Persistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Persistence.swift; sourceTree = "<group>"; };
 		911638005A9881330F4F855F /* SymbolsNerdFontMono-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "SymbolsNerdFontMono-Regular.ttf"; sourceTree = "<group>"; };
 		943254F613D20C4F0941EFA6 /* WebRemoteProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRemoteProtocol.swift; sourceTree = "<group>"; };
@@ -232,6 +237,7 @@
 		BD31B21D1D50D85D5D5E366A /* xterm-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "xterm-LICENSE.txt"; sourceTree = "<group>"; };
 		C0656F7C1D48AE0429C1888B /* VisualEffectBackground.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualEffectBackground.swift; sourceTree = "<group>"; };
 		C11B3335E47DDAF77A883064 /* ModalOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalOverlay.swift; sourceTree = "<group>"; };
+		C2F31716D5AC32AC157C5B6D /* LidAwakeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LidAwakeController.swift; sourceTree = "<group>"; };
 		C6FB2646BF84D9DCBB89FC93 /* GitRepositoryWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRepositoryWatcher.swift; sourceTree = "<group>"; };
 		C753FB652599A4C7900F8AA4 /* FontCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FontCatalog.swift; sourceTree = "<group>"; };
 		C82B0F532B8B13AB895CE778 /* AgyHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgyHookInstallerTests.swift; sourceTree = "<group>"; };
@@ -353,6 +359,7 @@
 				49C888E59D1091BFC22A9EA4 /* GitRepositoryWatcherTests.swift */,
 				5BDAAD70DC4C2FC80F6DEA51 /* GrokHookInstallerTests.swift */,
 				DCEE44600B0EBF18542EA3E7 /* GrokUsageReaderTests.swift */,
+				8D065BAD6FCAE51C9850D9E4 /* LidAwakeControllerTests.swift */,
 				349714D49AE52D84995314FD /* MascotAssetTests.swift */,
 				FDE16D678B1BC67A99EBA74F /* OmpHookInstallerTests.swift */,
 				EBCC04C19D745AA867D961FD /* PaneAgentKindTests.swift */,
@@ -393,6 +400,7 @@
 				C753FB652599A4C7900F8AA4 /* FontCatalog.swift */,
 				54663E213FE879B96C0D80E7 /* GitStatusPopover.swift */,
 				150EEF32284061D527E51866 /* GlintTheme.swift */,
+				7D8FFF31B1FED3DAEB6EC8C6 /* LidAwakeSettings.swift */,
 				C11B3335E47DDAF77A883064 /* ModalOverlay.swift */,
 				0D29C0D2447094B07854C193 /* NewWorkspaceSheet.swift */,
 				6D3B64992BBD5A190DFE36D2 /* SettingsView.swift */,
@@ -443,6 +451,7 @@
 				38E3B385162995D0F1F5B72D /* CodexHome.swift */,
 				A45B9324528D1CB15CF024C9 /* ConfirmationRelay.swift */,
 				21868C7211897C87A6CAD7C3 /* ControlBridge.swift */,
+				C2F31716D5AC32AC157C5B6D /* LidAwakeController.swift */,
 				41DDB9C7B5A277B7924270A3 /* PaneAgentState.swift */,
 				C9E2B9ADF809766CE4278047 /* SafeJSON.swift */,
 				9550DD194D906A2B5168DBFD /* ShellRcBlock.swift */,
@@ -724,6 +733,7 @@
 				0FB9792E290FC2A8B527B2D0 /* GitRepositoryWatcherTests.swift in Sources */,
 				57D99FDEAF8596DCDBC55ABE /* GrokHookInstallerTests.swift in Sources */,
 				4E46C7DC654185D9E8A07CDF /* GrokUsageReaderTests.swift in Sources */,
+				E3A844B9877D928C5CC247BE /* LidAwakeControllerTests.swift in Sources */,
 				04E75EAD5165E8D96C1C5517 /* MascotAssetTests.swift in Sources */,
 				DFDF7E690BD53E885484EA00 /* OmpHookInstallerTests.swift in Sources */,
 				ED46CD7A6E09551A775AD3B8 /* PaneAgentKindTests.swift in Sources */,
@@ -775,6 +785,8 @@
 				CEA0A8FF66046FEFA80FAC0C /* GlintApp.swift in Sources */,
 				930665E39CE84564CBF9D300 /* GlintTheme.swift in Sources */,
 				80C9187503230DFF69389EFE /* InlineSuggestionInstaller.swift in Sources */,
+				91EBD3E387ECCF8A23A410F8 /* LidAwakeSettings.swift in Sources */,
+				487328AA8DE73D20AADAAF90 /* LidAwakeController.swift in Sources */,
 				FE527C4220DD46528255F14E /* ModalOverlay.swift in Sources */,
 				ABFF3BCAC4AE8CCCAFF89CA0 /* NewWorkspaceSheet.swift in Sources */,
 				21C03B3AE912F4D30FA6F92C /* PaneAgentState.swift in Sources */,

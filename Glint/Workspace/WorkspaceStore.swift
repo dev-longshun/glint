@@ -2182,6 +2182,7 @@ final class WorkspaceStore: ObservableObject {
         // Fork: Telegram remote confirm (see ConfirmationRelay).
         ConfirmationRelay.shared.host = self
         TelegramBridge.shared.relay = ConfirmationRelay.shared
+        LidAwakeController.shared.start(host: self)
         TelegramBridge.shared.start()
         Self.autoInstallAgentHooksOnFirstLaunch(socketPath: AgentBridge.shared.socketPath)
         self.claudeHooksInstalled = AgentHookInstaller.isInstalled()
@@ -2849,6 +2850,7 @@ final class WorkspaceStore: ObservableObject {
         ConfirmationRelay.shared.agentEvent(hook: hook, kind: kind, pane: Self.paneHandle(key),
                                             message: info["message"] as? String,
                                             userIsWatching: userIsWatching)
+        LidAwakeController.shared.agentActivityChanged()
     }
 
     /// User pressed plain Esc in a pane whose agent is mid-turn. Neither
@@ -3469,6 +3471,22 @@ final class WorkspaceStore: ObservableObject {
 
     /// Only into a pane still sitting at the prompt the push was about: not
     /// working, not waiting on a permission prompt, and nobody typed since.
+    /// Fork: everything `LidAwakeController` needs to judge a pane. CPU is only
+    /// read for working panes, the one place it changes the answer.
+    func lidAwakePanes() -> [LidAwakePaneSample] {
+        paneAgentState.map { key, state in
+            let view = surfaceViews[key]
+            let working = state.status == .thinking || state.status == .tool
+                || state.status == .compacting
+            return LidAwakePaneSample(
+                handle: Self.paneHandle(key),
+                status: state.status,
+                updatedAt: state.updatedAt,
+                agentAlive: view?.foregroundJobIsRunning() ?? false,
+                childCPUNanoseconds: working ? view?.foregroundChildrenCPUNanoseconds() : nil)
+        }
+    }
+
     func deliverConfirmation(_ text: String, toPane pane: String,
                              pushedAt: Date) -> ConfirmationDelivery {
         guard let key = Self.parsePaneKey(pane), paneExists(key),
@@ -4978,6 +4996,8 @@ enum WebRemoteBrandIcon {
         return "data:image/png;base64,\(png.base64EncodedString())"
     }
 }
+
+extension WorkspaceStore: LidAwakeHost {}
 
 @MainActor
 final class PaneActivityStore: ObservableObject {

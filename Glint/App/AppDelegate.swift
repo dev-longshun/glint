@@ -249,6 +249,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         quitDebugLog("applicationWillTerminate enter")
+        // Fork: the sleep switch survives the process, so drop it first.
+        LidAwakeController.shared.shutdown()
         // Belt-and-suspenders: save the frame at quit even if didMove /
         // didEndLiveResize never fired this session (e.g. user opens, never
         // touches the window, quits).
