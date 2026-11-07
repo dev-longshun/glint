@@ -3471,19 +3471,23 @@ final class WorkspaceStore: ObservableObject {
 
     /// Only into a pane still sitting at the prompt the push was about: not
     /// working, not waiting on a permission prompt, and nobody typed since.
-    /// Fork: everything `LidAwakeController` needs to judge a pane. CPU is only
-    /// read for working panes, the one place it changes the answer.
+    /// Fork: everything `LidAwakeController` needs to judge a pane. A working
+    /// pane's CPU covers everything under the agent; otherwise only background
+    /// jobs count, so MCP chatter can't hold a finished or blocked agent.
     func lidAwakePanes() -> [LidAwakePaneSample] {
         paneAgentState.map { key, state in
             let view = surfaceViews[key]
             let working = state.status == .thinking || state.status == .tool
                 || state.status == .compacting
+            let backgroundCPU = view?.backgroundJobsCPUNanoseconds()
             return LidAwakePaneSample(
                 handle: Self.paneHandle(key),
                 status: state.status,
                 updatedAt: state.updatedAt,
                 agentAlive: view?.foregroundJobIsRunning() ?? false,
-                childCPUNanoseconds: working ? view?.foregroundChildrenCPUNanoseconds() : nil)
+                childCPUNanoseconds: working
+                    ? view?.foregroundChildrenCPUNanoseconds() : backgroundCPU,
+                backgroundJobRunning: backgroundCPU != nil)
         }
     }
 

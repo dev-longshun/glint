@@ -1339,13 +1339,48 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         guard let s = surface else { return nil }
         let rawPID = ghostty_surface_foreground_pid(s)
         guard rawPID > 0, rawPID <= UInt64(Int32.max) else { return nil }
-        var queue = Self.childPIDs(of: pid_t(rawPID)) ?? []
+        return Self.cpuNanoseconds(ofTrees: Self.childPIDs(of: pid_t(rawPID)) ?? [])
+    }
+
+    /// CPU used so far by the agent's background jobs, nil when it has none.
+    func backgroundJobsCPUNanoseconds() -> UInt64? {
+        guard let s = surface else { return nil }
+        let rawPID = ghostty_surface_foreground_pid(s)
+        guard rawPID > 0, rawPID <= UInt64(Int32.max) else { return nil }
+        let jobs = Self.backgroundJobShells(under: pid_t(rawPID))
+        return jobs.isEmpty ? nil : Self.cpuNanoseconds(ofTrees: jobs)
+    }
+
+    /// Shells under `root` outside its process group. Agents start Bash tools
+    /// in a group of their own, and a Monitor or `run_in_background` command
+    /// stays a live child of the agent after its turn ends. What the agent
+    /// keeps in its group (caffeinate, stdio MCP servers) isn't work, and a
+    /// detached MCP server isn't a shell.
+    static func backgroundJobShells(under root: pid_t) -> [pid_t] {
+        guard let group = bsdInfo(of: root)?.pbi_pgid else { return [] }
+        var queue = childPIDs(of: root) ?? []
+        var jobs: [pid_t] = []
+        var visited = 0
+        while let pid = queue.popLast(), visited < 256 {
+            visited += 1
+            if let info = bsdInfo(of: pid), info.pbi_pgid != group,
+               TerminalOfflinePolicy.isIdleShell(processName(of: pid)) {
+                jobs.append(pid)
+            } else {
+                queue.append(contentsOf: childPIDs(of: pid) ?? [])
+            }
+        }
+        return jobs
+    }
+
+    private static func cpuNanoseconds(ofTrees roots: [pid_t]) -> UInt64 {
+        var queue = roots
         var total: UInt64 = 0
         var visited = 0
         while let pid = queue.popLast(), visited < 256 {
             visited += 1
-            total += Self.cpuNanoseconds(of: pid) ?? 0
-            queue.append(contentsOf: Self.childPIDs(of: pid) ?? [])
+            total += cpuNanoseconds(of: pid) ?? 0
+            queue.append(contentsOf: childPIDs(of: pid) ?? [])
         }
         return total
     }

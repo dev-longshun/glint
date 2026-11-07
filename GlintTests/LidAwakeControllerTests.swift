@@ -9,11 +9,16 @@ final class LidAwakePolicyTests: XCTestCase {
     private func hold(_ status: PaneAgentStatus,
                       eventAgo: TimeInterval,
                       progressAgo: TimeInterval? = nil,
-                      alive: Bool = true) -> LidAwakePolicy.PaneHold {
+                      alive: Bool = true,
+                      background: Bool = false,
+                      backgroundEndedAgo: TimeInterval? = nil) -> LidAwakePolicy.PaneHold {
         LidAwakePolicy.classify(status: status,
                                 updatedAt: now.addingTimeInterval(-eventAgo),
                                 lastProgress: now.addingTimeInterval(-(progressAgo ?? eventAgo)),
                                 agentAlive: alive,
+                                backgroundJob: background,
+                                lastBackgroundJob: (background ? 0 : backgroundEndedAgo)
+                                    .map { now.addingTimeInterval(-$0) },
                                 now: now,
                                 limits: limits)
     }
@@ -54,6 +59,37 @@ final class LidAwakePolicyTests: XCTestCase {
             XCTAssertEqual(hold(status, eventAgo: 299), .finishing)
             XCTAssertEqual(hold(status, eventAgo: 300), .none)
         }
+    }
+
+    func testBackgroundJobKeepsAFinishedTurnAwakePastTheGrace() {
+        for status in [PaneAgentStatus.idle, .justCompleted, .failed] {
+            XCTAssertEqual(hold(status, eventAgo: 1_800, background: true), .working)
+        }
+    }
+
+    func testIdleBackgroundJobStallsAtTheLimit() {
+        // A forgotten dev server: alive, but no hook event and no CPU.
+        XCTAssertEqual(hold(.idle, eventAgo: 7_199, background: true), .working)
+        XCTAssertEqual(hold(.idle, eventAgo: 7_200, background: true), .stalled)
+    }
+
+    func testBusyBackgroundJobOutlastsTheStallLimit() {
+        XCTAssertEqual(hold(.idle, eventAgo: 21_600, progressAgo: 60, background: true), .working)
+    }
+
+    func testBackgroundJobEndingGivesTheAgentAGracePeriod() {
+        XCTAssertEqual(hold(.idle, eventAgo: 3_600, backgroundEndedAgo: 299), .finishing)
+        XCTAssertEqual(hold(.idle, eventAgo: 3_600, backgroundEndedAgo: 300), .none)
+    }
+
+    func testOnlyABusyBackgroundJobExtendsAWaitingPane() {
+        XCTAssertEqual(hold(.needsReply, eventAgo: 1_800, background: true), .waitExpired)
+        XCTAssertEqual(hold(.needsReply, eventAgo: 1_800, progressAgo: 1, background: true), .waiting)
+    }
+
+    func testDeadAgentGetsOnlyTheGraceWhateverItsBackgroundJobDoes() {
+        XCTAssertEqual(hold(.idle, eventAgo: 1_800, alive: false, background: true), .finishing)
+        XCTAssertEqual(hold(.needsReply, eventAgo: 1, alive: false, background: true), .none)
     }
 
     func testDeadAgentHoldsNothingWhateverItsStatusSays() {
@@ -201,6 +237,41 @@ final class LidAwakeSystemTests: XCTestCase {
         let after = try XCTUnwrap(GhosttySurfaceView.cpuNanoseconds(of: pid))
         XCTAssertGreaterThan(after - before, 150_000_000)
         XCTAssertLessThan(after - before, 2_000_000_000)
+    }
+
+    /// Real processes: the rule rests on process groups, which a fake can't show.
+    @MainActor
+    func testBackgroundJobsAreShellsOutsideTheAgentsProcessGroup() {
+        func spawn(_ arguments: [String], ownGroup: Bool) -> pid_t {
+            var attributes: posix_spawnattr_t?
+            posix_spawnattr_init(&attributes)
+            defer { posix_spawnattr_destroy(&attributes) }
+            if ownGroup {
+                posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETPGROUP))
+                posix_spawnattr_setpgroup(&attributes, 0)
+            }
+            var argv: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) } + [nil]
+            defer { argv.forEach { free($0) } }
+            var pid: pid_t = 0
+            XCTAssertEqual(posix_spawn(&pid, arguments[0], nil, &attributes, argv, environ), 0)
+            return pid
+        }
+        // The trailing `:` stops zsh exec-ing sleep and losing its process name.
+        let shell = ["/bin/zsh", "-c", "/bin/sleep 20; :"]
+        let job = spawn(shell, ownGroup: true)
+        let inAgentGroup = spawn(shell, ownGroup: false)
+        let detachedNonShell = spawn(["/bin/sleep", "20"], ownGroup: true)
+        defer {
+            for pid in [job, inAgentGroup, detachedNonShell] {
+                kill(pid, SIGKILL)
+                waitpid(pid, nil, 0)
+            }
+        }
+
+        let jobs = GhosttySurfaceView.backgroundJobShells(under: getpid())
+        XCTAssertTrue(jobs.contains(job))
+        XCTAssertFalse(jobs.contains(inAgentGroup))
+        XCTAssertFalse(jobs.contains(detachedNonShell))
     }
 }
 

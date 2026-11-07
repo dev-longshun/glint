@@ -57,22 +57,36 @@ enum LidAwakePolicy {
     static let userPresentWithin: TimeInterval = 120
 
     /// Exhaustive on purpose: a new status has to pick a side here.
+    ///
+    /// A background job (Monitor, `run_in_background`) outlives the turn that
+    /// started it, so a finished agent still holds while one runs. It can't
+    /// beat the stall limit by merely existing: a forgotten dev server looks
+    /// the same, so only hook events and its CPU restart that clock.
     static func classify(status: PaneAgentStatus,
                          updatedAt: Date,
                          lastProgress: Date,
                          agentAlive: Bool,
+                         backgroundJob: Bool,
+                         lastBackgroundJob: Date?,
                          now: Date,
                          limits: Limits) -> PaneHold {
+        let quiet = now.timeIntervalSince(max(updatedAt, lastProgress))
         switch status {
         case .thinking, .tool, .compacting:
             guard agentAlive else { return .none }
-            let quiet = now.timeIntervalSince(max(updatedAt, lastProgress))
             return quiet < limits.stallLimit ? .working : .stalled
         case .needsPermission, .needsReply:
             guard agentAlive else { return .none }
-            return now.timeIntervalSince(updatedAt) < limits.waitLimit ? .waiting : .waitExpired
+            let waited = backgroundJob ? quiet : now.timeIntervalSince(updatedAt)
+            return waited < limits.waitLimit ? .waiting : .waitExpired
         case .idle, .justCompleted, .failed:
-            return now.timeIntervalSince(updatedAt) < limits.finishGrace ? .finishing : .none
+            if agentAlive && backgroundJob {
+                return quiet < limits.stallLimit ? .working : .stalled
+            }
+            // Measured from the job's end too: the agent usually wakes on it,
+            // and dropping the switch for that one tick could sleep the Mac.
+            let finished = max(updatedAt, lastBackgroundJob ?? updatedAt)
+            return now.timeIntervalSince(finished) < limits.finishGrace ? .finishing : .none
         }
     }
 
@@ -532,9 +546,10 @@ struct LidAwakePaneSample {
     var status: PaneAgentStatus
     var updatedAt: Date
     var agentAlive: Bool
-    /// Nil unless the pane is working: CPU only matters for telling a long
-    /// tool run from a stall.
+    /// Nil unless the pane is working or has a background job: CPU only
+    /// matters for telling a long run from a stall.
     var childCPUNanoseconds: UInt64?
+    var backgroundJobRunning: Bool
 }
 
 @MainActor
@@ -609,6 +624,7 @@ final class LidAwakeController: ObservableObject {
     private var activity: NSObjectProtocol?
     private var lastProgress: [String: Date] = [:]
     private var lastCPU: [String: UInt64] = [:]
+    private var lastBackgroundJob: [String: Date] = [:]
     private var lastSampleAt: Date?
     private var notifiedWaiting: Set<String> = []
     private var engagedBefore = false
@@ -710,6 +726,7 @@ final class LidAwakeController: ObservableObject {
             releasedAt = nil
             lastProgress.removeAll()
             lastCPU.removeAll()
+            lastBackgroundJob.removeAll()
             notifiedWaiting.removeAll()
         }
         evaluate(now: Date())
@@ -777,16 +794,20 @@ final class LidAwakeController: ObservableObject {
             } else {
                 lastCPU.removeValue(forKey: sample.handle)
             }
+            if sample.backgroundJobRunning { lastBackgroundJob[sample.handle] = now }
             holds[sample.handle] = LidAwakePolicy.classify(
                 status: sample.status,
                 updatedAt: sample.updatedAt,
                 lastProgress: lastProgress[sample.handle] ?? sample.updatedAt,
                 agentAlive: sample.agentAlive,
+                backgroundJob: sample.backgroundJobRunning,
+                lastBackgroundJob: lastBackgroundJob[sample.handle],
                 now: now,
                 limits: limits)
         }
         lastProgress = lastProgress.filter { holds[$0.key] != nil }
         lastCPU = lastCPU.filter { holds[$0.key] != nil }
+        lastBackgroundJob = lastBackgroundJob.filter { holds[$0.key] != nil }
         return holds
     }
 

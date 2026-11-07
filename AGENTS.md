@@ -126,6 +126,7 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - SleepDisabled 跨重启保留，塞进包里不睡是最要防的：置 1 必须同时起看门进程，起不来就放弃；标记键 `lidAwake.ownsSleepDisabled` 故意不用 `glint.` 前缀（否则会被 seed 进 Debug，开发版启动时会清掉正式版持有的开关）  
    - 放开时盖子是合上的要主动 `pmset sleepnow`：`pmset sleep 0` 的机器不会闲置睡眠。外接显示器、近 2 分钟有输入（远程桌面）、其他程序持有开关时不睡  
    - 进展只看 hook 事件和 Agent 子进程 CPU，不看 Agent 自身 CPU 和终端输出：转圈动画在卡死时也会刷新  
+   - 后台任务（Monitor、`run_in_background`）：回合结束后还活着的，是 Agent 进程树下、不在前台进程组的 shell（`GhosttySurfaceView.backgroundJobShells`）。有它时 `idle` 也算 `.working`，但只有 hook 事件和它自己的 CPU 能刷新「无进展」计时（闲置的 dev server 长得一样）；等你回答时只有它占 CPU 才延长。任务结束后再给一次 5 分钟收尾：Agent 通常随即被唤醒，这一拍放开开关可能直接睡过去。`/loop`、定时唤醒没有进程，已脱离 Agent（ppid 1）的进程也看不到  
    - `AgentHookInstaller` reporter：Claude 的 `AskUserQuestion` / `ExitPlanMode` 和 Codex 的 `request_user_input` 的 `PreToolUse` 改判 `NeedsReply`，否则等你回答会被当成在跑工具  
    - `Glint/Pane/GhosttySurfaceView.swift`：`foregroundJobIsRunning`（包装脚本启动时前台是 `bash`，不能只看进程名）、`foregroundChildrenCPUNanoseconds`、`cpuNanoseconds`（Apple Silicon 上 `proc_taskinfo` 单位是 Mach tick，要换算）  
    - `AppDelegate.applicationWillTerminate` 开头的 `shutdown()`；`WorkspaceStore` 的 `lidAwakePanes`、`handleAgentEvent` 结尾的 `agentActivityChanged`  
