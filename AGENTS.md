@@ -128,6 +128,7 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - 进展只看 hook 事件和 Agent 子进程 CPU，不看 Agent 自身 CPU 和终端输出：转圈动画在卡死时也会刷新  
    - 后台任务（Monitor、`run_in_background`）：回合结束后还活着的，是 Agent 进程树下、不在前台进程组的 shell（`GhosttySurfaceView.backgroundJobShells`）。有它时 `idle` 也算 `.working`，但只有 hook 事件和它自己的 CPU 能刷新「无进展」计时（闲置的 dev server 长得一样）；等你回答时只有它占 CPU 才延长。任务结束后再给一次 5 分钟收尾：Agent 通常随即被唤醒，这一拍放开开关可能直接睡过去。`/loop`、定时唤醒没有进程，已脱离 Agent（ppid 1）的进程也看不到  
    - `AgentHookInstaller` reporter：Claude 的 `AskUserQuestion` / `ExitPlanMode` 和 Codex 的 `request_user_input` 的 `PreToolUse` 改判 `NeedsReply`，否则等你回答会被当成在跑工具  
+   - `AgentHookInstaller` reporter：丢弃 Claude 内部分支的工具事件（有 `agent_id` 无 `agent_type`；真实子 Agent 两个都有）。建议分支在 `Stop` 之后想调工具时，`PreToolUse` 发出后才被拒绝，没有后续事件，分屏会一直显示运行中，合盖时白白撑到无进展时限。上游若改 reporter：这段要放在提问工具改判 `NeedsReply` 之前  
    - `Glint/Pane/GhosttySurfaceView.swift`：`foregroundJobIsRunning`（包装脚本启动时前台是 `bash`，不能只看进程名）、`foregroundChildrenCPUNanoseconds`、`cpuNanoseconds`（Apple Silicon 上 `proc_taskinfo` 单位是 Mach tick，要换算）  
    - `AppDelegate.applicationWillTerminate` 开头的 `shutdown()`；`WorkspaceStore` 的 `lidAwakePanes`、`handleAgentEvent` 结尾的 `agentActivityChanged`  
    - 上游给 `PaneAgentStatus` 新增 case 时，`LidAwakePolicy.classify` 这个穷举 switch 要补分支；上游若改 reporter、退出流程或 `handleAgentEvent` 结尾：保留以上挂点  

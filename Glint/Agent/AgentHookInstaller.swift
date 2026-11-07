@@ -424,6 +424,17 @@ enum AgentHookInstaller {
       if [ -z "$SESSION" ] && [ -n "${GROK_SESSION_ID:-}" ]; then
         SESSION="$GROK_SESSION_ID"
       fi
+      # Fork: Claude's internal forks (prompt suggestion, memory extraction)
+      # run after Stop, and a suggestion fork's tool call is denied after
+      # PreToolUse, so no event ever follows it and the pane stays "running".
+      # They carry agent_id without the agent_type a real subagent reports.
+      if [ "$AGENT" = "claude" ] && { [ "$HOOK" = "PreToolUse" ] || [ "$HOOK" = "PostToolUse" ]; }; then
+        FORK=$(/usr/bin/plutil -extract agent_id raw -o - "$TMP" 2>/dev/null) || FORK=""
+        if [ -n "$FORK" ]; then
+          FORK_TYPE=$(/usr/bin/plutil -extract agent_type raw -o - "$TMP" 2>/dev/null) || FORK_TYPE=""
+          if [ -z "$FORK_TYPE" ]; then exit 0; fi
+        fi
+      fi
       # Grok's ask_user_question (and exit_plan_mode plan approval) block the
       # turn waiting for the user — same semantics as OMP's `ask` tool. Remap
       # PreToolUse → NeedsReply so the sidebar shows "awaiting reply".

@@ -384,6 +384,47 @@ final class AgentHookRoutingTests: XCTestCase {
         }
     }
 
+    /// Payloads as captured from Claude Code 2.1.319: a suggestion fork's
+    /// denied tool call fires PreToolUse after Stop and nothing after it.
+    func testReporterDropsToolEventsFromClaudeInternalForks() throws {
+        for (hook, tool) in [("PreToolUse", "mcp__flexnote__list_notes"),
+                             ("PostToolUse", "Read"),
+                             ("PreToolUse", "AskUserQuestion")] {
+            try runReporter(
+                hook: hook,
+                agent: "claude",
+                pane: "12345678-1234-1234-1234-123456789ABC:5",
+                stdinJSON: #"{"session_id":"s","agent_id":"a2d9114b","tool_name":"\#(tool)"}"#,
+                extraEnv: nil,
+                expectSocketTraffic: false
+            )
+        }
+    }
+
+    func testReporterKeepsToolEventsFromRealSubagents() throws {
+        let decoded = try runReporter(
+            hook: "PreToolUse",
+            agent: "claude",
+            pane: "12345678-1234-1234-1234-123456789ABC:5",
+            stdinJSON: #"{"session_id":"s","agent_id":"a0d164d3","agent_type":"Explore","tool_name":"Read"}"#,
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        XCTAssertEqual(decoded?["hook"], "PreToolUse")
+    }
+
+    func testReporterKeepsMainAgentToolEvents() throws {
+        let decoded = try runReporter(
+            hook: "PreToolUse",
+            agent: "claude",
+            pane: "12345678-1234-1234-1234-123456789ABC:5",
+            stdinJSON: #"{"session_id":"s","tool_name":"Read"}"#,
+            extraEnv: nil,
+            expectSocketTraffic: true
+        )
+        XCTAssertEqual(decoded?["hook"], "PreToolUse")
+    }
+
     func testReporterRemapsCodexRequestUserInputToNeedsReply() throws {
         let decoded = try runReporter(
             hook: "PreToolUse",
