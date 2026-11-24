@@ -101,6 +101,10 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
     /// creation so waking an offline terminal never re-runs an agent command.
     private var pendingInitialInput: String?
     var hasPendingInitialInput: Bool { pendingInitialInput?.isEmpty == false }
+    /// Fork: the pane's persisted startup command (see `Pane.startupCommand`).
+    /// Typed by every surface generation that has no one-shot input of its
+    /// own, so a pane reopened after idle-offline runs it again.
+    var startupInput: String?
     /// Latest cwd pushed by ghostty via OSC 7 / PWD action. Preferred over
     /// proc_pidinfo polling because it's event-driven.
     var cachedCwd: String?
@@ -492,7 +496,7 @@ final class GhosttySurfaceView: NSView, NSTextInputClient {
         // bytes into the PTY after the shell is ready, so callers don't have
         // to time the injection themselves.
         var inputBuf: UnsafeMutablePointer<CChar>? = nil
-        if let input = pendingInitialInput, !input.isEmpty {
+        if let input = pendingInitialInput ?? startupInput, !input.isEmpty {
             inputBuf = strdup(input)
             cfg.initial_input = UnsafePointer(inputBuf)
         }

@@ -275,9 +275,16 @@ struct Pane: Identifiable, Codable {
     /// mode. Only whitelisted flags (see `PaneAgentKind.permissionFlags`);
     /// same drop-on-agent-exit lifecycle as `sessionIds`.
     var launchFlags: [String: [String]]
+    /// Fork: command typed into the shell every time this pane's surface is
+    /// created (app restart, reopen after idle-offline). Unlike the one-shot
+    /// `pendingInitialInput` it is persisted, and it wins over agent resume.
+    /// Meant for panes that attach to a long-lived session living elsewhere,
+    /// e.g. `tmux new-session -A -s bot`.
+    var startupCommand: String?
 
     private enum CodingKeys: String, CodingKey {
         case id, title, workingDirectory, lastAgent, sessionIds, codexHome, launchFlags
+        case startupCommand
     }
 
     /// Field shape from the first cut of #45 (one Optional per agent). Read
@@ -308,6 +315,7 @@ struct Pane: Identifiable, Codable {
         self.lastAgent = try c.decodeIfPresent(String.self, forKey: .lastAgent)
         self.codexHome = try c.decodeIfPresent(String.self, forKey: .codexHome)
         self.launchFlags = try c.decodeIfPresent([String: [String]].self, forKey: .launchFlags) ?? [:]
+        self.startupCommand = try c.decodeIfPresent(String.self, forKey: .startupCommand)
         if let map = try c.decodeIfPresent([String: String].self, forKey: .sessionIds) {
             self.sessionIds = map
         } else {
@@ -336,6 +344,7 @@ struct Pane: Identifiable, Codable {
         try c.encodeIfPresent(workingDirectory, forKey: .workingDirectory)
         try c.encodeIfPresent(lastAgent, forKey: .lastAgent)
         try c.encodeIfPresent(codexHome, forKey: .codexHome)
+        try c.encodeIfPresent(startupCommand, forKey: .startupCommand)
         // Skip the key entirely when there's nothing to remember — most
         // panes never see an agent, and an empty `{}` on every pane would
         // be persistent noise in the autosave file.
@@ -389,6 +398,11 @@ struct Workspace: Identifiable, Codable {
     /// Repo/worktree/remote binding. Defaults to `.plain`; only persisted when
     /// non-plain, so existing saves and plain workspaces stay byte-clean.
     var source: WorkspaceSource
+    /// Fork: listed in the sidebar's separate "Bots" group instead of the main
+    /// workspace list. For always-on helper sessions (chat bots, timers) that
+    /// should stay visible but apart from day-to-day work. Only persisted
+    /// when true.
+    var isBot: Bool
 
     var accent: Color {
         Color(hex: accentHex) ?? Color(red: 0.37, green: 0.36, blue: 0.90)
@@ -397,6 +411,7 @@ struct Workspace: Identifiable, Codable {
     private enum CodingKeys: String, CodingKey {
         case id, name, userNamed, accentHex, symbol, archived
         case tabs, selectedTabID, nextTabSeq, panes, nextPaneSeq, source
+        case isBot = "bot"
         // Legacy single-tree keys, still read so pre-tabs saves migrate.
         case root, focusedPane
     }
@@ -404,7 +419,8 @@ struct Workspace: Identifiable, Codable {
     init(id: UUID, name: String, userNamed: Bool, accentHex: String, symbol: String,
          tabs: [WorkspaceTab], selectedTabID: TabID, nextTabSeq: UInt32,
          panes: [PaneID: Pane], nextPaneSeq: UInt32,
-         archived: Bool = false, source: WorkspaceSource = .plain) {
+         archived: Bool = false, source: WorkspaceSource = .plain,
+         isBot: Bool = false) {
         self.id = id
         self.name = name
         self.userNamed = userNamed
@@ -417,6 +433,7 @@ struct Workspace: Identifiable, Codable {
         self.panes = panes
         self.nextPaneSeq = nextPaneSeq
         self.source = source
+        self.isBot = isBot
     }
 
     /// Decode a workspace and repair dangling pane references; decoder supplies saved data; returns a restored workspace or throws.
@@ -435,6 +452,7 @@ struct Workspace: Identifiable, Codable {
         self.nextPaneSeq = try c.decode(UInt32.self, forKey: .nextPaneSeq)
         // Additive: old saves predate source binding — default to plain.
         self.source = (try? c.decode(WorkspaceSource.self, forKey: .source)) ?? .plain
+        self.isBot = (try? c.decode(Bool.self, forKey: .isBot)) ?? false
 
         if let tabs = try? c.decode([WorkspaceTab].self, forKey: .tabs), !tabs.isEmpty {
             self.tabs = tabs
@@ -509,6 +527,7 @@ struct Workspace: Identifiable, Codable {
         try c.encode(panes, forKey: .panes)
         try c.encode(nextPaneSeq, forKey: .nextPaneSeq)
         if source.kind != .plain { try c.encode(source, forKey: .source) }  // omit the common case
+        if isBot { try c.encode(true, forKey: .isBot) }
     }
 }
 
@@ -2362,6 +2381,9 @@ final class WorkspaceStore: ObservableObject {
             topAligned: topAligned,
             initialInput: restoreCommand
         )
+        // Replayed by every later surface generation of this view (reopen
+        // after idle-offline), not only the first one.
+        v.startupInput = startupInput(for: key)
         surfaceViews[key] = v
         // New mint is always for a pane about to be shown (PaneView only
         // asks for the selected workspace's tree). Explicitly mark it host-
@@ -2430,8 +2452,23 @@ final class WorkspaceStore: ObservableObject {
               selectedShort as NSString)
     }
 
+    /// The pane's persisted startup command as terminal input, or nil.
+    private func startupInput(for key: WorkspacePaneKey) -> String? {
+        guard let pane = workspaces.first(where: { $0.id == key.workspace })?.panes[key.pane] else { return nil }
+        return Self.startupInput(from: pane.startupCommand)
+    }
+
+    /// Normalize a user-entered startup command: trimmed, single trailing
+    /// newline so the shell runs it; nil when blank.
+    nonisolated static func startupInput(from command: String?) -> String? {
+        guard let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed + "\n"
+    }
+
     private func initialCommand(for key: WorkspacePaneKey) -> String? {
         if let pending = pendingInitialInput[key] { return pending }
+        if let startup = startupInput(for: key) { return startup }
         guard let pane = workspaces.first(where: { $0.id == key.workspace })?.panes[key.pane],
               let token = pane.lastAgent, let kind = PaneAgentKind(rawValue: token),
               restoreEnabled(for: kind) else { return nil }
@@ -2847,9 +2884,13 @@ final class WorkspaceStore: ObservableObject {
             postAttentionNotification(status: state.status, key: key)
         }
         syncDockBadge(for: key, oldStatus: oldStatus, newStatus: state.status, userIsWatching: userIsWatching)
-        ConfirmationRelay.shared.agentEvent(hook: hook, kind: kind, pane: Self.paneHandle(key),
-                                            message: info["message"] as? String,
-                                            userIsWatching: userIsWatching)
+        // Bots answer in their own chat; relaying every reply would spam the
+        // confirmation bot.
+        if workspaces.first(where: { $0.id == key.workspace })?.isBot != true {
+            ConfirmationRelay.shared.agentEvent(hook: hook, kind: kind, pane: Self.paneHandle(key),
+                                                message: info["message"] as? String,
+                                                userIsWatching: userIsWatching)
+        }
         LidAwakeController.shared.agentActivityChanged()
     }
 
@@ -3067,8 +3108,21 @@ final class WorkspaceStore: ObservableObject {
     /// Sidebar's main list: every workspace that isn't parked in the archive.
     /// ⌘1…⌘9 and the cycle shortcuts index into this, not `workspaces`,
     /// so the keyboard navigation matches what the user actually sees.
+    ///
+    /// Fork: bot workspaces come last, matching the sidebar where the "Bots"
+    /// group sits below the main list.
     var activeWorkspaces: [Workspace] {
-        workspaces.filter { !$0.archived }
+        regularWorkspaces + botWorkspaces
+    }
+
+    /// Active workspaces of the main sidebar list (everything but bots).
+    var regularWorkspaces: [Workspace] {
+        workspaces.filter { !$0.archived && !$0.isBot }
+    }
+
+    /// Active workspaces of the sidebar's "Bots" group.
+    var botWorkspaces: [Workspace] {
+        workspaces.filter { !$0.archived && $0.isBot }
     }
 
     var archivedWorkspaces: [Workspace] {
@@ -4088,6 +4142,53 @@ final class WorkspaceStore: ObservableObject {
               workspaces[idx].archived else { return }
         workspaces[idx].archived = false
         selectedWorkspaceID = id
+    }
+
+    /// Move a workspace into or out of the sidebar's "Bots" group.
+    func setWorkspaceIsBot(_ id: UUID, _ isBot: Bool) {
+        guard let i = workspaces.firstIndex(where: { $0.id == id }),
+              workspaces[i].isBot != isBot else { return }
+        workspaces[i].isBot = isBot
+    }
+
+    /// Startup command of the pane the workspace's selected tab focuses.
+    func startupCommand(workspace id: UUID) -> String? {
+        guard let ws = workspaces.first(where: { $0.id == id }),
+              let pane = ws.selectedTab?.focusedPane else { return nil }
+        return ws.panes[pane]?.startupCommand
+    }
+
+    /// Set (or clear, with a blank string) the startup command of the pane
+    /// the workspace's selected tab focuses. Takes effect the next time that
+    /// pane's terminal is created; a running terminal is left alone.
+    func setStartupCommand(workspace id: UUID, command: String?) {
+        guard let i = workspaces.firstIndex(where: { $0.id == id }),
+              let pane = workspaces[i].selectedTab?.focusedPane,
+              workspaces[i].panes[pane] != nil else { return }
+        let trimmed = command?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        guard workspaces[i].panes[pane]?.startupCommand != value else { return }
+        workspaces[i].panes[pane]?.startupCommand = value
+        let key = WorkspacePaneKey(workspace: id, pane: pane)
+        surfaceViews[key]?.startupInput = Self.startupInput(from: value)
+    }
+
+    /// Ask for the startup command of the workspace's focused pane.
+    func promptStartupCommand(workspace id: UUID) {
+        guard workspaces.contains(where: { $0.id == id }) else { return }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "Startup Command")
+        alert.informativeText = String(localized: "Runs in this workspace's focused terminal every time it opens, including after Glint restarts. Leave empty to remove.")
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 360, height: 24))
+        field.stringValue = startupCommand(workspace: id) ?? ""
+        field.placeholderString = "tmux new-session -A -s bot"
+        field.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        alert.accessoryView = field
+        alert.addButton(withTitle: String(localized: "Save"))
+        alert.addButton(withTitle: String(localized: "Cancel"))
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        setStartupCommand(workspace: id, command: field.stringValue)
     }
 
     func renameWorkspace(_ id: UUID, to name: String) {

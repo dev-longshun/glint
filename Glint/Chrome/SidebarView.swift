@@ -59,9 +59,9 @@ struct SidebarView: View {
                 ScrollViewReader { scrollProxy in
                     ScrollView {
                         VStack(spacing: 0) {
-                            workspacesSectionHeader(activeCount: filteredActiveWorkspaces.count)
+                            workspacesSectionHeader(activeCount: filteredRegularWorkspaces.count)
                             VStack(spacing: 6) {
-                                ForEach(filteredActiveWorkspaces) { ws in
+                                ForEach(filteredRegularWorkspaces) { ws in
                                     WorkspaceCard(ws: ws,
                                                   isDragging: draggingWorkspaceID == ws.id,
                                                   shortcutBadge: cmdKey.commandHeld ? shortcutNumber(for: ws) : nil,
@@ -83,7 +83,8 @@ struct SidebarView: View {
                             .padding(.horizontal, 10)
                             .padding(.top, 2)
                             .animation(.spring(response: 0.32, dampingFraction: 0.85),
-                                       value: filteredActiveWorkspaces.map(\.id))
+                                       value: filteredRegularWorkspaces.map(\.id))
+                            botsSection
                         }
                         .padding(.bottom, 12)
                     }
@@ -193,7 +194,7 @@ struct SidebarView: View {
     /// hiding it is cleared (the card then consumes the request on appear),
     /// and the list scrolls to it on the next runloop, once it's laid out.
     private func revealWorkspaceForRename(_ id: UUID, proxy: ScrollViewProxy) {
-        if !filteredActiveWorkspaces.contains(where: { $0.id == id }) {
+        if !(filteredRegularWorkspaces + filteredBotWorkspaces).contains(where: { $0.id == id }) {
             searchText = ""
         }
         DispatchQueue.main.async {
@@ -201,8 +202,37 @@ struct SidebarView: View {
         }
     }
 
-    private var filteredActiveWorkspaces: [Workspace] {
-        filteredWorkspaces(from: store.activeWorkspaces, applySort: true)
+    private var filteredRegularWorkspaces: [Workspace] {
+        filteredWorkspaces(from: store.regularWorkspaces, applySort: true)
+    }
+
+    /// Bots keep the user's order: they are a short fixed roster, and a card
+    /// jumping around on every reply would be noise.
+    private var filteredBotWorkspaces: [Workspace] {
+        filteredWorkspaces(from: store.botWorkspaces, applySort: false)
+    }
+
+    /// Fork: always-on helper sessions, listed apart from the main workspaces.
+    /// Hidden while there are none. Cards are not drag-reorderable here (they
+    /// sit outside the reorder coordinate space); the group is a short roster.
+    @ViewBuilder
+    private var botsSection: some View {
+        let bots = filteredBotWorkspaces
+        if !bots.isEmpty {
+            sectionHeader("Bots", count: bots.count)
+            VStack(spacing: 6) {
+                ForEach(bots) { ws in
+                    WorkspaceCard(ws: ws,
+                                  isDragging: false,
+                                  shortcutBadge: cmdKey.commandHeld ? shortcutNumber(for: ws) : nil,
+                                  onReorderChange: { _ in },
+                                  onReorderEnd: { })
+                        .id(ws.id)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 2)
+        }
     }
 
     private func syncWorkspaceJumpModifiers() {
@@ -811,6 +841,11 @@ private struct WorkspaceCard: View {
                 if ws.source.isWorktree {
                     Button("Reveal Worktree in Finder") { store.revealWorktreeInFinder(ws.id) }
                 }
+                Divider()
+                Button(ws.isBot ? "Move to Workspaces" : "Move to Bots") {
+                    store.setWorkspaceIsBot(ws.id, !ws.isBot)
+                }
+                Button("Startup Command…") { store.promptStartupCommand(workspace: ws.id) }
                 Divider()
                 Button("Archive") { store.archiveWorkspace(ws.id) }
                 if ws.source.isWorktree {

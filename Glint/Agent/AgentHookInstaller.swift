@@ -384,6 +384,22 @@ enum AgentHookInstaller {
       exit 0
     fi
 
+    # Fork: an agent living in a detached session (tmux started at login or
+    # from some other pane) has no pane environment of its own — or worse, a
+    # stale one inherited by the tmux server. GLINT_PANE_FILE names a two-line
+    # file (pane id, socket path) that whoever attaches the session in a
+    # Glint pane rewrites from its own environment, so the agent reports to
+    # the pane currently showing it — and to the Glint running now, whose
+    # socket path changes on every launch. When set, the file is the only
+    # source: a missing file means nobody is showing the session.
+    if [ -n "${GLINT_PANE_FILE:-}" ]; then
+      PANE=""
+      SOCK=""
+      if [ -r "$GLINT_PANE_FILE" ]; then
+        { IFS= read -r PANE && IFS= read -r SOCK; } <"$GLINT_PANE_FILE" 2>/dev/null || true
+      fi
+    fi
+
     # Always exits 0 — a missing pane/socket or a `nc` failure is silently
     # swallowed so a transient bridge outage can never block an agent hook.
     if [ -z "$PANE" ] || [ -z "$SOCK" ] || [ ! -S "$SOCK" ]; then
