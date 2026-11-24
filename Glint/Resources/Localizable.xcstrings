@@ -8066,6 +8066,72 @@
           }
         }
       }
+    },
+    "Bots": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "机器人"
+          }
+        }
+      }
+    },
+    "Move to Bots": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移到机器人"
+          }
+        }
+      }
+    },
+    "Move to Workspaces": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移回工作区"
+          }
+        }
+      }
+    },
+    "Startup Command…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动命令…"
+          }
+        }
+      }
+    },
+    "Startup Command": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动命令"
+          }
+        }
+      }
+    },
+    "Runs in this workspace's focused terminal every time it opens, including after Glint restarts. Leave empty to remove.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次打开这个工作区当前聚焦的终端时自动执行，Glint 重启后也一样。留空则移除。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

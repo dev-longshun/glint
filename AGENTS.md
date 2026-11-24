@@ -133,6 +133,14 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - `AppDelegate.applicationWillTerminate` 开头的 `shutdown()`；`WorkspaceStore` 的 `lidAwakePanes`、`handleAgentEvent` 结尾的 `agentActivityChanged`  
    - 上游给 `PaneAgentStatus` 新增 case 时，`LidAwakePolicy.classify` 这个穷举 switch 要补分支；上游若改 reporter、退出流程或 `handleAgentEvent` 结尾：保留以上挂点  
 
+15. **机器人分组与分屏启动命令**  
+   - `Glint/Workspace/WorkspaceStore.swift`：`Workspace.isBot`（存盘键 `bot`，只在为真时写）、`Pane.startupCommand`（只在有值时写）；`activeWorkspaces` = `regularWorkspaces` + `botWorkspaces`（机器人排在最后，⌘1…⌘9 的编号跟侧边栏从上到下一致）；`initialCommand` 的优先级是一次性命令 → 启动命令 → Agent 恢复；`setWorkspaceIsBot` / `setStartupCommand` / `promptStartupCommand`  
+   - `Glint/Pane/GhosttySurfaceView.swift`：`startupInput`，每一代 surface 在没有一次性输入时都会打一遍（空闲离线后重开也执行）  
+   - `Glint/Chrome/SidebarView.swift`：`botsSection`（「机器人」分组，没有机器人时不显示，组内不参与拖动排序和「完成优先」排序）；卡片右键「移到机器人 / 移回工作区」「启动命令…」  
+   - `Glint/Agent/AgentHookInstaller.swift` 的 reporter 脚本：设置了 `GLINT_PANE_FILE` 时，窗格地址只从这个文件读（两行：窗格 id、socket 路径），不用环境变量。用途：Agent 跑在 tmux 等脱离窗格的会话里，由接入会话的窗格把自己的地址写进文件。环境变量不可信的原因：tmux 服务进程会带着启动它的那个窗格的 `GLINT_PANE_ID` / `GLINT_AGENT_SOCK`，而且 socket 路径每次启动 Glint 都会变  
+   - `WorkspaceStore.handleAgentEvent` 结尾：机器人工作区不走 `ConfirmationRelay`（机器人每次回复都会触发 Stop，否则会刷屏）  
+   - 上游若改侧边栏列表、`initialCommand`、reporter 开头的窗格判断或 `handleAgentEvent` 结尾：保留以上挂点  
+
 ### 同步操作红线
 
 - **禁止**：`git reset --hard upstream/main`、`git checkout upstream/main -- .`、无审查的 `theirs` 全收、把冲突一律选成上游。  
