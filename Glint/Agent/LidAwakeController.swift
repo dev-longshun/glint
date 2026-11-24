@@ -83,11 +83,40 @@ enum LidAwakePolicy {
             if agentAlive && backgroundJob {
                 return quiet < limits.stallLimit ? .working : .stalled
             }
-            // Measured from the job's end too: the agent usually wakes on it,
-            // and dropping the switch for that one tick could sleep the Mac.
-            let finished = max(updatedAt, lastBackgroundJob ?? updatedAt)
-            return now.timeIntervalSince(finished) < limits.finishGrace ? .finishing : .none
+            let left = finishRemaining(updatedAt: updatedAt, lastBackgroundJob: lastBackgroundJob,
+                                       now: now, limits: limits)
+            return left > 0 ? .finishing : .none
         }
+    }
+
+    /// What is left of the grace after a turn ends; zero or less once spent.
+    /// Measured from the background job's end too: the agent usually wakes on
+    /// it, and dropping the switch for that one tick could sleep the Mac.
+    static func finishRemaining(updatedAt: Date,
+                                lastBackgroundJob: Date?,
+                                now: Date,
+                                limits: Limits) -> TimeInterval {
+        let finished = max(updatedAt, lastBackgroundJob ?? updatedAt)
+        return limits.finishGrace - now.timeIntervalSince(finished)
+    }
+
+    /// What the UI says. A turn that has ended is reported apart from one that
+    /// is running: the switch stays on for both, but only one is real work.
+    static func phase(enabled: Bool,
+                      holds: [PaneHold],
+                      block: Block?,
+                      finishLeft: TimeInterval?) -> LidAwakeController.Phase {
+        guard enabled else { return .off }
+        if let block, holds.contains(where: \.keepsAwake) { return .blocked(block) }
+        let working = holds.filter { $0 == .working }.count
+        if working > 0 { return .working(working) }
+        let waiting = holds.filter { $0 == .waiting }.count
+        if waiting > 0 { return .waiting(waiting) }
+        if holds.contains(.finishing) {
+            let minutes = Int(((finishLeft ?? 0) / 60).rounded(.up))
+            return .finishing(minutesLeft: max(1, minutes))
+        }
+        return .standby
     }
 
     static func block(battery: LidAwakeBattery?,
@@ -567,6 +596,8 @@ final class LidAwakeController: ObservableObject {
         case standby
         case working(Int)
         case waiting(Int)
+        /// Every turn has ended; the grace before the lid may sleep the Mac.
+        case finishing(minutesLeft: Int)
         case blocked(LidAwakePolicy.Block)
     }
 
@@ -752,20 +783,16 @@ final class LidAwakeController: ObservableObject {
         let active = holds.values.contains(where: \.keepsAwake)
         let newWant = enabled && active && block == nil
 
-        let working = holds.values.filter { $0 == .working || $0 == .finishing }.count
-        let waiting = holds.values.filter { $0 == .waiting }.count
-        let newPhase: Phase
-        if !enabled {
-            newPhase = .off
-        } else if active, let block {
-            newPhase = .blocked(block)
-        } else if working > 0 {
-            newPhase = .working(working)
-        } else if waiting > 0 {
-            newPhase = .waiting(waiting)
-        } else {
-            newPhase = .standby
-        }
+        let finishLeft = samples
+            .filter { holds[$0.handle] == .finishing }
+            .map {
+                LidAwakePolicy.finishRemaining(updatedAt: $0.updatedAt,
+                                               lastBackgroundJob: lastBackgroundJob[$0.handle],
+                                               now: now, limits: limits)
+            }
+            .max()
+        let newPhase = LidAwakePolicy.phase(enabled: enabled, holds: Array(holds.values),
+                                            block: block, finishLeft: finishLeft)
         if phase != newPhase { phase = newPhase }
 
         notifyWaiting(holds)
@@ -917,9 +944,11 @@ final class LidAwakeController: ObservableObject {
         case .standby:
             return String(localized: "Ready. Nothing needs the Mac to stay awake right now.")
         case let .working(count):
-            return String(format: String(localized: "Keeping the Mac awake for %lld running agent(s)."), count)
+            return String(format: String(localized: "%lld agent(s) running. Closing the lid won't sleep the Mac."), count)
         case let .waiting(count):
             return String(format: String(localized: "%lld agent(s) waiting for you. The Mac sleeps when the time limit is reached."), count)
+        case let .finishing(minutes):
+            return String(format: String(localized: "Agents have finished. The Mac stays awake about %lld more minute(s) so you can read the result, then sleeps normally when the lid closes."), minutes)
         case .blocked(.battery):
             return String(localized: "Battery is low, so the Mac can sleep.")
         case .blocked(.thermal):

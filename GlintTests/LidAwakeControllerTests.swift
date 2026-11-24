@@ -61,6 +61,42 @@ final class LidAwakePolicyTests: XCTestCase {
         }
     }
 
+    func testFinishRemainingCountsFromTheLaterOfTurnAndBackgroundJob() {
+        XCTAssertEqual(LidAwakePolicy.finishRemaining(updatedAt: now.addingTimeInterval(-60),
+                                                      lastBackgroundJob: nil,
+                                                      now: now, limits: limits), 240)
+        XCTAssertEqual(LidAwakePolicy.finishRemaining(updatedAt: now.addingTimeInterval(-600),
+                                                      lastBackgroundJob: now.addingTimeInterval(-100),
+                                                      now: now, limits: limits), 200)
+    }
+
+    private func phase(_ holds: [LidAwakePolicy.PaneHold],
+                       enabled: Bool = true,
+                       block: LidAwakePolicy.Block? = nil,
+                       finishLeft: TimeInterval? = nil) -> LidAwakeController.Phase {
+        LidAwakePolicy.phase(enabled: enabled, holds: holds, block: block, finishLeft: finishLeft)
+    }
+
+    func testFinishedTurnsAreNotReportedAsRunning() {
+        XCTAssertEqual(phase([.finishing, .none], finishLeft: 240), .finishing(minutesLeft: 4))
+        XCTAssertEqual(phase([.finishing], finishLeft: 241), .finishing(minutesLeft: 5))
+        // Never "0 minutes" while the switch is still on.
+        XCTAssertEqual(phase([.finishing], finishLeft: 5), .finishing(minutesLeft: 1))
+    }
+
+    func testPhaseCountsOnlyRealWorkAndPrefersItOverWaiting() {
+        XCTAssertEqual(phase([.working, .finishing, .waiting], finishLeft: 100), .working(1))
+        XCTAssertEqual(phase([.waiting, .finishing], finishLeft: 100), .waiting(1))
+        XCTAssertEqual(phase([.stalled, .waitExpired, .none]), .standby)
+    }
+
+    func testPhaseReportsOffAndBlocks() {
+        XCTAssertEqual(phase([.working], enabled: false), .off)
+        XCTAssertEqual(phase([.finishing], block: .battery, finishLeft: 100), .blocked(.battery))
+        // A block with nothing to hold for is just standby.
+        XCTAssertEqual(phase([.none], block: .thermal), .standby)
+    }
+
     func testBackgroundJobKeepsAFinishedTurnAwakePastTheGrace() {
         for status in [PaneAgentStatus.idle, .justCompleted, .failed] {
             XCTAssertEqual(hold(status, eventAgo: 1_800, background: true), .working)

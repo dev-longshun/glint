@@ -25,13 +25,13 @@ struct SidebarUpdateBadges: View {
     var body: some View {
         HStack(spacing: 4) {
             if lid.isKeepingAwake {
-                BadgePill(help: Text("Agents keep running with the lid closed"),
+                BadgePill(help: Text("Agents are working, so closing the lid won't sleep the Mac"),
                           isOpen: lidOpen, action: { lidOpen.toggle() }) {
                     Image(systemName: "laptopcomputer")
                         .font(.system(size: 9.5, weight: .semibold))
                     // Same width limit as the version text below.
                     if !updater.showsUpdateBadge && !showsUpstreamPill {
-                        Text("Lid-closed")
+                        Text("Stays awake")
                     }
                 }
                 .popover(isPresented: $lidOpen, arrowEdge: .top) {

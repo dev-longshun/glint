@@ -23,6 +23,17 @@
         }
       }
     },
+    "%lld agent(s) running. Closing the lid won't sleep the Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 个 Agent 在运行，现在合盖 Mac 也不会睡。"
+          }
+        }
+      }
+    },
     "%lld agent(s) waiting for you. The Mac sleeps when the time limit is reached.": {
       "extractionState": "manual",
       "localizations": {
@@ -34,13 +45,24 @@
         }
       }
     },
-    "Agents keep running with the lid closed": {
+    "Agents are working, so closing the lid won't sleep the Mac": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "合盖后 Agent 会继续运行"
+            "value": "有 Agent 在干活，现在合盖 Mac 也不会睡"
+          }
+        }
+      }
+    },
+    "Agents have finished. The Mac stays awake about %lld more minute(s) so you can read the result, then sleeps normally when the lid closes.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Agent 已结束，再保持唤醒约 %lld 分钟供你查看结果，之后合盖会正常睡眠。"
           }
         }
       }
@@ -100,17 +122,6 @@
         }
       }
     },
-    "Keeping the Mac awake for %lld running agent(s).": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在为 %lld 个运行中的 Agent 保持 Mac 唤醒。"
-          }
-        }
-      }
-    },
     "Let the Mac sleep once a running agent shows no activity for this long.": {
       "extractionState": "manual",
       "localizations": {
@@ -129,17 +140,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Agent 等你回答超过这个时长后，允许 Mac 睡眠。"
-          }
-        }
-      }
-    },
-    "Lid-closed": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "合盖运行中"
           }
         }
       }
@@ -261,6 +261,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "安全看门进程没有启动，合盖后 Mac 仍会睡眠。"
+          }
+        }
+      }
+    },
+    "Stays awake": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "合盖不睡"
           }
         }
       }
