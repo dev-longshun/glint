@@ -846,6 +846,12 @@ private struct WorkspaceCard: View {
                     store.setWorkspaceIsBot(ws.id, !ws.isBot)
                 }
                 Button("Startup Command…") { store.promptStartupCommand(workspace: ws.id) }
+                if ws.isBot,
+                   BotRegistry.botName(fromStartupCommand: store.startupCommand(workspace: ws.id)) != nil {
+                    Button("API Settings…") {
+                        BotAPIConfigDialog.present(startupCommand: store.startupCommand(workspace: ws.id))
+                    }
+                }
                 Divider()
                 Button("Archive") { store.archiveWorkspace(ws.id) }
                 if ws.source.isWorktree {

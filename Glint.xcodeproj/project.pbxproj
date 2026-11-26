@@ -29,6 +29,7 @@
 		2D9012046800A06555DEA381 /* GitRefreshCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */; };
 		2DD19A3FDAE094EF32B0B9F0 /* zsh-autosuggestions.zsh in Resources */ = {isa = PBXBuildFile; fileRef = D03AFC613028C5BB0D99238D /* zsh-autosuggestions.zsh */; };
 		2E52C3AC5AD998CD3604D6BE /* GhosttyKit.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 81DADCF27E710CC77846E961 /* GhosttyKit.xcframework */; };
+		2F04A646A63B9396C0166BE6 /* BotAPIConfigDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 60AF8E8F409F216A6D979ECC /* BotAPIConfigDialog.swift */; };
 		315A37A793978029ECA337C0 /* ShortcutStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0149644D9C66D1E2D27B0850 /* ShortcutStore.swift */; };
 		3194A1545E36E400BC2C33E6 /* PaneSessionIdMigrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 797C4E86D052EF8A68DD9B39 /* PaneSessionIdMigrationTests.swift */; };
 		31B9D23C9642121D7D8930A9 /* UpdaterVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E915CEF581085DF7D1B9D1 /* UpdaterVersionTests.swift */; };
@@ -58,7 +59,9 @@
 		66F384C4ABAC9DE1CC7E2C49 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CDC0A8429C70EC3F4D3532A /* main.swift */; };
 		679D2F2C16D2459A356A3559 /* CLIInstallation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D247212AF50E779FC07DD96 /* CLIInstallation.swift */; };
 		692D1A7D490E07D796535EAA /* UpdaterController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4408F9761E584DE2AB6630E2 /* UpdaterController.swift */; };
+		6974D005739F1B04A89B68DF /* BotAPIConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C08A7A912EFBD203B4EAF23 /* BotAPIConfig.swift */; };
 		698E706DF962CD27D42E3CF3 /* SidebarUpdateBadges.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C6F1A21D981840DA18EFFE /* SidebarUpdateBadges.swift */; };
+		6A1C173C253B5CB4263AC971 /* BotAPIConfigTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC798312D9F91B86E55735ED /* BotAPIConfigTests.swift */; };
 		6B6B183329BCCDE5474D88AF /* web-remote.css in Resources */ = {isa = PBXBuildFile; fileRef = ABF0871355239B5D7C80B719 /* web-remote.css */; };
 		6BE78104E4CC97417ED400B4 /* xterm.mjs in Resources */ = {isa = PBXBuildFile; fileRef = 36D0A3B6CB143C412B8EDA7B /* xterm.mjs */; };
 		6D74FE6545631EB8193C82E1 /* PaneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08FC2FBC9E8729A5ECBF857C /* PaneView.swift */; };
@@ -181,6 +184,7 @@
 		376568363043C189904E4E0A /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		38E3B385162995D0F1F5B72D /* CodexHome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexHome.swift; sourceTree = "<group>"; };
 		39F54835E4A44EC88236EFBE /* GitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitService.swift; sourceTree = "<group>"; };
+		3C08A7A912EFBD203B4EAF23 /* BotAPIConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotAPIConfig.swift; sourceTree = "<group>"; };
 		3E2E78BBA22734DD486C760B /* Glint.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Glint.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3FAD36B4BDB22AB47353C569 /* SyntaxHighlighterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyntaxHighlighterTests.swift; sourceTree = "<group>"; };
 		407B3A9D15F4B9E613DA1CF8 /* ReleaseNotes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotes.swift; sourceTree = "<group>"; };
@@ -201,6 +205,7 @@
 		5A8933F67B4B6EEA3FD4E603 /* WorkspaceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStore.swift; sourceTree = "<group>"; };
 		5BDAAD70DC4C2FC80F6DEA51 /* GrokHookInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokHookInstallerTests.swift; sourceTree = "<group>"; };
 		5DB06D8C68CA7B9C7E1E83E7 /* addon-fit.mjs */ = {isa = PBXFileReference; path = "addon-fit.mjs"; sourceTree = "<group>"; };
+		60AF8E8F409F216A6D979ECC /* BotAPIConfigDialog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotAPIConfigDialog.swift; sourceTree = "<group>"; };
 		65BE76E8E627A5347D565968 /* GitRefreshCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRefreshCoordinatorTests.swift; sourceTree = "<group>"; };
 		677808A57BE53607DA391FC8 /* addon-fit-LICENSE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = "addon-fit-LICENSE.txt"; sourceTree = "<group>"; };
 		6860F8F626EFDB9A289FC727 /* themes.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = themes.json; sourceTree = "<group>"; };
@@ -257,6 +262,7 @@
 		E94AB23640CA1E6007F8B2B4 /* GlintTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = GlintTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EBB695363FAF3A996EF0C9FF /* GitRefreshCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitRefreshCoordinator.swift; sourceTree = "<group>"; };
 		EBCC04C19D745AA867D961FD /* PaneAgentKindTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaneAgentKindTests.swift; sourceTree = "<group>"; };
+		EC798312D9F91B86E55735ED /* BotAPIConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BotAPIConfigTests.swift; sourceTree = "<group>"; };
 		F3AFEC99ADB408EF21B6530E /* WebRemoteServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebRemoteServer.swift; sourceTree = "<group>"; };
 		F3B91F000C01FEA1C7E61F5A /* ShellRcBlockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellRcBlockTests.swift; sourceTree = "<group>"; };
 		F3EB9A1E80F3CC4BCA468774 /* AgentChoice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentChoice.swift; sourceTree = "<group>"; };
@@ -349,6 +355,7 @@
 				FF0082D535969C315B8D75D7 /* AgentHookRoutingTests.swift */,
 				4EEF00CBEF45A9D60423A207 /* AgentKindResolutionTests.swift */,
 				C82B0F532B8B13AB895CE778 /* AgyHookInstallerTests.swift */,
+				EC798312D9F91B86E55735ED /* BotAPIConfigTests.swift */,
 				8EAD5F837F8646C4DACE8190 /* BotWorkspaceTests.swift */,
 				6AB338782EF6F22B7B381DA8 /* CodexHomeStoreTests.swift */,
 				26141150D2DB4C0589558ECC /* CodexHookInstallerTests.swift */,
@@ -397,6 +404,7 @@
 			isa = PBXGroup;
 			children = (
 				0C5FD3EEA1ECD40F78394862 /* AgentLaunchChooser.swift */,
+				60AF8E8F409F216A6D979ECC /* BotAPIConfigDialog.swift */,
 				9E574E2A2735328331FC3C78 /* CloseOnCmdW.swift */,
 				235E2D958A2244483CAA0812 /* CommandPalette.swift */,
 				4BE4DBC7E2579823474466E9 /* ContentView.swift */,
@@ -451,6 +459,7 @@
 				F3EB9A1E80F3CC4BCA468774 /* AgentChoice.swift */,
 				265A192AC9BD06DB09346E90 /* AgentHookInstaller.swift */,
 				829D894CF747D6BC08667239 /* AgentPaneSummary.swift */,
+				3C08A7A912EFBD203B4EAF23 /* BotAPIConfig.swift */,
 				38E3B385162995D0F1F5B72D /* CodexHome.swift */,
 				A45B9324528D1CB15CF024C9 /* ConfirmationRelay.swift */,
 				21868C7211897C87A6CAD7C3 /* ControlBridge.swift */,
@@ -724,6 +733,7 @@
 				A019A2AD685F1407D7E2A7E1 /* AgentHookRoutingTests.swift in Sources */,
 				81532B36FEC3039B8EAD9CB1 /* AgentKindResolutionTests.swift in Sources */,
 				E9DB92D63BAB21359153A525 /* AgyHookInstallerTests.swift in Sources */,
+				6A1C173C253B5CB4263AC971 /* BotAPIConfigTests.swift in Sources */,
 				1FE1C6B5110F80DE07BB08E6 /* BotWorkspaceTests.swift in Sources */,
 				C41119D04864077E5B554F59 /* CodexHomeStoreTests.swift in Sources */,
 				0FEECB27EB1ACE11E29ECCEF /* CodexHookInstallerTests.swift in Sources */,
@@ -769,6 +779,8 @@
 				C95E09498A4974B811D36575 /* AgentLaunchChooser.swift in Sources */,
 				C48BD1224EA2C6D3C87B9120 /* AgentPaneSummary.swift in Sources */,
 				5157C5439862F21202BCC44D /* AppDelegate.swift in Sources */,
+				6974D005739F1B04A89B68DF /* BotAPIConfig.swift in Sources */,
+				2F04A646A63B9396C0166BE6 /* BotAPIConfigDialog.swift in Sources */,
 				59A68E0E396F948F6CDA7984 /* CLIInstallation.swift in Sources */,
 				477B958A2D83C669B41E516B /* ChildWindowExceptionGuard.m in Sources */,
 				D0C5A885F5B3FE6BD5AFC54A /* CloseOnCmdW.swift in Sources */,

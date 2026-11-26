@@ -8143,6 +8143,248 @@
           }
         }
       }
+    },
+    "API Settings…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 配置…"
+          }
+        }
+      }
+    },
+    "API Settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 配置"
+          }
+        }
+      }
+    },
+    "Claude Subscription": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude 订阅"
+          }
+        }
+      }
+    },
+    "Relay": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中转站"
+          }
+        }
+      }
+    },
+    "Use": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用"
+          }
+        }
+      }
+    },
+    "API URL": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 地址"
+          }
+        }
+      }
+    },
+    "API Key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥"
+          }
+        }
+      }
+    },
+    "Show Key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示密钥"
+          }
+        }
+      }
+    },
+    "Save and Restart": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存并重启"
+          }
+        }
+      }
+    },
+    "This workspace isn't attached to a bot": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个工作区没有接到机器人上"
+          }
+        }
+      }
+    },
+    "Set its startup command to “~/.claude/channels/tgbots/glint-attach.sh <name>” first.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先把它的启动命令设成「~/.claude/channels/tgbots/glint-attach.sh <名字>」。"
+          }
+        }
+      }
+    },
+    "“%@” has no API settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」没有 API 配置"
+          }
+        }
+      }
+    },
+    "It isn't listed with a state folder in ~/.claude/channels/tgbots/bots.json, so it doesn't run Claude.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "它在 ~/.claude/channels/tgbots/bots.json 里没有状态目录，不运行 Claude。"
+          }
+        }
+      }
+    },
+    "The relay needs a URL and a key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中转站需要填地址和密钥"
+          }
+        }
+      }
+    },
+    "The URL must start with http:// or https://.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地址要以 http:// 或 https:// 开头。"
+          }
+        }
+      }
+    },
+    "Fill in the relay's API key, or choose Claude Subscription.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填上中转站的 API 密钥，或者改选「Claude 订阅」。"
+          }
+        }
+      }
+    },
+    "Couldn't save the API settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 配置保存失败"
+          }
+        }
+      }
+    },
+    "Switched to the relay. Continuing the same conversation.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已切换到中转站，接着刚才的对话。"
+          }
+        }
+      }
+    },
+    "Switched to this Mac's Claude subscription. Continuing the same conversation.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已切换到本机 Claude 订阅，接着刚才的对话。"
+          }
+        }
+      }
+    },
+    "Saved. The bot isn't running right now": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已保存。这个机器人现在没在运行"
+          }
+        }
+      }
+    },
+    "The new settings apply the next time it starts.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新配置会在它下次启动时生效。"
+          }
+        }
+      }
+    },
+    "Bot %@ · %@\n\nSave and Restart interrupts a reply in progress and continues the same conversation. Save alone takes effect at the next restart or /new. The relay URL and key are kept when you switch to the subscription.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "机器人 %@ · %@\n\n「保存并重启」会打断正在进行的回复，重启后接着原来的对话。只点「保存」要等下次重启或 /new 才生效。切回订阅时，中转站的地址和密钥会保留。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

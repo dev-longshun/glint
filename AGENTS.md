@@ -141,6 +141,13 @@ Glint 是**为 AI 代理打造的 macOS 终端**，底层基于 [Ghostty](https:
    - `WorkspaceStore.handleAgentEvent` 结尾：机器人工作区不走 `ConfirmationRelay`（机器人每次回复都会触发 Stop，否则会刷屏）  
    - 上游若改侧边栏列表、`initialCommand`、reporter 开头的窗格判断或 `handleAgentEvent` 结尾：保留以上挂点  
 
+16. **机器人 API 配置（订阅 / 中转站切换）**  
+   - `Glint/Agent/BotAPIConfig.swift`：`BotAPIConfig` 读写机器人状态目录里的 `api.env`，只管 `GLINT_API_MODE` / `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN` 三行，其他行（如 `ANTHROPIC_MODEL`）原样保留，切回订阅时地址和密钥留在文件里；`BotRegistry` 从启动命令 `glint-attach.sh <名字>` 找到 `tgbots/bots.json` 里的机器人，`restart` 写 `restart.flag` + `restart.continue` 后结束该机器人的 Claude，启动循环带 `--continue` 重开  
+   - `Glint/Chrome/BotAPIConfigDialog.swift`：配置弹窗；`SidebarView` 机器人卡片右键「API 配置…」只有一处挂载  
+   - 配置放在机器人那边而不是 Glint 里：机器人跑在 tmux，开机由 `start-all.sh` 拉起，Glint 没开也要生效  
+   - 仓库外约定：`~/.claude/channels/tgbots/api-env.sh` 每次起 Claude 前重读 `api.env`，解析规则要和 `BotAPIConfig(parsing:)` 一致（`BotAPIConfigTests`）；`pkill` 用 POSIX ERE，只转义 ERE 元字符（`NSRegularExpression.escapedPattern` 会转义 `/`，不能用）  
+   - 上游若改侧边栏右键菜单：保留这一项  
+
 ### 同步操作红线
 
 - **禁止**：`git reset --hard upstream/main`、`git checkout upstream/main -- .`、无审查的 `theirs` 全收、把冲突一律选成上游。  
